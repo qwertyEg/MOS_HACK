@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Мониторинг строек{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.4/htmx.min.js"></script>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  {% if user %}
+  <header class="bg-white border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-6 py-3 flex items-center gap-6">
+      <a href="/" class="font-semibold text-slate-900">Мониторинг строек</a>
+      <nav class="flex gap-4 text-sm text-slate-600">
+        <a href="/" class="hover:text-slate-900">Объекты</a>
+        <a href="/sites/new" class="hover:text-slate-900">Добавить объект</a>
+        <a href="/api/docs" class="hover:text-slate-900">API</a>
+      </nav>
+      <div class="ml-auto text-sm text-slate-500">
+        {{ user }} · <a href="/logout" class="hover:text-slate-900">выйти</a>
+      </div>
+    </div>
+  </header>
+  {% endif %}
+
+  <main class="max-w-6xl mx-auto px-6 py-8">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

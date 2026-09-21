@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ f.captured_at.strftime("%d.%m.%Y") }} — {{ cam.name }}{% endblock %}
+{% block content %}
+
+<div class="flex items-center mb-4">
+  <div>
+    <h1 class="text-xl font-semibold">{{ f.captured_at.strftime("%d.%m.%Y %H:%M") }}</h1>
+    <div class="text-sm text-slate-500">
+      <a href="/cameras/{{ cam.id }}/frames" class="hover:text-slate-900">← все кадры</a>
+      · {{ cam.name }}
+    </div>
+  </div>
+  <div class="ml-auto flex gap-2 text-sm">
+    {% if prev %}<a href="/frames/{{ prev.id }}"
+       class="bg-slate-100 rounded px-3 py-1.5 hover:bg-slate-200">← предыдущий</a>{% endif %}
+    {% if next %}<a href="/frames/{{ next.id }}"
+       class="bg-slate-100 rounded px-3 py-1.5 hover:bg-slate-200">следующий →</a>{% endif %}
+  </div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5 bg-white border border-slate-200 rounded-lg p-5 text-sm">
+  <div>
+    <div class="text-slate-500 text-xs">скрыто кадра</div>
+    <div class="text-lg font-medium">{{ "%.1f"|format(f.masked_ratio * 100) }}%</div>
+  </div>
+  <div>
+    <div class="text-slate-500 text-xs">маски цело</div>
+    <div class="text-lg font-medium">{{ "%.0f"|format(f.retained * 100) }}%</div>
+  </div>
+  <div>
+    <div class="text-slate-500 text-xs">изменилось за окно</div>
+    <div class="text-lg font-medium">{{ "%.0f"|format(f.change_pct * 100) }}%</div>
+  </div>
+  <div>
+    <div class="text-slate-500 text-xs">верхняя граница</div>
+    <div class="text-lg font-medium">{{ f.top_edge_px if f.top_edge_px is not none else "—" }}</div>
+  </div>
+  <div>
+    <div class="text-slate-500 text-xs">кадр</div>
+    <div class="text-lg font-medium">
+      {% if not f.quality_ok %}<span class="text-red-600">{{ f.reject_reason }}</span>
+      {% elif f.is_night %}<span class="text-slate-600">ночь</span>
+      {% else %}<span class="text-green-700">годен</span>{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="space-y-5">
+  {% if masked_url %}
+  <div>
+    <div class="text-sm font-medium mb-1">С погашенным фоном</div>
+    <div class="text-xs text-slate-500 mb-2">Ровно то, что получила бы модель Б.</div>
+    <img src="{{ masked_url }}" class="w-full rounded border border-slate-200">
+  </div>
+  {% endif %}
+
+  {% if overlay_url %}
+  <div>
+    <div class="text-sm font-medium mb-1">Маска красным</div>
+    <div class="text-xs text-slate-500 mb-2">Видно границы: где алгоритм считает фон.</div>
+    <img src="{{ overlay_url }}" class="w-full rounded border border-slate-200">
+  </div>
+  {% endif %}
+
+  <div>
+    <div class="text-sm font-medium mb-1">Исходник</div>
+    <img src="{{ orig_url }}" class="w-full rounded border border-slate-200">
+  </div>
+</div>
+{% endblock %}

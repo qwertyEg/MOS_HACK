@@ -1,1 +1,10 @@
 /data
+PLAN.md
+
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+var/
+vlm_bench_*.json

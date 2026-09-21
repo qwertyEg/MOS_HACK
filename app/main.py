@@ -1,0 +1,451 @@
+"""Веб-сервис: API и серверный рендер страниц в одном приложении.
+
+Отдельного фронтенда со сборкой нет намеренно — разработка соло, и React+Vite
+означал бы второй сервис, второй деплой и npm в докере ради страниц, которые
+прекрасно рендерятся на сервере. Интерактивность там, где она нужна, делается
+HTMX без единой строки сборки.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+from starlette.middleware.sessions import SessionMiddleware
+
+from app import auth
+from app.config import settings
+from app.db import get_session, init_db
+from app.models import (Building, Camera, Deviation, Frame, MacroStage,
+                        ObjectType, Site, SiteStage, StageTemplate)
+from app.pipeline.model_b import ModelB
+
+app = FastAPI(title="Мониторинг строительных площадок", docs_url="/api/docs")
+app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+templates = Jinja2Templates(directory="app/templates")
+
+
+@app.on_event("startup")
+def startup() -> None:
+    init_db()
+
+
+try:
+    app.mount("/static", StaticFiles(directory="app/static"), name="static")
+except RuntimeError:
+    pass  # каталога может не быть на раннем этапе
+
+
+# ---------------------------------------------------------------------------
+# служебное
+# ---------------------------------------------------------------------------
+
+@app.get("/healthz")
+def healthz(s: Session = Depends(get_session)) -> JSONResponse:
+    """Проверка живости всех внешних зависимостей разом.
+
+    Нужна не для галочки: на защите важно за секунду понять, что именно
+    отвалилось — база, хранилище или модель Б.
+    """
+    checks = {"db": False, "storage": False, "model_b": False}
+    try:
+        s.execute(select(1))
+        checks["db"] = True
+    except Exception:
+        pass
+    try:
+        from app.storage import storage
+        storage.exists("__healthz__")
+        checks["storage"] = True
+    except Exception:
+        pass
+    checks["model_b"] = ModelB().health()
+
+    code = 200 if all(checks.values()) else 503
+    return JSONResponse({"ok": all(checks.values()), "checks": checks,
+                         "model": settings.vlm_model}, status_code=code)
+
+
+@app.get("/media/{key:path}")
+def media(key: str) -> Response:
+    """Отдача кадров при локальном бэкенде хранилища. При S3 браузер ходит
+    в MinIO напрямую по presigned-ссылке и сюда не попадает."""
+    from app.storage import storage
+    try:
+        return Response(storage.get(key), media_type="image/jpeg")
+    except Exception:
+        return Response(status_code=404)
+
+
+# ---------------------------------------------------------------------------
+# авторизация
+# ---------------------------------------------------------------------------
+
+@app.get("/login", response_class=HTMLResponse)
+def login_form(request: Request):
+    return templates.TemplateResponse(request, "login.html", {"error": None})
+
+
+@app.post("/login")
+def login_submit(request: Request, login: str = Form(...), password: str = Form(...)):
+    if not auth.check_credentials(login, password):
+        return templates.TemplateResponse(
+            request, "login.html", {"error": "Неверный логин или пароль"},
+            status_code=401)
+    auth.login_user(request, login)
+    return auth.redirect("/")
+
+
+@app.get("/logout")
+def logout(request: Request):
+    auth.logout_user(request)
+    return auth.redirect("/login")
+
+
+# ---------------------------------------------------------------------------
+# страницы
+# ---------------------------------------------------------------------------
+
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request, user: str = Depends(auth.require_user),
+          s: Session = Depends(get_session)):
+    sites = s.scalars(select(Site).order_by(Site.name)).all()
+
+    open_deviations = dict(s.execute(
+        select(Deviation.site_id, func.count())
+        .where(Deviation.resolved_at.is_(None))
+        .group_by(Deviation.site_id)
+    ).all())
+
+    today = dt.date.today()
+    cards = []
+    for site in sites:
+        active = [st for st in site.stages
+                  if st.enabled and st.planned_start and st.planned_end
+                  and st.planned_start <= today <= st.planned_end]
+        cards.append({
+            "site": site,
+            "active": active,
+            "deviations": open_deviations.get(site.id, 0),
+            "cameras": len(site.cameras),
+            "buildings": len(site.buildings),
+        })
+    return templates.TemplateResponse(request, "index.html",
+                                      {"cards": cards, "user": user})
+
+
+@app.get("/sites/new", response_class=HTMLResponse)
+def site_new(request: Request, user: str = Depends(auth.require_user),
+             s: Session = Depends(get_session)):
+    return templates.TemplateResponse(request, "site_new.html", {
+        "user": user,
+        "object_types": s.scalars(select(ObjectType).order_by(ObjectType.id)).all(),
+        "macro_stages": s.scalars(select(MacroStage)
+                                  .order_by(MacroStage.order_default)).all(),
+    })
+
+
+@app.post("/sites")
+def site_create(request: Request, user: str = Depends(auth.require_user),
+                s: Session = Depends(get_session),
+                name: str = Form(...), address: str = Form(""),
+                object_type_id: int = Form(...)):
+    site = Site(name=name, address=address, object_type_id=object_type_id)
+    s.add(site)
+    s.flush()
+
+    # Предзаполняем этапы теми, что отмечены галочкой в справочнике для этого
+    # типа объекта. Даты пользователь проставляет сам — организаторы сказали,
+    # что привязка этапов к датам на нашей стороне.
+    otype = s.get(ObjectType, object_type_id)
+    stages = s.scalars(select(MacroStage).order_by(MacroStage.order_default)).all()
+    for idx, ms in enumerate(stages):
+        tpl = s.scalar(select(StageTemplate)
+                       .where(StageTemplate.macro_stage_id == ms.id))
+        s.add(SiteStage(
+            site_id=site.id, macro_stage_id=ms.id, order_idx=idx,
+            equipment_expected=tpl.equipment_expected if tpl else [],
+            equipment_forbidden=tpl.equipment_forbidden if tpl else [],
+        ))
+    s.commit()
+    return auth.redirect(f"/sites/{site.id}")
+
+
+@app.get("/sites/{site_id}", response_class=HTMLResponse)
+def site_detail(site_id: int, request: Request,
+                user: str = Depends(auth.require_user),
+                s: Session = Depends(get_session)):
+    site = s.get(Site, site_id)
+    if site is None:
+        return HTMLResponse("Объект не найден", status_code=404)
+    deviations = s.scalars(
+        select(Deviation).where(Deviation.site_id == site_id)
+        .order_by(Deviation.detected_at.desc()).limit(50)).all()
+    return templates.TemplateResponse(request, "site.html", {
+        "user": user, "site": site, "deviations": deviations,
+        "today": dt.date.today(),
+    })
+
+
+@app.post("/sites/{site_id}/stages")
+async def stages_save(site_id: int, request: Request,
+                      user: str = Depends(auth.require_user),
+                      s: Session = Depends(get_session)):
+    """Сохранение календарного плана. Даты конкретные, не кварталы —
+    организаторы указали это явно.
+
+    Форма разбирается вручную, а не через Form(...): полей заранее неизвестное
+    число, по три-четыре на каждый этап объекта.
+    """
+    form = await request.form()
+    for stage in s.scalars(select(SiteStage)
+                           .where(SiteStage.site_id == site_id)).all():
+        prefix = f"stage_{stage.id}_"
+        stage.enabled = form.get(prefix + "enabled") == "on"
+        start = form.get(prefix + "start") or ""
+        end = form.get(prefix + "end") or ""
+        stage.planned_start = dt.date.fromisoformat(start) if start else None
+        stage.planned_end = dt.date.fromisoformat(end) if end else None
+        stage.on_critical_path = form.get(prefix + "critical") == "on"
+        if stage.planned_start and stage.planned_end:
+            stage.dates_confirmed = True
+    s.commit()
+    return auth.redirect(f"/sites/{site_id}")
+
+
+@app.post("/sites/{site_id}/buildings")
+def building_add(site_id: int, user: str = Depends(auth.require_user),
+                 s: Session = Depends(get_session),
+                 name: str = Form(...), floors_total: int = Form(0),
+                 area: float = Form(0.0)):
+    """Корпус — внутренняя единица измерения. Вес в свёртке берётся по площади:
+    корпус на 33 этажа и пристройка на 2 не могут весить одинаково."""
+    s.add(Building(site_id=site_id, name=name,
+                   floors_total=floors_total or None,
+                   area=area or None, weight=area or 1.0))
+    s.commit()
+    return auth.redirect(f"/sites/{site_id}")
+
+
+@app.post("/sites/{site_id}/cameras")
+def camera_add(site_id: int, user: str = Depends(auth.require_user),
+               s: Session = Depends(get_session),
+               name: str = Form(...), view_type: str = Form("side"),
+               source_uri: str = Form("")):
+    from app.models import CameraState, ViewType
+    cam = Camera(site_id=site_id, name=name, source_uri=source_uri,
+                 view_type=ViewType(view_type))
+    s.add(cam)
+    s.flush()
+    s.add(CameraState(camera_id=cam.id))
+    s.commit()
+    # Сразу на карточку камеры: там рисуется маска, без неё прогон невозможен.
+    return auth.redirect(f"/cameras/{cam.id}")
+
+
+@app.post("/sites/{site_id}/delete")
+def site_delete(site_id: int, user: str = Depends(auth.require_user),
+                s: Session = Depends(get_session)):
+    site = s.get(Site, site_id)
+    if site:
+        s.delete(site)
+        s.commit()
+    return auth.redirect("/")
+
+
+# ---------------------------------------------------------------------------
+# камера: первый кадр, маска, прогон, результаты
+# ---------------------------------------------------------------------------
+
+@app.get("/cameras/{camera_id}", response_class=HTMLResponse)
+def camera_detail(camera_id: int, request: Request,
+                  user: str = Depends(auth.require_user),
+                  s: Session = Depends(get_session)):
+    from app.models import CameraState
+    from app.pipeline import ingest
+    from app.storage import storage
+
+    cam = s.get(Camera, camera_id)
+    if cam is None:
+        return HTMLResponse("Камера не найдена", status_code=404)
+    if cam.state is None:
+        cam.state = CameraState(camera_id=cam.id)
+        s.flush()
+        s.commit()
+
+    # Первый кадр берётся из папки-источника: маску надо рисовать до прогона.
+    first_url, first_err, total = None, "", 0
+    folder = Path(cam.source_uri) if cam.source_uri else None
+    if folder and folder.is_dir():
+        items = ingest.list_frames(folder)
+        total = len(items)
+        if items:
+            if not cam.reference_frame_key:
+                import cv2
+                img = cv2.imread(str(items[0][0]))
+                if img is not None:
+                    ok, buf = cv2.imencode(".jpg", img,
+                                           [cv2.IMWRITE_JPEG_QUALITY, 92])
+                    cam.reference_frame_key = storage.put(
+                        f"cam/{cam.id}/reference.jpg", buf.tobytes())
+                    s.commit()
+        else:
+            first_err = "в папке нет кадров с распознаваемой меткой времени"
+    elif folder:
+        first_err = f"папка не найдена: {folder}"
+    else:
+        first_err = "у камеры не задана папка с кадрами"
+
+    if cam.reference_frame_key:
+        first_url = storage.url(cam.reference_frame_key)
+
+    initial_url = (storage.url(cam.state.initial_mask_key)
+                   if cam.state.initial_mask_key else None)
+    frames_count = s.scalar(
+        select(func.count()).select_from(Frame).where(Frame.camera_id == cam.id)) or 0
+
+    return templates.TemplateResponse(request, "camera.html", {
+        "user": user, "cam": cam, "state": cam.state,
+        "first_url": first_url, "first_err": first_err,
+        "source_total": total, "initial_url": initial_url,
+        "frames_count": frames_count,
+    })
+
+
+@app.post("/cameras/{camera_id}/mask")
+def camera_mask_save(camera_id: int, user: str = Depends(auth.require_user),
+                     s: Session = Depends(get_session),
+                     mask_png: str = Form(...)):
+    """Принимает маску, нарисованную оператором, и делает её начальной."""
+    import base64
+    import cv2
+    import numpy as np
+
+    from app.pipeline import ingest, mask as M
+    from app.storage import storage
+
+    cam = s.get(Camera, camera_id)
+    if cam is None or cam.state is None:
+        return HTMLResponse("Камера не найдена", status_code=404)
+
+    header, _, b64 = mask_png.partition(",")
+    raw = base64.b64decode(b64)
+    bitmap = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_GRAYSCALE)
+    if bitmap is None:
+        return HTMLResponse("Не удалось разобрать маску", status_code=400)
+
+    ref = cv2.imdecode(
+        np.frombuffer(storage.get(cam.reference_frame_key), np.uint8),
+        cv2.IMREAD_COLOR)
+    shape = ingest.work_shape(ref)
+
+    st = M.init_from_bitmap(bitmap, shape)
+    ingest.save_state(s, cam.state, st, initial=True)
+    cam.state.mask_approved = True
+    s.commit()
+    return auth.redirect(f"/cameras/{camera_id}")
+
+
+@app.post("/cameras/{camera_id}/reset-mask")
+def camera_mask_reset(camera_id: int, user: str = Depends(auth.require_user),
+                      s: Session = Depends(get_session)):
+    cam = s.get(Camera, camera_id)
+    if cam and cam.state:
+        cam.state.mask_approved = False
+        cam.state.background_key = ""
+        cam.state.initial_mask_key = ""
+        cam.state.evidence_key = ""
+        cam.state.windows_accumulated = 0
+        s.commit()
+    return auth.redirect(f"/cameras/{camera_id}")
+
+
+@app.get("/cameras/{camera_id}/frames", response_class=HTMLResponse)
+def camera_frames(camera_id: int, request: Request,
+                  user: str = Depends(auth.require_user),
+                  s: Session = Depends(get_session),
+                  view: str = "masked", page: int = 1, per: int = 60):
+    """Галерея результатов прогона — то, ради чего всё и затевалось."""
+    from app.storage import storage
+
+    cam = s.get(Camera, camera_id)
+    if cam is None:
+        return HTMLResponse("Камера не найдена", status_code=404)
+
+    total = s.scalar(select(func.count()).select_from(Frame)
+                     .where(Frame.camera_id == camera_id)) or 0
+    pages = max(1, (total + per - 1) // per)
+    page = max(1, min(page, pages))
+
+    rows = s.scalars(
+        select(Frame).where(Frame.camera_id == camera_id)
+        .order_by(Frame.captured_at).offset((page - 1) * per).limit(per)).all()
+
+    key_of = {"masked": "masked_key", "overlay": "overlay_key",
+              "orig": "object_key"}.get(view, "masked_key")
+    items = [{
+        "frame": f,
+        "url": storage.url(getattr(f, key_of) or f.object_key),
+    } for f in rows]
+
+    return templates.TemplateResponse(request, "frames.html", {
+        "user": user, "cam": cam, "items": items, "view": view,
+        "page": page, "pages": pages, "total": total, "per": per,
+    })
+
+
+@app.get("/frames/{frame_id}", response_class=HTMLResponse)
+def frame_detail(frame_id: int, request: Request,
+                 user: str = Depends(auth.require_user),
+                 s: Session = Depends(get_session)):
+    from app.storage import storage
+
+    f = s.get(Frame, frame_id)
+    if f is None:
+        return HTMLResponse("Кадр не найден", status_code=404)
+    cam = s.get(Camera, f.camera_id)
+
+    prev = s.scalar(select(Frame).where(Frame.camera_id == f.camera_id,
+                                        Frame.captured_at < f.captured_at)
+                    .order_by(Frame.captured_at.desc()).limit(1))
+    nxt = s.scalar(select(Frame).where(Frame.camera_id == f.camera_id,
+                                       Frame.captured_at > f.captured_at)
+                   .order_by(Frame.captured_at).limit(1))
+
+    return templates.TemplateResponse(request, "frame.html", {
+        "user": user, "cam": cam, "f": f, "prev": prev, "next": nxt,
+        "orig_url": storage.url(f.object_key),
+        "masked_url": storage.url(f.masked_key) if f.masked_key else None,
+        "overlay_url": storage.url(f.overlay_key) if f.overlay_key else None,
+    })
+
+
+# ---------------------------------------------------------------------------
+# API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/sites/{site_id}/stages")
+def api_stages(site_id: int, user: str = Depends(auth.require_user),
+               s: Session = Depends(get_session)):
+    site = s.get(Site, site_id)
+    if site is None:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return {
+        "site": site.name,
+        "stages": [{
+            "id": st.id,
+            "name": st.title,
+            "planned_start": st.planned_start.isoformat() if st.planned_start else None,
+            "planned_end": st.planned_end.isoformat() if st.planned_end else None,
+            "dates_confirmed": st.dates_confirmed,
+            "critical": st.on_critical_path,
+            "enabled": st.enabled,
+            "equipment_expected": st.equipment_expected,
+        } for st in site.stages],
+    }

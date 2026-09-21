@@ -1,0 +1,61 @@
+name: stroyka
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: stroyka
+      POSTGRES_PASSWORD: stroyka
+      POSTGRES_DB: stroyka
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stroyka"]
+      interval: 5s
+      retries: 10
+
+  # Кадры лежат здесь, а не в БД и не в контейнере приложения: приложение
+  # можно пересобрать, снимки останутся. Организатор может подставить свой S3,
+  # поменяв S3_ENDPOINT — код не меняется.
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db: {condition: service_healthy}
+      minio: {condition: service_started}
+    environment:
+      DATABASE_URL: postgresql+psycopg://stroyka:stroyka@db:5432/stroyka
+      S3_ENDPOINT: http://minio:9000
+      # Браузер ходит за снимками напрямую в MinIO, минуя бэкенд, поэтому
+      # presigned-ссылки должны указывать на адрес, видимый снаружи.
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      # Модель Б живёт вне compose — она внешний сервис по условию задачи.
+      # Из контейнера localhost указывает на сам контейнер, поэтому host-gateway.
+      VLM_BASE_URL: http://host.docker.internal:11435/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./data:/app/data:ro
+
+volumes:
+  pgdata:
+  miniodata:

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Объекты{% endblock %}
+{% block content %}
+
+<div class="flex items-center mb-6">
+  <h1 class="text-xl font-semibold">Объекты</h1>
+  <a href="/sites/new"
+     class="ml-auto bg-slate-900 text-white text-sm rounded px-4 py-2 hover:bg-slate-700">
+    Добавить объект
+  </a>
+</div>
+
+{% if not cards %}
+<div class="bg-white border border-slate-200 rounded-lg p-12 text-center text-slate-500">
+  Пока ни одного объекта. Начните с добавления.
+</div>
+{% endif %}
+
+<div class="grid gap-4 md:grid-cols-2">
+  {% for c in cards %}
+  <a href="/sites/{{ c.site.id }}"
+     class="block bg-white border border-slate-200 rounded-lg p-5 hover:border-slate-400">
+    <div class="flex items-start">
+      <div>
+        <div class="font-medium">{{ c.site.name }}</div>
+        <div class="text-sm text-slate-500">
+          {{ c.site.object_type.name if c.site.object_type else "—" }}
+          {%- if c.site.address %} · {{ c.site.address }}{% endif %}
+        </div>
+      </div>
+      {% if c.deviations %}
+      <span class="ml-auto text-xs bg-amber-100 text-amber-800 rounded-full px-2 py-1">
+        {{ c.deviations }} отклонений
+      </span>
+      {% endif %}
+    </div>
+
+    <div class="mt-4 flex gap-6 text-sm text-slate-600">
+      <span>корпусов: {{ c.buildings }}</span>
+      <span>камер: {{ c.cameras }}</span>
+    </div>
+
+    {# Параллельные этапы — норма: на одной площадке корпуса идут вразнобой #}
+    {% if c.active %}
+    <div class="mt-3 flex flex-wrap gap-1">
+      {% for st in c.active %}
+      <span class="text-xs bg-slate-100 text-slate-700 rounded px-2 py-1">
+        {{ st.title }}
+      </span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="mt-3 text-xs text-slate-400">активных этапов по плану нет</div>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

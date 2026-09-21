@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Кадры — {{ cam.name }}{% endblock %}
+{% block content %}
+
+<div class="flex items-start mb-4">
+  <div>
+    <h1 class="text-xl font-semibold">Результаты прогона</h1>
+    <div class="text-sm text-slate-500">
+      <a href="/cameras/{{ cam.id }}" class="hover:text-slate-900">← {{ cam.name }}</a>
+      · кадров {{ total }}
+    </div>
+  </div>
+</div>
+
+{# Три представления одного и того же кадра — переключение без перезагрузки данных #}
+<div class="flex items-center gap-2 mb-5">
+  {% for key, title in [("masked", "С погашенным фоном"),
+                        ("overlay", "Маска красным"),
+                        ("orig", "Исходник")] %}
+  <a href="/cameras/{{ cam.id }}/frames?view={{ key }}&page={{ page }}"
+     class="text-sm rounded px-3 py-1.5 {% if view == key %}bg-slate-900 text-white{% else %}bg-slate-100 hover:bg-slate-200{% endif %}">
+    {{ title }}
+  </a>
+  {% endfor %}
+  <span class="ml-auto text-xs text-slate-500">
+    «С погашенным фоном» — ровно то, что получила бы модель Б
+  </span>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
+  {% for it in items %}
+  <a href="/frames/{{ it.frame.id }}" class="block group">
+    <img src="{{ it.url }}" loading="lazy"
+         class="w-full aspect-[4/3] object-cover rounded border border-slate-200 group-hover:border-slate-500">
+    <div class="mt-1 text-[11px] leading-tight">
+      <div class="text-slate-700">{{ it.frame.captured_at.strftime("%d.%m.%Y") }}</div>
+      <div class="text-slate-400">
+        скрыто {{ "%.0f"|format(it.frame.masked_ratio * 100) }}%
+        · цело {{ "%.0f"|format(it.frame.retained * 100) }}%
+        {%- if it.frame.is_night %} · ночь{% endif %}
+        {%- if not it.frame.quality_ok %} · {{ it.frame.reject_reason }}{% endif %}
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+{% if pages > 1 %}
+<div class="flex items-center gap-2 text-sm">
+  {% if page > 1 %}
+  <a href="?view={{ view }}&page={{ page - 1 }}"
+     class="bg-slate-100 rounded px-3 py-1.5 hover:bg-slate-200">← назад</a>
+  {% endif %}
+  <span class="text-slate-500">страница {{ page }} из {{ pages }}</span>
+  {% if page < pages %}
+  <a href="?view={{ view }}&page={{ page + 1 }}"
+     class="bg-slate-100 rounded px-3 py-1.5 hover:bg-slate-200">вперёд →</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
