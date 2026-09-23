@@ -18,34 +18,36 @@
 
 {# ------------------------------------------------------------------ #}
 {# Календарный план. Даты конкретные, не кварталы — требование заказчика. #}
+{# Состав и порядок задаёт пользователь: набор этапов на площадке свой.  #}
 {# ------------------------------------------------------------------ #}
 <section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
   <h2 class="font-medium mb-1">Календарный план</h2>
   <p class="text-xs text-slate-500 mb-4">
-    Несколько этапов могут идти одновременно — это нормально для площадки
-    с несколькими корпусами.
+    Этапы берутся из справочника — с камеры система умеет различать только их.
+    Строку можно перетащить за <span class="font-mono">⠿</span>, лишнюю убрать,
+    недостающую добавить снизу. Несколько этапов могут идти одновременно.
   </p>
 
   <form method="post" action="/sites/{{ site.id }}/stages">
     <table class="w-full text-sm">
       <thead class="text-slate-500 text-left">
         <tr class="border-b border-slate-200">
-          <th class="pb-2 w-8"></th>
+          <th class="pb-2 w-6"></th>
           <th class="pb-2">Этап</th>
           <th class="pb-2 w-36">Начало</th>
           <th class="pb-2 w-36">Окончание</th>
-          <th class="pb-2 w-24">Критич.</th>
           <th class="pb-2 w-20">Статус</th>
+          <th class="pb-2 w-8"></th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="stage-rows">
         {% for st in site.stages %}
-        <tr class="border-b border-slate-100">
+        <tr class="border-b border-slate-100" draggable="true"
+            data-macro="{{ st.macro_stage_id }}">
+          <td class="py-2 cursor-grab text-slate-300 select-none text-center"
+              title="Перетащить">⠿</td>
           <td class="py-2">
-            <input type="checkbox" name="stage_{{ st.id }}_enabled"
-                   {% if st.enabled %}checked{% endif %}>
-          </td>
-          <td class="py-2">
+            <input type="hidden" name="row" value="s:{{ st.id }}">
             {{ st.title }}
             {% if st.macro_stage and st.macro_stage.progress_metric %}
             <div class="text-xs text-slate-400">
@@ -54,18 +56,14 @@
             {% endif %}
           </td>
           <td class="py-2">
-            <input type="date" name="stage_{{ st.id }}_start"
+            <input type="date" name="start_s:{{ st.id }}"
                    value="{{ st.planned_start.isoformat() if st.planned_start else '' }}"
                    class="border border-slate-300 rounded px-2 py-1 w-full">
           </td>
           <td class="py-2">
-            <input type="date" name="stage_{{ st.id }}_end"
+            <input type="date" name="end_s:{{ st.id }}"
                    value="{{ st.planned_end.isoformat() if st.planned_end else '' }}"
                    class="border border-slate-300 rounded px-2 py-1 w-full">
-          </td>
-          <td class="py-2">
-            <input type="checkbox" name="stage_{{ st.id }}_critical"
-                   {% if st.on_critical_path %}checked{% endif %}>
           </td>
           <td class="py-2 text-xs">
             {% if not st.planned_start %}
@@ -80,119 +78,165 @@
               <span class="text-slate-400">впереди</span>
             {% endif %}
           </td>
+          <td class="py-2 text-right">
+            <button type="button" data-remove title="Убрать этап"
+                    class="text-slate-300 hover:text-red-600 px-1">&times;</button>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
 
-    <button class="mt-4 bg-slate-900 text-white text-sm rounded px-4 py-2 hover:bg-slate-700">
-      Сохранить план
+    <div id="stage-empty" class="py-6 text-sm text-slate-500" hidden>
+      План пуст. Добавьте этапы из списка ниже.
+    </div>
+
+    {# Заготовка строки для этапов, добавленных на месте. Дат и статуса
+       у них ещё нет — статус появится после сохранения. #}
+    <template id="stage-row-template">
+      <tr class="border-b border-slate-100" draggable="true" data-macro="__MACRO__">
+        <td class="py-2 cursor-grab text-slate-300 select-none text-center"
+            title="Перетащить">⠿</td>
+        <td class="py-2">
+          <input type="hidden" name="row" value="__KEY__">
+          __NAME__
+        </td>
+        <td class="py-2">
+          <input type="date" name="start___KEY__"
+                 class="border border-slate-300 rounded px-2 py-1 w-full">
+        </td>
+        <td class="py-2">
+          <input type="date" name="end___KEY__"
+                 class="border border-slate-300 rounded px-2 py-1 w-full">
+        </td>
+        <td class="py-2 text-xs"><span class="text-slate-400">новый</span></td>
+        <td class="py-2 text-right">
+          <button type="button" data-remove title="Убрать этап"
+                  class="text-slate-300 hover:text-red-600 px-1">&times;</button>
+        </td>
+      </tr>
+    </template>
+
+    <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+      <select id="stage-picker"
+              class="border border-slate-300 rounded px-2 py-1.5 text-sm">
+        <option value="">Выберите этап…</option>
+        {% for m in catalog %}
+        <option value="{{ m.id }}" data-name="{{ m.name }}">
+          {{ m.order_default }}. {{ m.name }}
+        </option>
+        {% endfor %}
+      </select>
+      <button type="button" id="stage-add"
+              class="bg-slate-100 text-sm rounded px-3 py-1.5 hover:bg-slate-200">
+        + Добавить этап
+      </button>
+
+      <button class="ml-auto bg-slate-900 text-white text-sm rounded px-4 py-2 hover:bg-slate-700">
+        Сохранить план
+      </button>
+    </div>
+  </form>
+</section>
+
+{# ------------------------------------------------------------------ #}
+{# Камеры. Маска рисуется руками один раз, дальше сжимается сама.       #}
+{# ------------------------------------------------------------------ #}
+<section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
+  <h2 class="font-medium mb-1">Камеры</h2>
+  <p class="text-xs text-slate-500 mb-4">
+    Маску фона оператор задаёт один раз на первом кадре, дальше она только
+    сжимается — растущее здание отвоёвывает её обратно. После подтверждения
+    маски разбор истории запускается сам.
+  </p>
+
+  {% if site.cameras %}
+  <table class="w-full text-sm mb-4">
+    <tbody>
+      {% for c in site.cameras %}
+      <tr class="border-b border-slate-100">
+        <td class="py-1.5">
+          <a href="/cameras/{{ c.id }}" class="hover:underline">{{ c.name }}</a>
+          {% if c.source_uri %}
+          <div class="text-xs text-slate-400 font-mono truncate max-w-md"
+               title="{{ c.source_uri }}">{{ c.source_uri }}</div>
+          {% endif %}
+        </td>
+        <td class="py-1.5 text-right text-xs w-56">
+          {% if c.state and c.state.mask_approved %}
+            <span class="{{ 'text-amber-600' if c.state.masked_ratio <= 0.03
+                            else 'text-green-700' }}">
+              скрыто {{ "%.0f"|format(c.state.masked_ratio * 100) }}%,
+              от исходной {{ "%.0f"|format(c.state.retained * 100) }}%
+            </span>
+          {% else %}
+            <a href="/cameras/{{ c.id }}"
+               class="text-amber-600 hover:underline">нарисовать маску</a>
+          {% endif %}
+        </td>
+        <td class="py-1.5 text-right w-8">
+          <form method="post" action="/cameras/{{ c.id }}/delete"
+                onsubmit="return confirm('Удалить камеру «{{ c.name }}» вместе с маской и всеми разобранными кадрами?')">
+            <button title="Удалить камеру"
+                    class="text-slate-300 hover:text-red-600 px-1">&times;</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <form method="post" action="/sites/{{ site.id }}/cameras"
+        class="flex flex-wrap gap-2">
+    <input name="name" placeholder="Название камеры" required
+           class="border border-slate-300 rounded px-2 py-1.5 text-sm w-48">
+    <input name="source_uri" id="source-uri" readonly
+           placeholder="папка с кадрами не выбрана"
+           class="border border-slate-300 rounded px-2 py-1.5 text-sm flex-1 min-w-64 font-mono text-xs cursor-pointer">
+    <button type="button" id="source-browse"
+            class="bg-slate-100 text-sm rounded px-3 py-1.5 hover:bg-slate-200">
+      Выбрать папку…
+    </button>
+    <button class="bg-slate-900 text-white text-sm rounded px-4 py-1.5 hover:bg-slate-700">
+      Добавить
     </button>
   </form>
 </section>
 
-<div class="grid gap-6 md:grid-cols-2 mb-6">
-
-  {# --------------------------------------------------------------- #}
-  {# Корпуса. Внутренняя единица измерения: отчётность идёт по объекту #}
-  {# целиком, но этажность и веса свёртки берутся отсюда.              #}
-  {# --------------------------------------------------------------- #}
-  <section class="bg-white border border-slate-200 rounded-lg p-6">
-    <h2 class="font-medium mb-1">Корпуса</h2>
-    <p class="text-xs text-slate-500 mb-4">
-      Нужны для измерения: этажность — знаменатель прогресса монолита,
-      площадь — вес при сведении показателей в целом по объекту.
-    </p>
-
-    {% if site.buildings %}
-    <table class="w-full text-sm mb-4">
-      <tbody>
-        {% for b in site.buildings %}
-        <tr class="border-b border-slate-100">
-          <td class="py-1.5">{{ b.name }}</td>
-          <td class="py-1.5 text-slate-500">
-            {{ b.floors_total or "—" }} эт.
-          </td>
-          <td class="py-1.5 text-slate-500 text-right">
-            {{ "%.0f"|format(b.area) if b.area else "—" }} м²
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
-
-    <form method="post" action="/sites/{{ site.id }}/buildings" class="flex gap-2">
-      <input name="name" placeholder="Корпус 3.4" required
-             class="border border-slate-300 rounded px-2 py-1 text-sm flex-1">
-      <input name="floors_total" type="number" placeholder="эт." min="0"
-             class="border border-slate-300 rounded px-2 py-1 text-sm w-20">
-      <input name="area" type="number" step="0.1" placeholder="м²"
-             class="border border-slate-300 rounded px-2 py-1 text-sm w-24">
-      <button class="bg-slate-100 text-sm rounded px-3 hover:bg-slate-200">+</button>
-    </form>
-  </section>
-
-  {# --------------------------------------------------------------- #}
-  {# Камеры. Маска не рисуется руками — собирается сама по истории.     #}
-  {# --------------------------------------------------------------- #}
-  <section class="bg-white border border-slate-200 rounded-lg p-6">
-    <h2 class="font-medium mb-1">Камеры</h2>
-    <p class="text-xs text-slate-500 mb-4">
-      Маска площадки строится автоматически по истории кадров — обводить
-      контур руками не нужно. Ракурс влияет на то, какие величины с камеры
-      измеримы.
-    </p>
-
-    {% if site.cameras %}
-    <table class="w-full text-sm mb-4">
-      <tbody>
-        {% for c in site.cameras %}
-        <tr class="border-b border-slate-100">
-          <td class="py-1.5">
-            <a href="/cameras/{{ c.id }}" class="hover:underline">{{ c.name }}</a>
-          </td>
-          <td class="py-1.5 text-slate-500">
-            {% if c.view_type.value == "side" %}сбоку
-            {% elif c.view_type.value == "top" %}с мачты
-            {% else %}с соседнего дома{% endif %}
-          </td>
-          <td class="py-1.5 text-right text-xs">
-            {% if c.state and c.state.mask_approved %}
-              <span class="text-green-700">
-                маска задана, скрыто {{ "%.0f"|format(c.state.masked_ratio * 100) }}%
-              </span>
-            {% else %}
-              <a href="/cameras/{{ c.id }}"
-                 class="text-amber-600 hover:underline">нарисовать маску</a>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% endif %}
-
-    <form method="post" action="/sites/{{ site.id }}/cameras" class="space-y-2">
-      <div class="flex gap-2">
-        <input name="name" placeholder="Камера 1" required
-               class="border border-slate-300 rounded px-2 py-1 text-sm flex-1">
-        <select name="view_type"
-                class="border border-slate-300 rounded px-2 py-1 text-sm">
-          <option value="side">сбоку</option>
-          <option value="top">с мачты</option>
-          <option value="remote">с соседнего дома</option>
-        </select>
-      </div>
-      <div class="flex gap-2">
-        <input name="source_uri" placeholder="путь к папке с кадрами"
-               class="border border-slate-300 rounded px-2 py-1 text-sm flex-1 font-mono text-xs">
-        <button class="bg-slate-100 text-sm rounded px-3 hover:bg-slate-200">
-          Добавить
+{# ------------------------------------------------------------------ #}
+{# Проводник по машине сервиса                                          #}
+{# ------------------------------------------------------------------ #}
+<div id="fs-modal" hidden
+     class="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-50">
+  <div class="bg-white border border-slate-200 rounded-lg w-full max-w-2xl flex flex-col"
+       style="max-height: 80vh">
+    <div class="p-4 border-b border-slate-200">
+      <div class="font-medium mb-2">Папка с кадрами</div>
+      <div class="flex items-center gap-2">
+        <button type="button" id="fs-up"
+                class="bg-slate-100 text-sm rounded px-3 py-1.5 hover:bg-slate-200">
+          ↑ вверх
         </button>
+        <div id="fs-here"
+             class="flex-1 text-xs font-mono text-slate-600 truncate"></div>
       </div>
-    </form>
-  </section>
+    </div>
+
+    <div id="fs-list" class="flex-1 overflow-y-auto"></div>
+
+    <div class="p-4 border-t border-slate-200 flex items-center gap-3">
+      <span id="fs-count" class="text-xs text-slate-500"></span>
+      <button type="button" id="fs-cancel"
+              class="ml-auto text-sm text-slate-600 px-3 py-1.5 hover:text-slate-900">
+        Отмена
+      </button>
+      <button type="button" id="fs-pick"
+              class="bg-slate-900 text-white text-sm rounded px-4 py-1.5 hover:bg-slate-700">
+        Выбрать эту папку
+      </button>
+    </div>
+  </div>
 </div>
 
 {# ------------------------------------------------------------------ #}
@@ -222,4 +266,7 @@
   <p class="text-sm text-slate-500">Отклонений не зафиксировано.</p>
   {% endif %}
 </section>
+
+<script src="/static/stages.js"></script>
+<script src="/static/folder_picker.js"></script>
 {% endblock %}

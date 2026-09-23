@@ -20,7 +20,10 @@ services:
   # можно пересобрать, снимки останутся. Организатор может подставить свой S3,
   # поменяв S3_ENDPOINT — код не меняется.
   minio:
-    image: minio/minio:latest
+    # Docker Hub с конца 2024 отдаёт "pull access denied" на minio/minio —
+    # MinIO Inc. закрыла анонимный доступ к своему org на Hub. Тот же образ
+    # официально публикуется на quay.io.
+    image: quay.io/minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin

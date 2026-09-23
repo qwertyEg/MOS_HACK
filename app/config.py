@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     parked_after_days: int = 2           # техника → PARKED
 
     # --- веб ---
+    # Корень, глубже которого не пускает выбор папки с кадрами. Пусто →
+    # домашний каталог пользователя, под которым запущен сервис.
+    fs_browse_root: str = ""
     secret_key: str = "dev-secret-change-me"
     admin_login: str = "admin"
     admin_password: str = "admin"

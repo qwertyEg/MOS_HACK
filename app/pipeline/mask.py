@@ -40,6 +40,29 @@
 устойчивой геометрией окон, и там структурный признак может выиграть.
 Но строить на нём сейчас нельзя, на имеющихся данных он измеримо хуже.
 
+**Освещение снимается по опорным клеткам, а не по всей маске.** Пасмурный
+день, снег и смена сезона двигают яркость всего кадра разом. Чтобы это не
+читалось как застройка, из измеренного изменения вычитается общий сдвиг.
+Считать его по всей маске нельзя: когда здание отвоевало её большую часть,
+такая медиана измеряет уже стройку и вычитает сигнал сам из себя. Опора
+берётся по самым спокойным из ещё закрашенных клеток — это и есть настоящий
+неподвижный фон. Замер на двух прогонах Эдинбурга: F1 0.39 → 0.42 и
+0.73 → 0.80, от исходной маски доживает 15% → 28% и 14% → 19%.
+
+**Чего яркость не умеет.** На прогоне, где стройка занимает лишь пятую часть
+закрашенного, точность упирается в 0.33 при любых порогах. Причина измерена:
+71% фоновых клеток хоть раз дают вспышку изменения длиной в три окна —
+снег, мокрый асфальт, переставленный контейнер, техника у границы площадки.
+По силе и частоте изменения фон от стройки на таких данных не отделяется.
+
+Проверено и отвергнуто, числа — на двух реальных прогонах разом:
+отложенное подтверждение стирания по обратимости (точность на трудном
+прогоне 0.27 → 0.31, но на удачном F1 0.80 → 0.72), требование связности
+растущей области снизу вверх (0.80 → 0.60) и отбрасывание одиночных клеток
+(0.80 → 0.53). Все три покупают точность на трудном прогоне ценой удачного.
+Разумный следующий шаг — не признак, а право оператора пометить область
+как неприкосновенную: там, где он уверен, гарантия нужнее эвристики.
+
 **Что в расчёт не идёт.** Ночные кадры: ИК-режим даёт другую статистику
 яркости, и смешивание дня с ночью развалит сравнение — половина кадров будет
 «отличаться» просто из-за режима съёмки, а не потому, что там что-то построили.
@@ -60,6 +83,7 @@ CELL = 16                 # сторона клетки, в которых сч�
 WINDOW_DAYS = 10          # база сравнения: половина окна против половины
 CHANGE_THRESHOLD = 35.0   # порог изменения яркости клетки
 LOCK_WINDOWS = 3          # окон подряд до стирания клетки из маски
+ANCHOR_FRAC = 0.5         # доля самых спокойных клеток под опору освещения
 
 
 @dataclass
@@ -68,16 +92,20 @@ class MaskState:
     shape: tuple[int, int]                        # (h, w) рабочего разрешения
     background: np.ndarray = field(default=None)  # bool, True = фон. Только убывает
     evidence: np.ndarray = field(default=None)    # int16, по клеткам
+    hot_count: np.ndarray = field(default=None)   # как часто клетка менялась
     initial_area: int = 0
     windows: int = 0
     last_reset: dt.datetime | None = None
 
     def __post_init__(self) -> None:
         h, w = self.shape
+        grid = (h // CELL, w // CELL)
         if self.background is None:
             self.background = np.zeros((h, w), dtype=bool)
         if self.evidence is None:
-            self.evidence = np.zeros((h // CELL, w // CELL), dtype=np.int16)
+            self.evidence = np.zeros(grid, dtype=np.int16)
+        if self.hot_count is None:
+            self.hot_count = np.zeros(grid, dtype=np.int32)
         if not self.initial_area:
             self.initial_area = int(self.background.sum())
 
@@ -185,6 +213,30 @@ def change_map(day_medians: list[np.ndarray]) -> np.ndarray:
     return cv2.resize(diff, (gw, gh), interpolation=cv2.INTER_AREA)
 
 
+def _cells(frame: np.ndarray) -> np.ndarray:
+    """Кадр рабочего разрешения → сетка клеток."""
+    gh, gw = frame.shape[0] // CELL, frame.shape[1] // CELL
+    return cv2.resize(frame, (gw, gh), interpolation=cv2.INTER_AREA)
+
+
+def _anchor(state: MaskState, masked_cells: np.ndarray) -> tuple:
+    """Клетки, по которым меряется общая засветка кадра.
+
+    Берутся самые спокойные из ещё закрашенных: это и есть настоящий
+    неподвижный фон — стена соседнего дома, асфальт, горизонт.
+
+    Медиану по всей маске брать нельзя. Когда здание отвоевало её большую
+    часть, такая медиана измеряет уже стройку и вычитает сама себя — сигнал
+    глохнет ровно там, где он есть. Замер: полнота падала с 0.91 до 0.64.
+    """
+    ys, xs = np.where(masked_cells)
+    if len(ys) < 15:
+        return None
+    order = np.argsort(state.hot_count[ys, xs])
+    keep = max(15, int(len(order) * ANCHOR_FRAC))
+    return ys[order[:keep]], xs[order[:keep]]
+
+
 def update(
     state: MaskState,
     day_medians: list[np.ndarray],
@@ -195,11 +247,27 @@ def update(
 
     background после вызова никогда не больше, чем был.
     """
-    if len(day_medians) < 4:
+    # Полуокна сравниваются только на полном окне. На огрызке в четыре дня
+    # половины слишком коротки, сравнение шумит и плодит стирания на ровном
+    # месте: точность на реальном прогоне падала с 0.31 до 0.28.
+    if len(day_medians) < WINDOW_DAYS:
         return state
 
-    ch = change_map(day_medians)
-    hot = ch > threshold
+    stack = np.stack(day_medians)
+    half = max(1, len(stack) // 2)
+    now = _cells(np.median(stack[-half:], axis=0))
+    before = _cells(np.median(stack[:half], axis=0))
+
+    gh, gw = state.grid
+    h, w = state.shape
+    masked_cells = cv2.resize(state.background.astype(np.uint8), (gw, gh),
+                              interpolation=cv2.INTER_NEAREST).astype(bool)
+
+    anchor = _anchor(state, masked_cells)
+    offset = float(np.median((now - before)[anchor])) if anchor else 0.0
+
+    hot = np.abs(now - before - offset) > threshold
+    state.hot_count += hot
 
     # Счётчик со спадом. Устойчивое изменение (растущая стена) накапливается
     # и пробивает порог; разовое (припарковавшаяся машина, облако, мокрый
@@ -207,9 +275,8 @@ def update(
     state.evidence = np.where(hot, state.evidence + 1,
                               np.maximum(state.evidence - 1, 0)).astype(np.int16)
 
-    erase_cells = state.evidence >= lock_windows
+    erase_cells = (state.evidence >= lock_windows) & masked_cells
     if erase_cells.any():
-        h, w = state.shape
         erase = cv2.resize(erase_cells.astype(np.uint8), (w, h),
                            interpolation=cv2.INTER_NEAREST).astype(bool)
         state.background = state.background & ~erase
@@ -274,6 +341,7 @@ def reset(state: MaskState) -> MaskState:
     h, w = state.shape
     state.background = np.zeros((h, w), dtype=bool)
     state.evidence = np.zeros(state.grid, dtype=np.int16)
+    state.hot_count = np.zeros(state.grid, dtype=np.int32)
     state.initial_area = 0
     state.windows = 0
     state.last_reset = dt.datetime.now(dt.UTC)

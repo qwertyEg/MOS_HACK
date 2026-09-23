@@ -7,9 +7,6 @@
     <h1 class="text-xl font-semibold">{{ cam.name }}</h1>
     <div class="text-sm text-slate-500">
       <a href="/sites/{{ cam.site_id }}" class="hover:text-slate-900">← к объекту</a>
-      · {% if cam.view_type.value == "side" %}сбоку
-        {% elif cam.view_type.value == "top" %}с мачты
-        {% else %}с соседнего дома{% endif %}
       {% if source_total %}· кадров в источнике: {{ source_total }}{% endif %}
     </div>
   </div>
@@ -25,7 +22,7 @@
 <div class="mb-6 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-4 py-3">
   {{ first_err }}
   <div class="text-xs text-red-600 mt-1">
-    Укажите путь к папке с кадрами в поле «источник» при добавлении камеры.
+    Папка выбирается при добавлении камеры кнопкой «Выбрать папку…».
     Имена файлов должны содержать метку времени вида
     <code>doric_2006_11_23_12_30_21.jpg</code>.
   </div>
@@ -151,7 +148,8 @@
       Подтвердить маску
     </button>
     <span class="text-xs text-slate-500 ml-3">
-      После подтверждения можно запускать прогон истории.
+      Сразу после подтверждения начнётся разбор истории — он идёт минуты,
+      прогресс будет виден на этой же странице.
     </span>
   </form>
 </section>
@@ -161,16 +159,35 @@
 
 {% if state.mask_approved %}
 <section class="bg-white border border-slate-200 rounded-lg p-6">
-  <h2 class="font-medium mb-2">Прогон истории</h2>
-  <p class="text-sm text-slate-600 mb-3">
-    Аналитическая модель на этом шаге не вызывается — считается только маска.
-    Запуск из терминала, чтобы был виден прогресс:
-  </p>
-  <pre class="bg-slate-900 text-slate-100 text-xs rounded p-3 overflow-x-auto">python tools/ingest_folder.py --camera {{ cam.id }}</pre>
-  {% if frames_count %}
-  <p class="text-sm text-slate-600 mt-3">
+  <div class="flex items-start mb-3">
+    <div>
+      <h2 class="font-medium">Разбор истории</h2>
+      <p class="text-sm text-slate-600 mt-1">
+        Считается только маска — аналитическая модель на этом шаге не вызывается.
+      </p>
+    </div>
+    {% if not run %}
+    <form method="post" action="/cameras/{{ cam.id }}/run" class="ml-auto"
+          {% if frames_count %}
+          onsubmit="return confirm('Пересчитать заново? Прежние кадры этой камеры будут заменены.')"
+          {% endif %}>
+      <button class="bg-slate-100 text-sm rounded px-4 py-2 hover:bg-slate-200">
+        {% if frames_count %}Пересчитать{% else %}Запустить разбор{% endif %}
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if run %}
+  {% include "_progress.html" %}
+  {% elif frames_count %}
+  <p class="text-sm text-slate-600">
     Обработано кадров: <b>{{ frames_count }}</b>.
     <a href="/cameras/{{ cam.id }}/frames" class="text-slate-900 underline">Смотреть результаты</a>
+  </p>
+  {% else %}
+  <p class="text-sm text-slate-500">
+    Кадры ещё не разбирались.
   </p>
   {% endif %}
 </section>

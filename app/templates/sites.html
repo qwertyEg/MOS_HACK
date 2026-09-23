@@ -2,17 +2,38 @@
 {% block title %}Объекты{% endblock %}
 {% block content %}
 
-<div class="flex items-center mb-6">
+<div class="flex items-center gap-4 mb-6">
   <h1 class="text-xl font-semibold">Объекты</h1>
+  <span class="text-sm text-slate-500">
+    {% if q %}найдено {{ cards|length }} из {{ total }}{% else %}{{ total }}{% endif %}
+  </span>
   <a href="/sites/new"
      class="ml-auto bg-slate-900 text-white text-sm rounded px-4 py-2 hover:bg-slate-700">
     Добавить объект
   </a>
 </div>
 
+{# Поиск серверный: список объектов рендерится на сервере, и отдельный
+   индекс ради сотни строк был бы лишней машинерией. #}
+<form method="get" action="/sites" class="mb-6 flex gap-2">
+  <input name="q" value="{{ q }}" autofocus
+         placeholder="название или адрес"
+         class="border border-slate-300 rounded px-3 py-2 text-sm flex-1">
+  <button class="bg-slate-100 text-sm rounded px-4 hover:bg-slate-200">Найти</button>
+  {% if q %}
+  <a href="/sites" class="text-sm text-slate-500 px-3 py-2 hover:text-slate-900">
+    Сбросить
+  </a>
+  {% endif %}
+</form>
+
 {% if not cards %}
 <div class="bg-white border border-slate-200 rounded-lg p-12 text-center text-slate-500">
-  Пока ни одного объекта. Начните с добавления.
+  {% if q %}
+    По запросу «{{ q }}» ничего не найдено.
+  {% else %}
+    Пока ни одного объекта. Начните с добавления.
+  {% endif %}
 </div>
 {% endif %}
 
@@ -36,8 +57,8 @@
     </div>
 
     <div class="mt-4 flex gap-6 text-sm text-slate-600">
-      <span>корпусов: {{ c.buildings }}</span>
       <span>камер: {{ c.cameras }}</span>
+      {% if c.frames %}<span>кадров: {{ c.frames }}</span>{% endif %}
     </div>
 
     {# Параллельные этапы — норма: на одной площадке корпуса идут вразнобой #}

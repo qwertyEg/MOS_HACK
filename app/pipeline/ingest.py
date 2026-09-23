@@ -114,10 +114,13 @@ def save_state(session: Session, cam_state: CameraState, st: M.MaskState,
         cam_state.initial_mask_key = storage.put(
             f"{prefix}/initial.png", _mask_to_png(st.background), "image/png")
 
+    # Счётчики лежат одним архивом. hot_count терять нельзя: по нему
+    # выбираются опорные клетки освещения, и без него первые окна после
+    # перезапуска мерили бы засветку по чему попало.
     buf = io.BytesIO()
-    np.save(buf, st.evidence)
+    np.savez_compressed(buf, evidence=st.evidence, hot_count=st.hot_count)
     cam_state.evidence_key = storage.put(
-        f"{prefix}/evidence.npy", buf.getvalue(), "application/octet-stream")
+        f"{prefix}/counters.npz", buf.getvalue(), "application/octet-stream")
 
     cam_state.work_h, cam_state.work_w = st.shape
     cam_state.windows_accumulated = st.windows
@@ -127,18 +130,12 @@ def save_state(session: Session, cam_state: CameraState, st: M.MaskState,
     session.flush()
 
 
-def load_state(cam_state: CameraState) -> M.MaskState | None:
-    if not cam_state.background_key or not cam_state.work_w:
+def initial_state(cam_state: CameraState) -> M.MaskState | None:
+    """Маска ровно такой, какой её нарисовал оператор, со сброшенными счётчиками."""
+    if not cam_state.initial_mask_key or not cam_state.work_w:
         return None
-    bg = _png_to_mask(storage.get(cam_state.background_key))
-    st = M.MaskState(shape=(cam_state.work_h, cam_state.work_w), background=bg)
-    if cam_state.initial_mask_key:
-        st.initial_area = int(_png_to_mask(
-            storage.get(cam_state.initial_mask_key)).sum())
-    if cam_state.evidence_key:
-        st.evidence = np.load(io.BytesIO(storage.get(cam_state.evidence_key)))
-    st.windows = cam_state.windows_accumulated
-    return st
+    bg = _png_to_mask(storage.get(cam_state.initial_mask_key))
+    return M.MaskState(shape=(cam_state.work_h, cam_state.work_w), background=bg)
 
 
 def work_shape(img: np.ndarray) -> tuple[int, int]:
@@ -165,9 +162,13 @@ def run(
     if cam_state is None or not cam_state.mask_approved:
         raise ValueError("маска не нарисована или не подтверждена")
 
-    st = load_state(cam_state)
+    # Прогон считает папку целиком и стирает прежние кадры, поэтому и маска
+    # начинается заново — с той, что нарисовал оператор. Продолжить от текущей
+    # значило бы сжимать уже сжатое: второй прогон по тем же кадрам съедал бы
+    # маску вдвое, третий втрое, и результат зависел бы от числа запусков.
+    st = initial_state(cam_state)
     if st is None:
-        raise ValueError("состояние маски не найдено")
+        raise ValueError("исходная маска не найдена — нарисуйте её заново")
 
     items = list_frames(folder)
     if limit:
@@ -200,7 +201,7 @@ def run(
             ring.append(M.daily_median([frame]))
             if len(ring) > window_days:
                 ring.pop(0)
-            if len(ring) >= 4:
+            if len(ring) >= window_days:
                 ch = M.change_map(ring)
                 prev_change = float((ch > threshold).mean())
                 M.update(st, ring, threshold=threshold, lock_windows=lock_windows)
@@ -218,12 +219,14 @@ def run(
 
         session.add(row)
         prog.done += 1
+        # Сброс в базу реже, чем доклад о прогрессе: flush стоит заметно
+        # дороже, а полоса должна двигаться плавно.
         if prog.done % 20 == 0:
             session.flush()
-            if on_progress:
-                prog.message = (f"{when:%Y-%m-%d}  маска {st.masked_ratio:.1%}  "
-                                f"цела {st.retained:.0%}")
-                on_progress(prog)
+        if on_progress and prog.done % 5 == 0:
+            prog.message = (f"{when:%Y-%m-%d}  маска {st.masked_ratio:.1%}  "
+                            f"цела {st.retained:.0%}")
+            on_progress(prog)
 
     save_state(session, cam_state, st)
     session.commit()

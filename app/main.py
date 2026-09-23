@@ -22,8 +22,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from app import auth
 from app.config import settings
 from app.db import get_session, init_db
-from app.models import (Building, Camera, Deviation, Frame, MacroStage,
+from app.models import (Camera, CameraState, Deviation, Frame, MacroStage,
                         ObjectType, Site, SiteStage, StageTemplate)
+from app.pipeline import ingest, runner
 from app.pipeline.model_b import ModelB
 
 app = FastAPI(title="Мониторинг строительных площадок", docs_url="/api/docs")
@@ -112,16 +113,31 @@ def logout(request: Request):
 # страницы
 # ---------------------------------------------------------------------------
 
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request, user: str = Depends(auth.require_user),
-          s: Session = Depends(get_session)):
-    sites = s.scalars(select(Site).order_by(Site.name)).all()
+# Статусы объекта. Берутся из открытых отклонений, а не из плана: план
+# говорит только о намерениях, а отставание — это наблюдение. Пока разбор
+# не прошёл, объект с планом честно числится «наблюдения нет».
+BEHIND_TYPES = {"STAGE_BEHIND", "STAGE_NOT_STARTED", "TEMPO_DECAY",
+                "SITE_IDLE", "ACTIVITY_DROP"}
+AHEAD_TYPES = {"STAGE_AHEAD"}
 
-    open_deviations = dict(s.execute(
+
+def _site_cards(s: Session, q: str = "") -> tuple[list[dict], int]:
+    """Карточки объектов со сводкой. Общее число — до фильтрации поиском."""
+    sites = s.scalars(select(Site).order_by(Site.name)).all()
+    total = len(sites)
+    if q:
+        needle = q.strip().lower()
+        sites = [x for x in sites
+                 if needle in x.name.lower() or needle in (x.address or "").lower()]
+
+    open_dev = dict(s.execute(
         select(Deviation.site_id, func.count())
         .where(Deviation.resolved_at.is_(None))
-        .group_by(Deviation.site_id)
-    ).all())
+        .group_by(Deviation.site_id)).all())
+    frames_by_site = dict(s.execute(
+        select(Camera.site_id, func.count(Frame.id))
+        .join(Frame, Frame.camera_id == Camera.id)
+        .group_by(Camera.site_id)).all())
 
     today = dt.date.today()
     cards = []
@@ -132,12 +148,116 @@ def index(request: Request, user: str = Depends(auth.require_user),
         cards.append({
             "site": site,
             "active": active,
-            "deviations": open_deviations.get(site.id, 0),
+            "deviations": open_dev.get(site.id, 0),
             "cameras": len(site.cameras),
-            "buildings": len(site.buildings),
+            "frames": frames_by_site.get(site.id, 0),
         })
-    return templates.TemplateResponse(request, "index.html",
-                                      {"cards": cards, "user": user})
+    return cards, total
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard(request: Request, user: str = Depends(auth.require_user),
+              s: Session = Depends(get_session)):
+    """Сводка по всем объектам сразу — то, с чего начинает работу куратор.
+
+    Показывается только то, что действительно посчитано. Объект, по которому
+    разбор ещё не прошёл, числится в «наблюдения нет», а не в «по графику»:
+    иначе дашборд рисовал бы благополучие там, где просто нет данных.
+    """
+    today = dt.date.today()
+    sites = s.scalars(select(Site).order_by(Site.name)).all()
+    cameras = s.scalars(select(Camera)).all()
+
+    frames_total = s.scalar(select(func.count()).select_from(Frame)) or 0
+    frames_ok = s.scalar(select(func.count()).select_from(Frame)
+                         .where(Frame.quality_ok.is_(True))) or 0
+
+    open_devs = s.scalars(
+        select(Deviation).where(Deviation.resolved_at.is_(None))
+        .order_by(Deviation.detected_at.desc())).all()
+
+    by_site: dict[int, list] = {}
+    for d in open_devs:
+        by_site.setdefault(d.site_id, []).append(d)
+
+    # Распределение объектов по состоянию графика.
+    status = {"behind": 0, "ahead": 0, "on_track": 0, "no_data": 0, "no_plan": 0}
+    for site in sites:
+        kinds = {d.type.value for d in by_site.get(site.id, [])}
+        has_plan = any(st.enabled and st.planned_start and st.planned_end
+                       for st in site.stages)
+        observed = any(cam.state and cam.state.windows_accumulated
+                       for cam in site.cameras)
+        if not has_plan:
+            status["no_plan"] += 1
+        elif kinds & BEHIND_TYPES:
+            status["behind"] += 1
+        elif kinds & AHEAD_TYPES:
+            status["ahead"] += 1
+        elif observed:
+            status["on_track"] += 1
+        else:
+            status["no_data"] += 1
+
+    # Какие этапы идут прямо сейчас по плану — в разрезе всех объектов.
+    stage_load: dict[str, int] = {}
+    for site in sites:
+        for st in site.stages:
+            if (st.enabled and st.planned_start and st.planned_end
+                    and st.planned_start <= today <= st.planned_end):
+                stage_load[st.title] = stage_load.get(st.title, 0) + 1
+    stage_load = dict(sorted(stage_load.items(), key=lambda kv: -kv[1]))
+
+    dev_kinds: dict[str, int] = {}
+    for d in open_devs:
+        dev_kinds[d.type.value] = dev_kinds.get(d.type.value, 0) + 1
+    dev_kinds = dict(sorted(dev_kinds.items(), key=lambda kv: -kv[1]))
+
+    # Что мешает системе работать. Камера без маски не разбирается вовсе,
+    # камера с исчерпанной маской отдаёт модели полный кадр — это не поломка,
+    # но знать об этом надо.
+    attention = []
+    for cam in cameras:
+        st = cam.state
+        site = s.get(Site, cam.site_id)
+        if st is None or not st.mask_approved:
+            attention.append({"camera": cam, "site": site,
+                              "what": "маска не задана",
+                              "hint": "разбор кадров невозможен"})
+        elif st.masked_ratio <= 0.03 and st.windows_accumulated:
+            attention.append({"camera": cam, "site": site,
+                              "what": "маска исчерпана",
+                              "hint": f"скрыто {st.masked_ratio * 100:.0f}%, "
+                                      "модель получает полный кадр"})
+    for site in sites:
+        if not site.cameras:
+            attention.append({"camera": None, "site": site,
+                              "what": "нет камер",
+                              "hint": "наблюдать объект нечем"})
+
+    return templates.TemplateResponse(request, "dashboard.html", {
+        "user": user, "today": today,
+        "sites_total": len(sites),
+        "cameras_total": len(cameras),
+        "cameras_ready": sum(1 for c in cameras if c.state and c.state.mask_approved),
+        "frames_total": frames_total, "frames_ok": frames_ok,
+        "status": status, "stage_load": stage_load,
+        "dev_kinds": dev_kinds, "dev_total": len(open_devs),
+        "recent": open_devs[:8],
+        "site_of": {x.id: x for x in sites},
+        "attention": attention[:8],
+        "attention_total": len(attention),
+    })
+
+
+@app.get("/sites", response_class=HTMLResponse)
+def sites_list(request: Request, q: str = "",
+               user: str = Depends(auth.require_user),
+               s: Session = Depends(get_session)):
+    cards, total = _site_cards(s, q)
+    return templates.TemplateResponse(request, "sites.html",
+                                      {"cards": cards, "total": total,
+                                       "q": q, "user": user})
 
 
 @app.get("/sites/new", response_class=HTMLResponse)
@@ -187,9 +307,14 @@ def site_detail(site_id: int, request: Request,
     deviations = s.scalars(
         select(Deviation).where(Deviation.site_id == site_id)
         .order_by(Deviation.detected_at.desc()).limit(50)).all()
+    used = {st.macro_stage_id for st in site.stages}
+    catalog = s.scalars(select(MacroStage)
+                        .order_by(MacroStage.order_default)).all()
     return templates.TemplateResponse(request, "site.html", {
         "user": user, "site": site, "deviations": deviations,
         "today": dt.date.today(),
+        "catalog": catalog,
+        "available": [m for m in catalog if m.id not in used],
     })
 
 
@@ -197,38 +322,62 @@ def site_detail(site_id: int, request: Request,
 async def stages_save(site_id: int, request: Request,
                       user: str = Depends(auth.require_user),
                       s: Session = Depends(get_session)):
-    """Сохранение календарного плана. Даты конкретные, не кварталы —
-    организаторы указали это явно.
+    """Сохранение календарного плана: состав, порядок и даты разом.
 
-    Форма разбирается вручную, а не через Form(...): полей заранее неизвестное
-    число, по три-четыре на каждый этап объекта.
+    Форма разбирается вручную, а не через Form(...): число строк заранее
+    неизвестно, пользователь добавляет и удаляет этапы прямо на странице.
+
+    Порядок берётся из порядка полей `row` в теле запроса — браузер шлёт их
+    в том порядке, в каком они лежат в разметке, а перетаскивание строки
+    двигает саму разметку. Отдельный номер позиции хранить не нужно.
+
+    Ключ строки: `s<id>` для уже существующего этапа, `m<id>` для только что
+    добавленного из справочника. Различать обязательно — у нового этапа ещё
+    нет строки в базе, а у существующего нельзя терять привязанные данные.
     """
     form = await request.form()
-    for stage in s.scalars(select(SiteStage)
-                           .where(SiteStage.site_id == site_id)).all():
-        prefix = f"stage_{stage.id}_"
-        stage.enabled = form.get(prefix + "enabled") == "on"
-        start = form.get(prefix + "start") or ""
-        end = form.get(prefix + "end") or ""
+    keys = form.getlist("row")
+
+    existing = {st.id: st for st in s.scalars(
+        select(SiteStage).where(SiteStage.site_id == site_id)).all()}
+    kept: set[int] = set()
+
+    for idx, key in enumerate(keys):
+        kind, _, raw = str(key).partition(":")
+        if not raw.isdigit():
+            continue
+        ident = int(raw)
+
+        if kind == "s":
+            stage = existing.get(ident)
+            if stage is None:
+                continue
+            kept.add(stage.id)
+        elif kind == "m":
+            stage = SiteStage(site_id=site_id, macro_stage_id=ident)
+            tpl = s.scalar(select(StageTemplate)
+                           .where(StageTemplate.macro_stage_id == ident))
+            stage.equipment_expected = tpl.equipment_expected if tpl else []
+            stage.equipment_forbidden = tpl.equipment_forbidden if tpl else []
+            s.add(stage)
+        else:
+            continue
+
+        # Этап есть в плане — значит он включён. Отдельной галочки больше нет:
+        # лишний этап теперь убирают из списка, а не снимают с него отметку.
+        stage.enabled = True
+        stage.order_idx = idx
+        start = form.get(f"start_{key}") or ""
+        end = form.get(f"end_{key}") or ""
         stage.planned_start = dt.date.fromisoformat(start) if start else None
         stage.planned_end = dt.date.fromisoformat(end) if end else None
-        stage.on_critical_path = form.get(prefix + "critical") == "on"
-        if stage.planned_start and stage.planned_end:
-            stage.dates_confirmed = True
-    s.commit()
-    return auth.redirect(f"/sites/{site_id}")
+        stage.dates_confirmed = bool(stage.planned_start and stage.planned_end)
 
+    # Чего в форме не пришло — пользователь удалил со страницы.
+    for stage_id, stage in existing.items():
+        if stage_id not in kept:
+            s.delete(stage)
 
-@app.post("/sites/{site_id}/buildings")
-def building_add(site_id: int, user: str = Depends(auth.require_user),
-                 s: Session = Depends(get_session),
-                 name: str = Form(...), floors_total: int = Form(0),
-                 area: float = Form(0.0)):
-    """Корпус — внутренняя единица измерения. Вес в свёртке берётся по площади:
-    корпус на 33 этажа и пристройка на 2 не могут весить одинаково."""
-    s.add(Building(site_id=site_id, name=name,
-                   floors_total=floors_total or None,
-                   area=area or None, weight=area or 1.0))
     s.commit()
     return auth.redirect(f"/sites/{site_id}")
 
@@ -236,17 +385,32 @@ def building_add(site_id: int, user: str = Depends(auth.require_user),
 @app.post("/sites/{site_id}/cameras")
 def camera_add(site_id: int, user: str = Depends(auth.require_user),
                s: Session = Depends(get_session),
-               name: str = Form(...), view_type: str = Form("side"),
-               source_uri: str = Form("")):
-    from app.models import CameraState, ViewType
-    cam = Camera(site_id=site_id, name=name, source_uri=source_uri,
-                 view_type=ViewType(view_type))
+               name: str = Form(...), source_uri: str = Form("")):
+    cam = Camera(site_id=site_id, name=name, source_uri=source_uri.strip())
     s.add(cam)
     s.flush()
     s.add(CameraState(camera_id=cam.id))
     s.commit()
     # Сразу на карточку камеры: там рисуется маска, без неё прогон невозможен.
     return auth.redirect(f"/cameras/{cam.id}")
+
+
+@app.post("/cameras/{camera_id}/delete")
+def camera_delete(camera_id: int, user: str = Depends(auth.require_user),
+                  s: Session = Depends(get_session)):
+    """Удаление камеры вместе с накопленным состоянием и кадрами.
+
+    Кадры уходят по внешнему ключу на стороне БД. Картинки остаются в
+    хранилище: они адресуются ключом с номером камеры, новый номер их не
+    переиспользует, а гонять тысячу удалений ради освобождения места,
+    которое ничего не стоит, — плохой размен.
+    """
+    cam = s.get(Camera, camera_id)
+    site_id = cam.site_id if cam else None
+    if cam:
+        s.delete(cam)
+        s.commit()
+    return auth.redirect(f"/sites/{site_id}" if site_id else "/sites")
 
 
 @app.post("/sites/{site_id}/delete")
@@ -256,7 +420,7 @@ def site_delete(site_id: int, user: str = Depends(auth.require_user),
     if site:
         s.delete(site)
         s.commit()
-    return auth.redirect("/")
+    return auth.redirect("/sites")
 
 
 # ---------------------------------------------------------------------------
@@ -267,8 +431,6 @@ def site_delete(site_id: int, user: str = Depends(auth.require_user),
 def camera_detail(camera_id: int, request: Request,
                   user: str = Depends(auth.require_user),
                   s: Session = Depends(get_session)):
-    from app.models import CameraState
-    from app.pipeline import ingest
     from app.storage import storage
 
     cam = s.get(Camera, camera_id)
@@ -305,6 +467,12 @@ def camera_detail(camera_id: int, request: Request,
     if cam.reference_frame_key:
         first_url = storage.url(cam.reference_frame_key)
 
+    # Состояние прогона показывается, пока он идёт, и если он упал. Успешно
+    # завершённый прятать обязательно: иначе страница навсегда застрянет на
+    # «готово» и кнопка пересчёта больше не появится.
+    running = runner.status(cam.id)
+    run = running if running and (not running.finished or running.error) else None
+
     initial_url = (storage.url(cam.state.initial_mask_key)
                    if cam.state.initial_mask_key else None)
     frames_count = s.scalar(
@@ -315,6 +483,7 @@ def camera_detail(camera_id: int, request: Request,
         "first_url": first_url, "first_err": first_err,
         "source_total": total, "initial_url": initial_url,
         "frames_count": frames_count,
+        "camera_id": cam.id, "run": run,
     })
 
 
@@ -327,7 +496,7 @@ def camera_mask_save(camera_id: int, user: str = Depends(auth.require_user),
     import cv2
     import numpy as np
 
-    from app.pipeline import ingest, mask as M
+    from app.pipeline import mask as M
     from app.storage import storage
 
     cam = s.get(Camera, camera_id)
@@ -349,6 +518,11 @@ def camera_mask_save(camera_id: int, user: str = Depends(auth.require_user),
     ingest.save_state(s, cam.state, st, initial=True)
     cam.state.mask_approved = True
     s.commit()
+
+    # Маска подтверждена — прогонять историю больше не за чем ждать команды
+    # в терминале. Страница камеры сразу покажет прогресс и уведёт к кадрам.
+    if cam.source_uri and Path(cam.source_uri).is_dir():
+        runner.start(camera_id)
     return auth.redirect(f"/cameras/{camera_id}")
 
 
@@ -424,6 +598,69 @@ def frame_detail(frame_id: int, request: Request,
         "masked_url": storage.url(f.masked_key) if f.masked_key else None,
         "overlay_url": storage.url(f.overlay_key) if f.overlay_key else None,
     })
+
+
+@app.post("/cameras/{camera_id}/run")
+def camera_run(camera_id: int, user: str = Depends(auth.require_user),
+               s: Session = Depends(get_session)):
+    cam = s.get(Camera, camera_id)
+    if cam is None or cam.state is None or not cam.state.mask_approved:
+        return HTMLResponse("Сначала нужно задать маску", status_code=400)
+    runner.start(camera_id)
+    return auth.redirect(f"/cameras/{camera_id}")
+
+
+@app.get("/cameras/{camera_id}/progress", response_class=HTMLResponse)
+def camera_progress(camera_id: int, request: Request,
+                    user: str = Depends(auth.require_user)):
+    """Кусок разметки для опроса из HTMX.
+
+    Когда прогон закончен, отдаётся заголовок HX-Redirect — браузер сам
+    уходит на страницу с разобранными кадрами, ради которой всё и делалось.
+    """
+    st = runner.status(camera_id)
+    if st is None:
+        return HTMLResponse("")
+
+    resp = templates.TemplateResponse(request, "_progress.html",
+                                      {"run": st, "camera_id": camera_id})
+    if st.finished and not st.error:
+        resp.headers["HX-Redirect"] = f"/cameras/{camera_id}/frames"
+    return resp
+
+
+@app.get("/api/fs")
+def fs_browse(path: str = "", user: str = Depends(auth.require_user)) -> JSONResponse:
+    """Обзор папок на машине сервиса — выбор источника кадров мышью.
+
+    Наружу не выпускает: любой путь приводится к абсолютному и проверяется,
+    что он лежит под корнем. Без этого `..` в параметре открыл бы весь диск.
+    """
+    root = Path(settings.fs_browse_root or Path.home()).resolve()
+    try:
+        here = Path(path).resolve() if path else root
+        here.relative_to(root)
+    except (ValueError, OSError):
+        here = root
+    if not here.is_dir():
+        here = root
+
+    dirs, frames_here = [], 0
+    try:
+        for entry in sorted(here.iterdir(), key=lambda x: x.name.lower()):
+            if entry.name.startswith("."):
+                continue
+            if entry.is_dir():
+                dirs.append({"name": entry.name, "path": str(entry)})
+            elif entry.suffix.lower() in ingest.IMAGE_EXT and \
+                    ingest.parse_stamp(entry.name):
+                frames_here += 1
+    except PermissionError:
+        pass
+
+    parent = str(here.parent) if here != root else ""
+    return JSONResponse({"path": str(here), "parent": parent, "root": str(root),
+                         "dirs": dirs, "frames": frames_here})
 
 
 # ---------------------------------------------------------------------------

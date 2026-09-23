@@ -139,6 +139,30 @@ def test_top_edge_rises_as_building_grows() -> None:
     assert edges[-1] < edges[0], f"граница не поднялась: {edges[0]} → {edges[-1]}"
 
 
+def test_weather_swing_does_not_erode(result) -> None:
+    """Скачок освещения сильнее порога не должен стирать маску.
+
+    Пасмурный день, снег, другое время года двигают яркость всего кадра
+    разом. Если бы порог применялся к сырой разности, такой скачок читался
+    бы как застройка по всей площади сразу.
+    """
+    days = []
+    for d in range(50):
+        rng = np.random.default_rng(d)
+        # амплитуда заведомо выше CHANGE_THRESHOLD
+        weather = 70 * np.sin(d / 6.0)
+        days.append(M.daily_median([scene(0, rng, weather) for _ in range(4)]))
+
+    st = M.init_from_bitmap(operator_mask(days[0].shape), days[0].shape)
+    start = int(st.background.sum())
+    for i in range(M.WINDOW_DAYS, len(days) + 1):
+        M.update(st, days[i - M.WINDOW_DAYS:i])
+
+    assert st.background.sum() / start > 0.9, (
+        "погода съела маску: от неё осталось "
+        f"{st.background.sum() / start:.0%}, а стройки в кадре нет вовсе")
+
+
 def test_useful_flag() -> None:
     """Если скрывать нечего, система должна это признавать, а не
     делать вид, что фон отфильтрован."""
