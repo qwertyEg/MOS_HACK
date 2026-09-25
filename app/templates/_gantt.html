@@ -1,0 +1,131 @@
+{# ------------------------------------------------------------------ #}
+{# Диаграмма Ганта: план и факт на одной шкале.                          #}
+{# Плановая полоса серая и лежит сверху строки, под ней — по полосе на   #}
+{# каждую камеру. Усреднять камеры нельзя: расхождение между ними — это  #}
+{# сведение (работы идут с той стороны), а не шум, который надо сгладить. #}
+{# ------------------------------------------------------------------ #}
+{# Обёртка существует всегда, даже когда факта ещё нет: пока идёт съёмка,   #}
+{# она сама подтягивает свежую диаграмму, и первый появившийся этап видно   #}
+{# без перезагрузки страницы.                                               #}
+<div {% if poll %}hx-get="/sites/{{ site.id }}/chart" hx-trigger="every 10s"
+       hx-swap="outerHTML"{% endif %}>
+{% if chart %}
+<section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
+  <div class="flex flex-wrap items-start gap-4 mb-1">
+    <h2 class="font-medium">Этапы: план и факт</h2>
+    <div class="ml-auto flex flex-wrap items-center gap-4 text-xs text-slate-500">
+      <span class="flex items-center gap-1.5">
+        <span class="inline-block w-6 h-2.5 rounded-sm bg-slate-300"></span>по плану
+      </span>
+      {% for src in chart.sources %}
+      <span class="flex items-center gap-1.5">
+        <span class="inline-block w-6 h-2 rounded-sm"
+              style="background: {{ src.color }}"></span>{{ src.label }}
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <p class="text-xs text-slate-500 mb-4">
+    Факт строится по хронологии чек-листов: этап активен, пока модель видит
+    его признаки. Признак пропал из кадра — этап закончился, это норма.
+    {% if not chart.sources %}
+    Факта пока нет: кадры ещё не разбирались моделью.
+    {% endif %}
+  </p>
+
+  {% if chart.sources %}
+  <div class="flex flex-wrap gap-6 mb-5 text-sm">
+    <div>
+      <div class="text-slate-500 text-xs">совпадение с планом</div>
+      <div class="text-lg font-medium">
+        {{ "%.0f"|format(chart.match * 100) if chart.match is not none else "—" }}%
+      </div>
+    </div>
+    <div>
+      <div class="text-slate-500 text-xs">этапов опознано</div>
+      <div class="text-lg font-medium">{{ chart.detected }} из {{ chart.planned }}</div>
+    </div>
+    <div class="max-w-md text-xs text-slate-500 self-end pb-1">
+      Совпадение — пересечение календарных дней плана и факта к их
+      объединению: штрафуется и сдвиг начала, и растянутость.
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="space-y-1.5">
+    {% for row in chart.rows %}
+    <div class="flex items-stretch gap-3 text-sm">
+      <div class="w-48 shrink-0 truncate text-slate-600 self-center"
+           title="{{ row.title }}">
+        {{ row.title }}
+        {% if row.reached %}
+        <span class="text-green-700"
+              title="все необратимые признаки этапа наблюдались">✓</span>
+        {% endif %}
+      </div>
+
+      <div class="relative flex-1 bg-slate-50 rounded border border-slate-100
+                  py-1.5 px-0">
+        {% if chart.today_left is not none %}
+        <div class="absolute top-0 bottom-0 w-px bg-red-400/60"
+             style="left: {{ chart.today_left }}%" title="сегодня"></div>
+        {% endif %}
+
+        <div class="relative h-2.5 mb-1">
+          {% if row.plan %}
+          <div class="absolute h-2.5 rounded-sm bg-slate-300"
+               style="left: {{ row.plan.left }}%; width: {{ row.plan.width }}%"
+               title="по плану: {{ row.plan.label }}"></div>
+          {% endif %}
+        </div>
+
+        {% for lane in row.lanes %}
+        <div class="relative h-2 {% if not loop.last %}mb-1{% endif %}">
+          {% for box in lane.boxes %}
+          <div class="absolute h-2 rounded-sm"
+               style="left: {{ box.left }}%; width: {{ box.width }}%;
+                      background: {{ lane.color }}"
+               title="{{ lane.label }}: {{ box.label }}"></div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="w-36 shrink-0 text-xs self-center text-right">
+        <span class="{{ 'text-green-700' if row.verdict == 'в срок'
+                        else ('text-slate-400' if 'наблюдался' in row.verdict
+                              else 'text-amber-700') }}">
+          {{ row.verdict }}
+        </span>
+        {% if row.match is not none %}
+        <div class="text-slate-400">совпало {{ "%.0f"|format(row.match * 100) }}%</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="flex items-center gap-3 mt-2">
+    <div class="w-48 shrink-0"></div>
+    <div class="relative flex-1 h-4">
+      {% for tick in chart.ticks %}
+      <span class="absolute text-[10px] text-slate-400 -translate-x-1/2"
+            style="left: {{ tick.left }}%">{{ tick.label }}</span>
+      {% endfor %}
+    </div>
+    <div class="w-36 shrink-0"></div>
+  </div>
+</section>
+{% endif %}
+{% if not chart %}
+<section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
+  <h2 class="font-medium mb-1">Этапы: план и факт</h2>
+  <p class="text-xs text-slate-500">
+    Проставьте этапам даты в календарном плане ниже — и диаграмма появится.
+    Фактические полосы добавятся, как только камеры пришлют первые кадры.
+  </p>
+</section>
+{% endif %}
+</div>
+

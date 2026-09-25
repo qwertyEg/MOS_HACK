@@ -34,6 +34,7 @@ IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 PREVIEW_WIDTH = 900       # ширина сохраняемых превью
 NIGHT_SATURATION = 12.0   # ИК-режим даёт почти монохром
+VLM_GROUP = 5             # вопросов в одном запросе к модели Б
 
 
 @dataclass(slots=True)
@@ -138,6 +139,76 @@ def initial_state(cam_state: CameraState) -> M.MaskState | None:
     return M.MaskState(shape=(cam_state.work_h, cam_state.work_w), background=bg)
 
 
+def site_questions(camera: Camera) -> list[dict]:
+    """Объединение вопросов всех этапов объекта, без повторов.
+
+    Спрашивать чек-листы поэтапно значило бы задавать один и тот же вопрос
+    по нескольку раз: «здание выше уровня земли» встречается в четырёх
+    этапах. Ключ у вопроса один, ответ на кадр тоже один — достаточно
+    спросить каждый уникальный ключ единожды, а этапы разберут общий пул.
+    """
+    seen: dict[str, dict] = {}
+    for stage in camera.site.stages:
+        for q in stage.questions or []:
+            seen.setdefault(q["key"], q)
+    return list(seen.values())
+
+
+def ask_model_b(questions: list[dict], frame: np.ndarray,
+                mask: np.ndarray | None) -> dict[str, object]:
+    """Все уникальные вопросы кадра → ответы, группами по VLM_GROUP.
+
+    Группа маленькая намеренно: замер показал, что длинным списком модель
+    перестаёт различать «этого нет» и «этого не видно» — см. шапку model_b.
+    """
+    from PIL import Image
+
+    from app.pipeline.model_b import MaskMode, ModelB
+
+    pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    model = ModelB()
+    out: dict[str, object] = {}
+    for i in range(0, len(questions), VLM_GROUP):
+        chunk = questions[i:i + VLM_GROUP]
+        for item in model.fill_checklist(pil, chunk, mask=mask,
+                                         mask_mode=MaskMode.DARKEN):
+            out[item["key"]] = item
+    return out
+
+
+def save_checklists(session: Session, camera: Camera, frame_row: Frame,
+                    answered: dict[str, object]) -> int:
+    """Раскладывает общий пул ответов по этапам объекта.
+
+    Строка чек-листа заводится на каждый этап: аналитика (§3.7) устроена
+    так, что у каждого этапа своя хронология, а ответ на общий ключ просто
+    участвует в нескольких. Возвращает число заполненных чек-листов.
+    """
+    from app.models import Checklist, ChecklistAnswer
+    from app.config import settings
+
+    filled = 0
+    for stage in camera.site.stages:
+        items = [answered[q["key"]] for q in (stage.questions or [])
+                 if q["key"] in answered]
+        if not items:
+            continue
+        cl = Checklist(frame_id=frame_row.id, site_stage_id=stage.id,
+                       model_name=settings.vlm_model)
+        session.add(cl)
+        session.flush()
+        filled += 1
+        for q in (stage.questions or []):
+            item = answered.get(q["key"])
+            if item is None:
+                continue
+            session.add(ChecklistAnswer(
+                checklist_id=cl.id, key=q["key"], question=q["text"],
+                answer=item["answer"], polarity=q["polarity"],
+                latency_ms=item["latency_ms"], raw_response=item["raw"]))
+    return filled
+
+
 def work_shape(img: np.ndarray) -> tuple[int, int]:
     return M.prepare(img).shape
 
@@ -150,6 +221,8 @@ def run(
     threshold: float = M.CHANGE_THRESHOLD,
     lock_windows: int = M.LOCK_WINDOWS,
     window_days: int = M.WINDOW_DAYS,
+    model_b: bool = False,
+    model_b_hours: int = 1,
     on_progress: Callable[[Progress], None] | None = None,
 ) -> Progress:
     """Прогон истории камеры через маску.
@@ -181,6 +254,8 @@ def run(
 
     ring: list[np.ndarray] = []
     prev_change = 0.0
+    questions = site_questions(camera) if model_b else []
+    last_vlm: dt.datetime | None = None
 
     for path, when in items:
         frame = cv2.imread(str(path))
@@ -218,6 +293,20 @@ def run(
         row.change_pct = prev_change
 
         session.add(row)
+
+        # Модель Б — не на каждом кадре: этап строительства за час не
+        # меняется, а вызов стоит секунд. §4.2 плана.
+        if model_b and ok and not night and questions:
+            if last_vlm is None or (when - last_vlm).total_seconds() >= model_b_hours * 3600:
+                session.flush()
+                try:
+                    visible = M.to_full_res(M.visible_mask(st), w, h) if st.useful else None
+                    save_checklists(session, camera, row,
+                                    ask_model_b(questions, frame, visible))
+                    last_vlm = when
+                except Exception as exc:
+                    prog.message = f"модель Б: {exc}"
+
         prog.done += 1
         # Сброс в базу реже, чем доклад о прогрессе: flush стоит заметно
         # дороже, а полоса должна двигаться плавно.

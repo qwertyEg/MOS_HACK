@@ -70,7 +70,8 @@ def forget(camera_id: int) -> None:
     _runs.pop(camera_id, None)
 
 
-def start(camera_id: int, limit: int = 0) -> RunStatus:
+def start(camera_id: int, limit: int = 0,
+          model_b: bool = False) -> RunStatus:
     """Ставит прогон в работу. Повторный запуск поверх идущего игнорируется."""
     with _lock:
         running = _runs.get(camera_id)
@@ -95,7 +96,8 @@ def start(camera_id: int, limit: int = 0) -> RunStatus:
                     st.skipped = p.skipped
                     st.message = p.message
 
-                ingest.run(session, cam, folder, limit=limit, on_progress=report)
+                ingest.run(session, cam, folder, limit=limit,
+                           model_b=model_b, on_progress=report)
         except Exception as exc:                      # noqa: BLE001
             # Причина нужна на странице: «ничего не произошло» без объяснения
             # хуже, чем текст ошибки.

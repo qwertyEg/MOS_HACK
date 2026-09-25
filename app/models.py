@@ -116,6 +116,9 @@ class MacroStage(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     progress_metric: Mapped[str] = mapped_column(String(64), default="")
     progress_view: Mapped[str] = mapped_column(String(16), default="")
+    # Пусто = применим ко всем типам объектов. Для дороги нет ни монолита,
+    # ни кровли, и предлагать их в плане незачем.
+    object_types: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
 
     template: Mapped["StageTemplate"] = relationship(back_populates="macro_stage",
                                                      uselist=False)
@@ -216,6 +219,11 @@ class SiteStage(Base):
     equipment_expected: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     equipment_forbidden: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Снимок чек-листа на момент сохранения плана. Правка CSV не должна
+    # задним числом менять вопросы у объекта, который наблюдается месяцами:
+    # иначе половина истории окажется по одному набору вопросов, половина
+    # по другому, и сравнивать их будет нельзя.
+    questions: Mapped[list[dict]] = mapped_column(JSONB, default=list)
 
     site: Mapped[Site] = relationship(back_populates="stages")
     macro_stage: Mapped[MacroStage | None] = relationship()
@@ -239,12 +247,28 @@ class Declaration(Base):
 # --------------------------------------------------------------------------
 
 class Camera(Base):
+    """Источник кадров.
+
+    Два режима, `source_type`:
+
+        folder  — папка на диске, прогоняется целиком по команде. Режим
+                  разработки: на нём мерялось качество маски, он повторяем.
+        stream  — камера как отдельный сервис. `source_uri` — её адрес,
+                  сервис сам шлёт кадры по одному, а мы принимаем и
+                  разбираем их на лету. Это то, как система работает в жизни.
+
+    `ingest_key` — пропуск камеры к приёмнику. Кадры приходят без сессии
+    оператора, и отличить свою камеру от чужого запроса больше нечем.
+    Ключ у каждой камеры свой: увели один — отключается одна камера.
+    """
     __tablename__ = "cameras"
     id: Mapped[int] = mapped_column(primary_key=True)
     site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(128))
     source_type: Mapped[str] = mapped_column(String(32), default="folder")
     source_uri: Mapped[str] = mapped_column(Text, default="")
+    ingest_key: Mapped[str] = mapped_column(String(64), default="")
+    last_seen_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     view_type: Mapped[ViewType] = mapped_column(Enum(ViewType), default=ViewType.SIDE)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     reference_frame_key: Mapped[str] = mapped_column(Text, default="")
@@ -324,6 +348,10 @@ class Frame(Base):
     retained: Mapped[float] = mapped_column(Float, default=1.0)
     top_edge_px: Mapped[int | None] = mapped_column(Integer)
     change_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    # Что камера сообщила о кадре помимо картинки: модель, выдержка, погода,
+    # номер в серии. Схему сюда не навязываем — у разных камер она разная,
+    # а терять то, чего мы не ждали, хуже, чем хранить лишнее.
+    meta: Mapped[dict] = mapped_column(JSONB, default=dict)
 
     __table_args__ = (UniqueConstraint("camera_id", "captured_at",
                                        name="uq_frame_camera_time"),)

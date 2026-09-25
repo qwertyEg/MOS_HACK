@@ -9,9 +9,12 @@ HTMX без единой строки сборки.
 from __future__ import annotations
 
 import datetime as dt
+import json
+import secrets
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, Form, Request
+from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -19,12 +22,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import auth
+from app import auth, netutil
 from app.config import settings
 from app.db import get_session, init_db
 from app.models import (Camera, CameraState, Deviation, Frame, MacroStage,
                         ObjectType, Site, SiteStage, StageTemplate)
-from app.pipeline import ingest, runner
+from app.pipeline import aggregate, gantt, ingest, live, runner
 from app.pipeline.model_b import ModelB
 
 app = FastAPI(title="Мониторинг строительных площадок", docs_url="/api/docs")
@@ -297,6 +300,34 @@ def site_create(request: Request, user: str = Depends(auth.require_user),
     return auth.redirect(f"/sites/{site.id}")
 
 
+def _chart(s: Session, site, today: dt.date) -> gantt.Chart | None:
+    """План против факта: диаграмма Ганта на общей шкале.
+
+    Факт строится по каждой камере отдельно. Две камеры смотрят на площадку
+    с разных сторон, и то, что одна видит этап, а другая нет, — сведение,
+    которое нельзя терять усреднением: чаще всего это значит, что работы
+    идут с той стороны, а не что модель ошиблась.
+    """
+    per_cam = aggregate.curves_by_camera(s, site)
+    names = {c.id: c.name for c in site.cameras}
+
+    sources = []
+    for i, cam_id in enumerate(sorted(per_cam)):
+        curves = per_cam[cam_id]
+        sources.append(gantt.Source(
+            key=f"cam{cam_id}",
+            label=names.get(cam_id, f"камера {cam_id}"),
+            color=gantt.PALETTE[i % len(gantt.PALETTE)],
+            intervals={c.stage_id: c.intervals for c in curves},
+            reached={c.stage_id for c in curves if c.reached},
+        ))
+
+    stages = [{"id": st.id, "title": st.title,
+               "planned_start": st.planned_start, "planned_end": st.planned_end}
+              for st in site.stages]
+    return gantt.build(stages, sources, today)
+
+
 @app.get("/sites/{site_id}", response_class=HTMLResponse)
 def site_detail(site_id: int, request: Request,
                 user: str = Depends(auth.require_user),
@@ -310,11 +341,31 @@ def site_detail(site_id: int, request: Request,
     used = {st.macro_stage_id for st in site.stages}
     catalog = s.scalars(select(MacroStage)
                         .order_by(MacroStage.order_default)).all()
+    today = dt.date.today()
     return templates.TemplateResponse(request, "site.html", {
         "user": user, "site": site, "deviations": deviations,
-        "today": dt.date.today(),
+        "today": today,
         "catalog": catalog,
         "available": [m for m in catalog if m.id not in used],
+        "chart": _chart(s, site, today),
+        "live": {c.id: live.status(c.id) for c in site.cameras},
+        # Диаграмма подтягивает себя сама, только пока есть чему меняться.
+        "poll": any(c.source_type == "stream" for c in site.cameras),
+    })
+
+
+@app.get("/sites/{site_id}/chart", response_class=HTMLResponse)
+def site_chart(site_id: int, request: Request,
+               user: str = Depends(auth.require_user),
+               s: Session = Depends(get_session)):
+    """Одна диаграмма, без остальной страницы — для опроса из HTMX."""
+    site = s.get(Site, site_id)
+    if site is None:
+        return HTMLResponse("")
+    today = dt.date.today()
+    return templates.TemplateResponse(request, "_gantt.html", {
+        "site": site, "chart": _chart(s, site, today), "today": today,
+        "poll": any(c.source_type == "stream" for c in site.cameras),
     })
 
 
@@ -359,6 +410,10 @@ async def stages_save(site_id: int, request: Request,
                            .where(StageTemplate.macro_stage_id == ident))
             stage.equipment_expected = tpl.equipment_expected if tpl else []
             stage.equipment_forbidden = tpl.equipment_forbidden if tpl else []
+            # Снимок вопросов берётся один раз, при добавлении этапа.
+            # Дальше правка справочника на этот объект не влияет — иначе
+            # накопленная история окажется посчитанной по разным чек-листам.
+            stage.questions = tpl.questions if tpl else []
             s.add(stage)
         else:
             continue
@@ -385,13 +440,23 @@ async def stages_save(site_id: int, request: Request,
 @app.post("/sites/{site_id}/cameras")
 def camera_add(site_id: int, user: str = Depends(auth.require_user),
                s: Session = Depends(get_session),
-               name: str = Form(...), source_uri: str = Form("")):
-    cam = Camera(site_id=site_id, name=name, source_uri=source_uri.strip())
+               name: str = Form(...), mode: str = Form("stream"),
+               source_uri: str = Form("")):
+    """Заведение камеры. Два режима — поток и папка, см. `Camera`.
+
+    Ключ приёма выдаётся сразу и живёт с камерой: он нужен уже при первом
+    подключении, а придумывать отдельный шаг «сгенерировать ключ» значило бы
+    добавить оператору действие, которое никогда не делается иначе.
+    """
+    cam = Camera(site_id=site_id, name=name,
+                 source_type="folder" if mode == "folder" else "stream",
+                 source_uri=source_uri.strip(),
+                 ingest_key=secrets.token_urlsafe(24))
     s.add(cam)
     s.flush()
     s.add(CameraState(camera_id=cam.id))
     s.commit()
-    # Сразу на карточку камеры: там рисуется маска, без неё прогон невозможен.
+    # Сразу на карточку камеры: там рисуется маска, без неё разбор невозможен.
     return auth.redirect(f"/cameras/{cam.id}")
 
 
@@ -427,8 +492,43 @@ def site_delete(site_id: int, user: str = Depends(auth.require_user),
 # камера: первый кадр, маска, прогон, результаты
 # ---------------------------------------------------------------------------
 
+def _remote(cam: Camera, path: str, method: str = "get", **kw):
+    """Запрос к сервису камеры. Возвращает (ответ, текст ошибки)."""
+    import requests
+
+    if not cam.source_uri:
+        return None, "у камеры не задан адрес"
+    url = cam.source_uri.rstrip("/") + path
+    try:
+        resp = getattr(requests, method)(url, timeout=5,
+                                         proxies=netutil.proxies_for(url), **kw)
+    except requests.RequestException as exc:
+        return None, f"камера не отвечает ({url}): {exc.__class__.__name__}"
+    if resp.status_code >= 400:
+        return None, f"камера ответила {resp.status_code}: {resp.text[:200]}"
+    return resp, ""
+
+
+def _stream_reference(s: Session, cam: Camera) -> str:
+    """Опорный кадр для рисования маски — до того, как пошла съёмка.
+
+    Маску рисуют один раз и заранее: без неё принятый кадр разбирать нечем.
+    Поэтому камеру спрашивают о первом кадре отдельно, не дожидаясь, пока
+    она начнёт слать серию.
+    """
+    from app.storage import storage
+
+    resp, err = _remote(cam, "/api/preview")
+    if resp is None:
+        return err
+    cam.reference_frame_key = storage.put(f"cam/{cam.id}/reference.jpg",
+                                          resp.content)
+    s.commit()
+    return ""
+
+
 @app.get("/cameras/{camera_id}", response_class=HTMLResponse)
-def camera_detail(camera_id: int, request: Request,
+def camera_detail(camera_id: int, request: Request, err: str = "",
                   user: str = Depends(auth.require_user),
                   s: Session = Depends(get_session)):
     from app.storage import storage
@@ -440,29 +540,41 @@ def camera_detail(camera_id: int, request: Request,
         cam.state = CameraState(camera_id=cam.id)
         s.flush()
         s.commit()
+    if not cam.ingest_key:
+        cam.ingest_key = secrets.token_urlsafe(24)
+        s.commit()
 
-    # Первый кадр берётся из папки-источника: маску надо рисовать до прогона.
-    first_url, first_err, total = None, "", 0
-    folder = Path(cam.source_uri) if cam.source_uri else None
-    if folder and folder.is_dir():
-        items = ingest.list_frames(folder)
-        total = len(items)
-        if items:
-            if not cam.reference_frame_key:
-                import cv2
-                img = cv2.imread(str(items[0][0]))
-                if img is not None:
-                    ok, buf = cv2.imencode(".jpg", img,
-                                           [cv2.IMWRITE_JPEG_QUALITY, 92])
-                    cam.reference_frame_key = storage.put(
-                        f"cam/{cam.id}/reference.jpg", buf.tobytes())
-                    s.commit()
-        else:
-            first_err = "в папке нет кадров с распознаваемой меткой времени"
-    elif folder:
-        first_err = f"папка не найдена: {folder}"
+    first_url, first_err, total, remote = None, "", 0, None
+
+    if cam.source_type == "stream":
+        resp, first_err = _remote(cam, "/api/info")
+        if resp is not None:
+            remote = resp.json()
+            total = remote.get("frames", 0)
+        if not cam.reference_frame_key and resp is not None:
+            first_err = _stream_reference(s, cam)
     else:
-        first_err = "у камеры не задана папка с кадрами"
+        # Первый кадр берётся из папки-источника: маску надо рисовать до прогона.
+        folder = Path(cam.source_uri) if cam.source_uri else None
+        if folder and folder.is_dir():
+            items = ingest.list_frames(folder)
+            total = len(items)
+            if items:
+                if not cam.reference_frame_key:
+                    import cv2
+                    img = cv2.imread(str(items[0][0]))
+                    if img is not None:
+                        ok, buf = cv2.imencode(".jpg", img,
+                                               [cv2.IMWRITE_JPEG_QUALITY, 92])
+                        cam.reference_frame_key = storage.put(
+                            f"cam/{cam.id}/reference.jpg", buf.tobytes())
+                        s.commit()
+            else:
+                first_err = "в папке нет кадров с распознаваемой меткой времени"
+        elif folder:
+            first_err = f"папка не найдена: {folder}"
+        else:
+            first_err = "у камеры не задана папка с кадрами"
 
     if cam.reference_frame_key:
         first_url = storage.url(cam.reference_frame_key)
@@ -480,9 +592,11 @@ def camera_detail(camera_id: int, request: Request,
 
     return templates.TemplateResponse(request, "camera.html", {
         "user": user, "cam": cam, "state": cam.state,
-        "first_url": first_url, "first_err": first_err,
+        "first_url": first_url, "first_err": first_err, "err": err,
         "source_total": total, "initial_url": initial_url,
-        "frames_count": frames_count,
+        "frames_count": frames_count, "remote": remote,
+        "ingest_url": settings.public_base_url.rstrip("/") + "/api/ingest",
+        "live": live.status(cam.id),
         "camera_id": cam.id, "run": run,
     })
 
@@ -519,9 +633,11 @@ def camera_mask_save(camera_id: int, user: str = Depends(auth.require_user),
     cam.state.mask_approved = True
     s.commit()
 
-    # Маска подтверждена — прогонять историю больше не за чем ждать команды
+    # Маска подтверждена — прогонять историю больше незачем ждать команды
     # в терминале. Страница камеры сразу покажет прогресс и уведёт к кадрам.
-    if cam.source_uri and Path(cam.source_uri).is_dir():
+    # Потоковую камеру это не касается: там разбор начнётся сам, как только
+    # пойдут кадры, а прогонять нечего — истории ещё нет.
+    if cam.source_type == "folder" and cam.source_uri and Path(cam.source_uri).is_dir():
         runner.start(camera_id)
     return auth.redirect(f"/cameras/{camera_id}")
 
@@ -602,11 +718,12 @@ def frame_detail(frame_id: int, request: Request,
 
 @app.post("/cameras/{camera_id}/run")
 def camera_run(camera_id: int, user: str = Depends(auth.require_user),
-               s: Session = Depends(get_session)):
+               s: Session = Depends(get_session),
+               model_b: str = Form("")):
     cam = s.get(Camera, camera_id)
     if cam is None or cam.state is None or not cam.state.mask_approved:
         return HTMLResponse("Сначала нужно задать маску", status_code=400)
-    runner.start(camera_id)
+    runner.start(camera_id, model_b=model_b == "on")
     return auth.redirect(f"/cameras/{camera_id}")
 
 
@@ -627,6 +744,139 @@ def camera_progress(camera_id: int, request: Request,
     if st.finished and not st.error:
         resp.headers["HX-Redirect"] = f"/cameras/{camera_id}/frames"
     return resp
+
+
+# ---------------------------------------------------------------------------
+# камера как поток: подключение и приём кадров
+# ---------------------------------------------------------------------------
+
+@app.post("/cameras/{camera_id}/connect")
+def camera_connect(camera_id: int, user: str = Depends(auth.require_user),
+                   s: Session = Depends(get_session)):
+    """Сказать камере, куда слать кадры, и включить съёмку.
+
+    Адрес приёмника сообщаем мы, а не камера его угадывает: камера живёт на
+    другой машине, и «localhost» у неё свой. Ключ уходит той же командой —
+    камера не хранит его между запусками, и это правильно: отозвать доступ
+    должно быть можно, не заходя на камеру.
+    """
+    cam = s.get(Camera, camera_id)
+    if cam is None:
+        return HTMLResponse("Камера не найдена", status_code=404)
+
+    def back(err: str = "") -> Response:
+        return auth.redirect(f"/cameras/{camera_id}"
+                             + (f"?err={quote(err)}" if err else ""))
+
+    if cam.source_type != "stream":
+        return back("камера заведена как папка, подключать нечего")
+    if cam.state is None or not cam.state.mask_approved:
+        return back("сначала нужно нарисовать маску: без неё кадр разбирать нечем")
+
+    # Приёмник поднимаем до команды: первый кадр может прийти через секунду.
+    live.worker(camera_id)
+
+    resp, err = _remote(cam, "/api/start", "post", json={
+        "ingest_url": settings.public_base_url.rstrip("/") + "/api/ingest",
+        "camera_id": cam.id,
+        "api_key": cam.ingest_key,
+        "restart": True,
+    })
+    return back(err)
+
+
+@app.post("/cameras/{camera_id}/disconnect")
+def camera_disconnect(camera_id: int, user: str = Depends(auth.require_user),
+                      s: Session = Depends(get_session)):
+    cam = s.get(Camera, camera_id)
+    if cam is None:
+        return HTMLResponse("Камера не найдена", status_code=404)
+    _, err = _remote(cam, "/api/stop", "post")
+    return auth.redirect(f"/cameras/{camera_id}"
+                         + (f"?err={quote(err)}" if err else ""))
+
+
+@app.post("/cameras/{camera_id}/reset-stream")
+def camera_reset_stream(camera_id: int, user: str = Depends(auth.require_user),
+                        s: Session = Depends(get_session)):
+    """Забыть наблюдения и вернуть маску к нарисованной — для повторного показа."""
+    cam = s.get(Camera, camera_id)
+    if cam is None or cam.state is None:
+        return HTMLResponse("Камера не найдена", status_code=404)
+    _remote(cam, "/api/stop", "post")
+    live.reset(s, cam)
+    return auth.redirect(f"/cameras/{camera_id}")
+
+
+@app.get("/cameras/{camera_id}/live", response_class=HTMLResponse)
+def camera_live(camera_id: int, request: Request,
+                user: str = Depends(auth.require_user),
+                s: Session = Depends(get_session)):
+    """Кусок разметки для опроса из HTMX: что происходит с потоком сейчас."""
+    cam = s.get(Camera, camera_id)
+    if cam is None:
+        return HTMLResponse("")
+    resp, err = _remote(cam, "/api/info")
+    frames_count = s.scalar(
+        select(func.count()).select_from(Frame)
+        .where(Frame.camera_id == camera_id)) or 0
+    return templates.TemplateResponse(request, "_live.html", {
+        "cam": cam, "camera_id": camera_id, "live": live.status(camera_id),
+        "remote": resp.json() if resp is not None else None,
+        "remote_err": err, "frames_count": frames_count,
+        "state": cam.state,
+    })
+
+
+@app.post("/api/ingest")
+async def api_ingest(request: Request,
+                     file: UploadFile = File(...),
+                     camera_id: int = Form(...),
+                     captured_at: str = Form(""),
+                     meta: str = Form(""),
+                     s: Session = Depends(get_session)) -> JSONResponse:
+    """Приём одного кадра от камеры.
+
+    Пускает ключ, а не сессия оператора: кадры шлёт машина, у неё нет и не
+    должно быть пароля пользователя. Ключ проверяется против конкретной
+    камеры, а не против общего секрета, — иначе один утёкший ключ открывал
+    бы приём за любую камеру системы.
+
+    Отвечаем сразу, как только кадр лёг в очередь. Разбор занимает секунды,
+    а камера в это время должна снимать, а не ждать нас.
+    """
+    cam = s.get(Camera, camera_id)
+    key = request.headers.get("X-Camera-Key", "")
+    if cam is None or not cam.ingest_key or not secrets.compare_digest(
+            key, cam.ingest_key):
+        return JSONResponse({"error": "неизвестная камера или ключ"},
+                            status_code=403)
+
+    data = await file.read()
+    if not data:
+        return JSONResponse({"error": "пустой кадр"}, status_code=400)
+
+    try:
+        when = (dt.datetime.fromisoformat(captured_at) if captured_at
+                else dt.datetime.now(dt.UTC))
+    except ValueError:
+        return JSONResponse({"error": f"метка времени не разобрана: {captured_at}"},
+                            status_code=400)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt.UTC)
+
+    try:
+        payload = json.loads(meta) if meta else {}
+    except ValueError:
+        # Метаданные — дело камеры, и ронять из-за них приём кадра нельзя.
+        payload = {"raw": meta[:500]}
+    if not isinstance(payload, dict):
+        payload = {"value": payload}
+
+    if not live.submit(camera_id, data, when, payload):
+        return JSONResponse({"error": "очередь переполнена, повторите позже"},
+                            status_code=503)
+    return JSONResponse({"ok": True, "queued": True}, status_code=202)
 
 
 @app.get("/api/fs")

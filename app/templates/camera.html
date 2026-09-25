@@ -7,24 +7,40 @@
     <h1 class="text-xl font-semibold">{{ cam.name }}</h1>
     <div class="text-sm text-slate-500">
       <a href="/sites/{{ cam.site_id }}" class="hover:text-slate-900">← к объекту</a>
-      {% if source_total %}· кадров в источнике: {{ source_total }}{% endif %}
+      {% if source_total %}
+      · {{ "кадров в серии" if cam.source_type == "stream" else "кадров в источнике" }}:
+      {{ source_total }}
+      {% endif %}
     </div>
   </div>
   {% if frames_count %}
   <a href="/cameras/{{ cam.id }}/frames"
      class="ml-auto bg-slate-900 text-white text-sm rounded px-4 py-2 hover:bg-slate-700">
-    Результаты прогона ({{ frames_count }})
+    {{ "Принятые кадры" if cam.source_type == "stream" else "Результаты прогона" }}
+    ({{ frames_count }})
   </a>
   {% endif %}
 </div>
+
+{% if err %}
+<div class="mb-6 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-4 py-3">
+  {{ err }}
+</div>
+{% endif %}
 
 {% if first_err %}
 <div class="mb-6 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-4 py-3">
   {{ first_err }}
   <div class="text-xs text-red-600 mt-1">
+    {% if cam.source_type == "stream" %}
+    Камера — отдельный сервис, и поднимается он своей командой:
+    <code>.venv/bin/python -m simcam --folder ПАПКА --port 9101 --name "{{ cam.name }}"</code>.
+    Адрес камеры указан при её заведении: <code>{{ cam.source_uri or "не задан" }}</code>.
+    {% else %}
     Папка выбирается при добавлении камеры кнопкой «Выбрать папку…».
     Имена файлов должны содержать метку времени вида
     <code>doric_2006_11_23_12_30_21.jpg</code>.
+    {% endif %}
   </div>
 </div>
 {% endif %}
@@ -148,8 +164,13 @@
       Подтвердить маску
     </button>
     <span class="text-xs text-slate-500 ml-3">
+      {% if cam.source_type == "stream" %}
+      После подтверждения камеру можно подключать — кадры начнут разбираться
+      по мере поступления.
+      {% else %}
       Сразу после подтверждения начнётся разбор истории — он идёт минуты,
       прогресс будет виден на этой же странице.
+      {% endif %}
     </span>
   </form>
 </section>
@@ -157,13 +178,45 @@
 <script src="/static/mask_editor.js"></script>
 {% endif %}
 
-{% if state.mask_approved %}
+{% if state.mask_approved and cam.source_type == "stream" %}
+{# ------------------------------------------------------------------ #}
+{# Поток. Кадр приходит — маска двигается, модель отвечает, график      #}
+{# объекта перерисовывается. Кнопки «прогнать датасет» здесь нет:       #}
+{# прогонять нечего, история появляется по мере съёмки.                 #}
+{# ------------------------------------------------------------------ #}
+<section class="bg-white border border-slate-200 rounded-lg p-6">
+  <div class="mb-4">
+    <h2 class="font-medium">Живой поток</h2>
+    <p class="text-sm text-slate-600 mt-1">
+      Каждый принятый кадр сразу проходит маску и уходит модели Б.
+      Диаграмма этапов объекта перерисовывается по мере накопления ответов.
+    </p>
+  </div>
+
+  {% include "_live.html" %}
+
+  <details class="mt-6 text-xs text-slate-500">
+    <summary class="cursor-pointer">Параметры подключения</summary>
+    <div class="mt-2 space-y-1 font-mono break-all">
+      <div>адрес камеры: {{ cam.source_uri or "—" }}</div>
+      <div>приёмник: {{ ingest_url }}</div>
+      <div>ключ камеры: {{ cam.ingest_key }}</div>
+    </div>
+    <p class="mt-2 font-sans">
+      Ключ уходит камере в момент подключения — на самой камере он не хранится.
+    </p>
+  </details>
+</section>
+
+{% elif state.mask_approved %}
 <section class="bg-white border border-slate-200 rounded-lg p-6">
   <div class="flex items-start mb-3">
     <div>
       <h2 class="font-medium">Разбор истории</h2>
       <p class="text-sm text-slate-600 mt-1">
-        Считается только маска — аналитическая модель на этом шаге не вызывается.
+        Без галочки считается только маска. С моделью Б кадры ещё и
+        разбираются по чек-листам — дольше, но появляется факт на диаграмме
+        этапов объекта.
       </p>
     </div>
     {% if not run %}
@@ -171,6 +224,10 @@
           {% if frames_count %}
           onsubmit="return confirm('Пересчитать заново? Прежние кадры этой камеры будут заменены.')"
           {% endif %}>
+      <label class="flex items-center gap-2 text-xs text-slate-600 mb-2">
+        <input type="checkbox" name="model_b">
+        разбирать чек-листы моделью Б
+      </label>
       <button class="bg-slate-100 text-sm rounded px-4 py-2 hover:bg-slate-200">
         {% if frames_count %}Пересчитать{% else %}Запустить разбор{% endif %}
       </button>

@@ -39,6 +39,8 @@ def main() -> int:
                     help=f"окон подряд до стирания (по умолчанию {M.LOCK_WINDOWS})")
     ap.add_argument("--window", type=int, default=M.WINDOW_DAYS,
                     help=f"размер окна в днях (по умолчанию {M.WINDOW_DAYS})")
+    ap.add_argument("--model-b", action="store_true",
+                    help="разбирать кадры моделью Б и писать чек-листы")
     ap.add_argument("--list", action="store_true", help="показать камеры и выйти")
     args = ap.parse_args()
 
@@ -91,7 +93,7 @@ def main() -> int:
         print(f"порог {args.threshold}, окно {args.window} дн., "
               f"стирание после {args.lock} окон\n")
 
-        prog = ingest.run(s, cam, folder, limit=args.limit,
+        prog = ingest.run(s, cam, folder, limit=args.limit, model_b=args.model_b,
                           threshold=args.threshold, lock_windows=args.lock,
                           window_days=args.window, on_progress=report)
 

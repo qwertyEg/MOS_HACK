@@ -3,13 +3,37 @@
 Сама модель вне репозитория: подключается по OpenAI-совместимому эндпоинту,
 чтобы организатор мог подставить свой. Здесь только клиент и разбор ответа.
 
-Два неочевидных решения:
+Четыре неочевидных решения:
 
 1. **Ответ тернарный.** Бинарный «да/нет» заставляет модель угадывать там,
    где кадр не даёт информации — перекрыт краном, засвечен, объект далеко.
-   Третье значение позволяет такой кадр не учитывать вовсе.
+   Третье значение позволяет такой кадр не учитывать вовсе. Называется оно
+   «не видно», а не «не уверена»: конкретная инструкция исполняется заметно
+   лучше размытой.
 
-2. **Способ гашения фона — параметр, а не константа.** Заливка чёрным создаёт
+2. **Вопросы одного этапа идут одним запросом, но этапы — разными.**
+   Замер на реальном кадре: 26 вопросов поодиночке 13.9 с, одним батчем
+   6.8 с. Выигрыш всего двукратный, а не 26-кратный, потому что Ollama
+   переиспользует KV-кэш картинки между вызовами — дорогой префилл
+   изображения происходит один раз в любом случае.
+
+   Большой батч при этом заметно врёт. На кадре, где виден только фасад и
+   правильный ответ почти везде «не видно», батч из 26 вопросов дал 21 «нет»
+   и одно «не видно»: отвечая длинным столбцом, модель входит в ритм и
+   перестаёт различать «этого там нет» и «я этого не вижу». Группа в
+   4-6 вопросов почти не отличается от поодиночного опроса. Поэтому единица
+   батча — чек-лист одного этапа: это и естественная группа по смыслу, и
+   безопасный размер, и локализация сбоя разбора.
+
+3. **Формат ответа задаётся схемой, а не парсится.** Ollama поддерживает
+   ограничение декодирования JSON-схемой. Схема — объект, где каждый ключ
+   обязательное поле с перечислением допустимых значений, лишние поля
+   запрещены. При такой схеме модель структурно не может пропустить вопрос,
+   переименовать ключ или ответить не из списка. Разбор сводится к
+   json.loads, а `parse_answer` остаётся фолбэком для эндпоинтов, которые
+   ограничение декодирования не умеют.
+
+4. **Способ гашения фона — параметр, а не константа.** Заливка чёрным создаёт
    картинку, каких VLM в обучении не видела, и дырявое изображение может
    испортить ответ сильнее, чем убираемый шум. Какой режим лучше — вопрос
    замера, а не рассуждения, поэтому все пять вариантов реализованы и
@@ -21,6 +45,7 @@ from __future__ import annotations
 import base64
 import enum
 import io
+import json
 import time
 from dataclasses import dataclass
 
@@ -147,6 +172,37 @@ def encode(img: Image.Image, max_side: int = 1024) -> str:
 
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1", "host.docker.internal")
 
+# Слова ответа выбраны под инструкцию ниже: «не видно» модель исполняет
+# сильно лучше, чем «не уверена».
+_CHOICES = ("да", "нет", "не видно")
+_TO_ANSWER = {"да": Answer.YES, "нет": Answer.NO, "не видно": Answer.UNSURE}
+
+SYSTEM_PROMPT = (
+    "Ты отвечаешь на вопросы строго по тому, что ВИДНО на снимке "
+    "строительной площадки.\n"
+    "«да» — признак различим на снимке.\n"
+    "«нет» — область видна, но признака в ней нет.\n"
+    "«не видно» — область не попала в кадр, перекрыта или неразличима.\n"
+    "Не догадывайся и не достраивай сцену по смыслу: если по этому снимку "
+    "судить нельзя — отвечай «не видно». Отвечать «нет» про то, чего не "
+    "видно в кадре, — ошибка."
+)
+
+
+def build_schema(keys: list[str]) -> dict:
+    """Схема, при которой ответ не может оказаться неполным или кривым.
+
+    Каждый ключ — обязательное поле с перечислением значений,
+    additionalProperties запрещены. Ключи вместо номеров намеренно: номер
+    не самоидентифицируется, и сдвиг ответа на единицу никак не поймать.
+    """
+    return {
+        "type": "object",
+        "properties": {k: {"type": "string", "enum": list(_CHOICES)} for k in keys},
+        "required": list(keys),
+        "additionalProperties": False,
+    }
+
 
 class ModelB:
     def __init__(self, base_url: str | None = None, model: str | None = None) -> None:
@@ -197,6 +253,36 @@ class ModelB:
                             latency_ms=dt)
         return VlmReply(answer=parse_answer(raw), raw=raw, latency_ms=dt)
 
+    def ask_batch(self, data_uri: str, questions: list[dict]) -> dict[str, Answer]:
+        """Все вопросы одного чек-листа одним запросом, ответ по схеме."""
+        keys = [q["key"] for q in questions]
+        body = "\n".join(f'{q["key"]}: {q["text"]}' for q in questions)
+        payload = {
+            "model": self.model,
+            "temperature": settings.vlm_temperature,
+            "max_tokens": settings.vlm_max_tokens,
+            "response_format": {"type": "json_schema",
+                                "json_schema": {"name": "checklist",
+                                                "schema": build_schema(keys)}},
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": [
+                    {"type": "image_url", "image_url": {"url": data_uri}},
+                    {"type": "text", "text":
+                     "Ответь на каждый вопрос. Ключ в ответе — ровно тот, "
+                     "что слева от двоеточия.\n\n" + body},
+                ]},
+            ],
+        }
+        r = self.session.post(
+            f"{self.base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {settings.vlm_api_key}"},
+            json=payload, timeout=settings.vlm_timeout)
+        r.raise_for_status()
+        content = r.json()["choices"][0]["message"].get("content") or ""
+        data = json.loads(content)
+        return {k: _TO_ANSWER[data[k]] for k in keys}
+
     def fill_checklist(
         self,
         img: Image.Image,
@@ -204,18 +290,45 @@ class ModelB:
         mask: np.ndarray | None = None,
         mask_mode: MaskMode = MaskMode.DARKEN,
     ) -> list[dict]:
-        """Заполняет чек-лист одного этапа по одному кадру."""
+        """Заполняет чек-лист одного этапа по одному кадру.
+
+        Сначала пробуем один запрос со схемой. Если эндпоинт ограничение
+        декодирования не умеет или ответ не разобрался — откатываемся на
+        поштучный опрос со свободным разбором. Молча возвращать «не видно»
+        на всё нельзя: это выглядело бы как честный результат.
+        """
+        if not questions:
+            return []
         prepared = apply_mask(img, mask, mask_mode)
         uri = encode(prepared)
+
+        t0 = time.perf_counter()
+        try:
+            answers = self.ask_batch(uri, questions)
+        except Exception as exc:
+            # Откат записывается в данные, а не проглатывается. Один раз это
+            # уже стоило дорого: в конфиге стояла thinking-версия модели,
+            # она тратила весь бюджет токенов на рассуждение и возвращала
+            # пустой ответ — схема не разбиралась, всё тихо уезжало в
+            # поштучный опрос, и прогон вместо минут шёл часами.
+            return self._fill_one_by_one(uri, questions, reason=str(exc)[:200])
+        dt = int((time.perf_counter() - t0) * 1000)
+        per = dt // max(1, len(questions))
+        return [{**q, "answer": answers[q["key"]], "raw": answers[q["key"]].value,
+                 "latency_ms": per} for q in questions]
+
+    def _fill_one_by_one(self, uri: str, questions: list[dict],
+                         reason: str = "") -> list[dict]:
+        note = f" [откат на поштучный опрос: {reason}]" if reason else ""
         out = []
         for q in questions:
             try:
                 reply = self.ask(uri, q["text"])
             except Exception as exc:
-                out.append({**q, "answer": Answer.UNSURE, "raw": f"ошибка: {exc}",
-                            "latency_ms": 0})
+                out.append({**q, "answer": Answer.UNSURE,
+                            "raw": f"ошибка: {exc}{note}", "latency_ms": 0})
                 continue
-            out.append({**q, "answer": reply.answer, "raw": reply.raw,
+            out.append({**q, "answer": reply.answer, "raw": reply.raw + note,
                         "latency_ms": reply.latency_ms})
         return out
 

@@ -16,6 +16,8 @@
   </form>
 </div>
 
+{% include "_gantt.html" %}
+
 {# ------------------------------------------------------------------ #}
 {# Календарный план. Даты конкретные, не кварталы — требование заказчика. #}
 {# Состав и порядок задаёт пользователь: набор этапов на площадке свой.  #}
@@ -146,8 +148,8 @@
   <h2 class="font-medium mb-1">Камеры</h2>
   <p class="text-xs text-slate-500 mb-4">
     Маску фона оператор задаёт один раз на первом кадре, дальше она только
-    сжимается — растущее здание отвоёвывает её обратно. После подтверждения
-    маски разбор истории запускается сам.
+    сжимается — растущее здание отвоёвывает её обратно. Камера в режиме
+    потока шлёт кадры сама, и каждый разбирается сразу по приходу.
   </p>
 
   {% if site.cameras %}
@@ -157,9 +159,19 @@
       <tr class="border-b border-slate-100">
         <td class="py-1.5">
           <a href="/cameras/{{ c.id }}" class="hover:underline">{{ c.name }}</a>
+          <span class="text-xs text-slate-400">
+            · {{ "поток" if c.source_type == "stream" else "папка" }}
+          </span>
           {% if c.source_uri %}
           <div class="text-xs text-slate-400 font-mono truncate max-w-md"
                title="{{ c.source_uri }}">{{ c.source_uri }}</div>
+          {% endif %}
+        </td>
+        <td class="py-1.5 text-xs text-slate-500 w-36">
+          {% set st = live.get(c.id) %}
+          {% if st and st.processed %}
+            разобрано {{ st.processed }}
+            {%- if st.checklists %}, чек-листов {{ st.checklists }}{% endif %}
           {% endif %}
         </td>
         <td class="py-1.5 text-right text-xs w-56">
@@ -188,20 +200,62 @@
   {% endif %}
 
   <form method="post" action="/sites/{{ site.id }}/cameras"
-        class="flex flex-wrap gap-2">
+        class="flex flex-wrap gap-2" id="camera-form">
     <input name="name" placeholder="Название камеры" required
            class="border border-slate-300 rounded px-2 py-1.5 text-sm w-48">
-    <input name="source_uri" id="source-uri" readonly
+
+    <select name="mode" id="camera-mode"
+            class="border border-slate-300 rounded px-2 py-1.5 text-sm">
+      <option value="stream">Поток с камеры</option>
+      <option value="folder">Папка на диске</option>
+    </select>
+
+    {# Одно и то же поле под два смысла завело бы в путаницу: у потока это
+       адрес сервиса, у папки — путь, и выбирается он мышью, а не печатается. #}
+    <input name="source_uri" id="source-stream"
+           placeholder="http://127.0.0.1:9101"
+           class="border border-slate-300 rounded px-2 py-1.5 text-sm flex-1 min-w-64 font-mono text-xs">
+    <input name="source_uri" id="source-uri" readonly disabled hidden
            placeholder="папка с кадрами не выбрана"
            class="border border-slate-300 rounded px-2 py-1.5 text-sm flex-1 min-w-64 font-mono text-xs cursor-pointer">
-    <button type="button" id="source-browse"
+    <button type="button" id="source-browse" hidden
             class="bg-slate-100 text-sm rounded px-3 py-1.5 hover:bg-slate-200">
       Выбрать папку…
     </button>
+
     <button class="bg-slate-900 text-white text-sm rounded px-4 py-1.5 hover:bg-slate-700">
       Добавить
     </button>
   </form>
+
+  <p class="text-xs text-slate-500 mt-3">
+    Камера-поток поднимается отдельной командой и живёт своим процессом:
+    <code class="font-mono">.venv/bin/python -m simcam --folder ПАПКА --port 9101
+      --name "Камера 1" --interval 30</code>.
+    Здесь указывается её адрес; съёмка включается на странице камеры после
+    того, как нарисована маска.
+  </p>
+
+  <script>
+    // Поля источника переключаются вместе с режимом. Отключённое поле
+    // (disabled) браузер не отправляет — иначе в source_uri уходило бы
+    // два значения, и сервер брал бы первое попавшееся.
+    (function () {
+      var mode = document.getElementById("camera-mode");
+      if (!mode) return;
+      var stream = document.getElementById("source-stream");
+      var folder = document.getElementById("source-uri");
+      var browse = document.getElementById("source-browse");
+      function sync() {
+        var isStream = mode.value === "stream";
+        stream.hidden = stream.disabled = !isStream;
+        folder.hidden = folder.disabled = isStream;
+        browse.hidden = isStream;
+      }
+      mode.addEventListener("change", sync);
+      sync();
+    })();
+  </script>
 </section>
 
 {# ------------------------------------------------------------------ #}
