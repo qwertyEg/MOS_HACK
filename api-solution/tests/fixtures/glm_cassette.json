@@ -1,0 +1,1068 @@
+{
+ "a9618598f4573cb3d1d7cacff834f58a59f32f93": {
+  "step": "Есть ли на снимке здание? Верни {\"building\": true} или {\"building\": false}.",
+  "raw_text": "```json\n{\n  \"building\": true\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 145,
+    "cached_tokens": 0,
+    "completion_tokens": 13,
+    "cost_usd": 0.0,
+    "latency_ms": 7989
+   }
+  ]
+ },
+ "321b6de799a7c67f046d02d5e8dc7ac21c34fb7e": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На стройплощадке ведутся земляные работы: видны котлован, техника для разработки грунта и оборудование для бурения.\",\n  \"equipment\": [\n    {\"type\": \"crawler_crane\", \"total\": 1, \"working\": 0, \"evidence\": \"Кран стоит без видимых признаков работы\"},\n    {\"type\": \"drilling_rig\", \"total\": 1, \"working\": 0, \"evidence\": \"Установка стоит без видимых признаков работы\"},\n    {\"type\": \"excavator\", \"total\": 2, \"working\": 0, \"evidence\": \"Экскаваторы стоят без видимых признаков работы\"},\n    {\"type\": \"other\", \"total\": 1, \"working\": 0, \"evidence\": \"Белая гусеничная машина с отвалом (возможно, буровой или сваебойный станок)\"}\n  ],\n  \"workers_count\": null,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": 60,\n  \"stage_likelihood\": {\"1\": 0.1, \"2\": 0.8, \"3\": 0.9, \"4\": 0.1, \"5\": 0.1, \"6\": 0.1, \"7\": 0.1, \"8\": 0.1}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3795,
+    "cached_tokens": 4,
+    "completion_tokens": 336,
+    "cost_usd": 0.0014399,
+    "latency_ms": 10719
+   }
+  ]
+ },
+ "ee25a67a33f66f171e1e835cd86c7b26d38abaea": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"unsure\".",
+  "raw_text": "{\"answers\": {\"rig\": \"yes\", \"sheet_pile\": \"no\", \"pile_heads\": \"no\", \"above_grade\": \"no\", \"pile_stock\": \"no\", \"rebar\": \"no\", \"formwork\": \"no\", \"capping_beam\": \"no\", \"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"struts\": \"no\", \"pit_bottom_prepared\": \"no\"}, \"comment\": \"На площадке видны котлован, кучи грунта и работающая землеройная техника.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2737,
+    "cached_tokens": 4,
+    "completion_tokens": 128,
+    "cost_usd": 0.0009353,
+    "latency_ms": 3594
+   }
+  ]
+ },
+ "75c1e97695b250b9daf9d52556b6f4d8213b2b73": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На строительной площадке ведутся земляные работы и подготовка фундамента. Видны котлован, строительная техника и рабочие.\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 1, \"working\": 0, \"evidence\": \"Кран стоит неподвижно, нет видимых движений стрелы или груза\"},\n    {\"type\": \"excavator\", \"total\": 1, \"working\": 1, \"evidence\": \"Экскаватор с поднятым ковшом, рабочие рядом\"},\n    {\"type\": \"skid_steer\", \"total\": 1, \"working\": 0, \"evidence\": \"Маленький погрузчик стоит без движения\"},\n    {\"type\": \"truck\", \"total\": 2, \"working\": 0, \"evidence\": \"Два грузовика (красный и красный с белым) стоят на месте\"}\n  ],\n  \"workers_count\": 5,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": 70,\n  \"stage_likelihood\": {\"1\": 0.1, \"2\": 0.9, \"3\": 0.9, \"4\": 0.1, \"5\": 0.0, \"6\": 0.0, \"7\": 0.0, \"8\": 0.0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3795,
+    "cached_tokens": 171,
+    "completion_tokens": 344,
+    "cost_usd": 0.0014053499999999999,
+    "latency_ms": 12767
+   }
+  ]
+ },
+ "25d320d087ebe470a74a9d973567d1aa25e0d4b9": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"unsure\".",
+  "raw_text": "{\"answers\": {\"rig\": \"yes\", \"sheet_pile\": \"yes\", \"pile_heads\": \"yes\", \"above_grade\": \"no\", \"pile_stock\": \"no\", \"rebar\": \"yes\", \"formwork\": \"yes\", \"capping_beam\": \"no\", \"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"struts\": \"no\", \"pit_bottom_prepared\": \"no\"}, \"comment\": \"Видны сваебойная установка, шпунтовое ограждение, оголовки свай, арматура, опалубка, котлован, кучи грунта и работающая землеройная техника.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2737,
+    "cached_tokens": 4,
+    "completion_tokens": 156,
+    "cost_usd": 0.0009605,
+    "latency_ms": 6691
+   }
+  ]
+ },
+ "c5402469f537d7f6a7d186835ae2fdb004edfe6f": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На стройплощадке ведутся земляные работы и подготовка фундамента. Видны рабочие, башенный кран, экскаватор и другие строительные машины.\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 2, \"working\": 0, \"evidence\": \"Краны стоят без видимых движений стрелы или груза\"},\n    {\"type\": \"excavator\", \"total\": 1, \"working\": 1, \"evidence\": \"Экскаватор с поднятым ковшом\"},\n    {\"type\": \"skid_steer\", \"total\": 1, \"working\": 1, \"evidence\": \"Мини-погрузчик с поднятым ковшом\"},\n    {\"type\": \"wheel_loader\", \"total\": 1, \"working\": 1, \"evidence\": \"Фронтальный погрузчик с поднятым ковшом\"}\n  ],\n  \"workers_count\": 10,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": 60,\n  \"stage_likelihood\": {\"1\": 0.1, \"2\": 0.3, \"3\": 0.9, \"4\": 0.2, \"5\": 0.1, \"6\": 0.1, \"7\": 0.1, \"8\": 0.1}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3795,
+    "cached_tokens": 171,
+    "completion_tokens": 344,
+    "cost_usd": 0.0014053499999999999,
+    "latency_ms": 11015
+   }
+  ]
+ },
+ "5bbdee16785f7864d72a6c65b0a2b9c620a313c7": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"unsure\".",
+  "raw_text": "{\"answers\": {\"rig\": \"no\", \"sheet_pile\": \"yes\", \"pile_heads\": \"yes\", \"above_grade\": \"no\", \"pile_stock\": \"no\", \"rebar\": \"yes\", \"formwork\": \"yes\", \"capping_beam\": \"yes\", \"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"struts\": \"no\", \"pit_bottom_prepared\": \"no\"}, \"comment\": \"Видны шпунтовое ограждение, оголовки свай, арматура, опалубка, обвязочная балка, котлован, отвал грунта и работающая техника.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2737,
+    "cached_tokens": 4,
+    "completion_tokens": 153,
+    "cost_usd": 0.0009578000000000001,
+    "latency_ms": 8569
+   }
+  ]
+ },
+ "a89d3eaaf490155c32a42ca56b9d462867a7d85a": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На стройплощадке ведутся работы по армированию монолитной плиты, рядом установлены башенные краны, рабочие в жилетах и касках занимаются монтажом конструкций.\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 2, \"working\": 0, \"evidence\": \"Краны стоят без видимых движений стрелы или груза\"},\n    {\"type\": \"truck\", \"total\": 1, \"working\": 0, \"evidence\": \"Грузовик с красным кузовом стоит на площадке без признаков разгрузки\"},\n    {\"type\": \"other\", \"total\": 1, \"working\": 0, \"evidence\": \"Машина с жёлтым барабаном (возможно, бетоносмеситель) стоит неподвижно\"}\n  ],\n  \"workers_count\": 12,\n  \"floors_built\": 0,\n  \"floors_glazed\": 0,\n  \"facade_clad_pct\": 0,\n  \"pit_area_pct\": 30,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0.1, \"3\": 0.1, \"4\": 0.8, \"5\": 0, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3795,
+    "cached_tokens": 4,
+    "completion_tokens": 328,
+    "cost_usd": 0.0014327,
+    "latency_ms": 6633
+   }
+  ]
+ },
+ "1aad34a84f49d389d53a5498a9ea871626b795fa": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"unsure\".",
+  "raw_text": "{\"answers\": {\"rig\": \"no\", \"sheet_pile\": \"no\", \"pile_heads\": \"no\", \"above_grade\": \"no\", \"pile_stock\": \"yes\", \"rebar\": \"yes\", \"formwork\": \"yes\", \"capping_beam\": \"no\", \"slab\": \"no\", \"below_grade\": \"yes\", \"pit_bottom_prepared\": \"no\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"earthwork\": \"no\", \"soil_pile\": \"yes\", \"backfill\": \"no\"}, \"comment\": \"Видны арматурные каркасы, опалубка и складированные сваи, котлован ниже уровня земли, но дно не выровнено.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 3039,
+    "cached_tokens": 171,
+    "completion_tokens": 186,
+    "cost_usd": 0.00103635,
+    "latency_ms": 6436
+   }
+  ]
+ },
+ "646f15746e3e4b05903d6d725e67a5c57bfdaeb3": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На строительной площадке ведутся работы по возведению монолитного каркаса здания. Видны рабочие, башенный кран и строящиеся этажи.\",\n  \"equipment\": [\n    {\n      \"type\": \"tower_crane\",\n      \"total\": 1,\n      \"working\": 1,\n      \"evidence\": \"Стрела крана направлена над площадкой, что указывает на работу\"\n    }\n  ],\n  \"workers_count\": 5,\n  \"floors_built\": 1,\n  \"floors_glazed\": 0,\n  \"facade_clad_pct\": 0,\n  \"pit_area_pct\": 0,\n  \"stage_likelihood\": {\n    \"1\": 0,\n    \"2\": 0,\n    \"3\": 0,\n    \"4\": 0.9,\n    \"5\": 0.9,\n    \"6\": 0,\n    \"7\": 0,\n    \"8\": 0\n  }\n}",
+  "calls": [
+   {
+    "prompt_tokens": 2192,
+    "cached_tokens": 171,
+    "completion_tokens": 236,
+    "cost_usd": 0.0008272499999999999,
+    "latency_ms": 3502
+   }
+  ]
+ },
+ "5ca43afb21a2b99e6405d623d1c9379552462878": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"unsure\".",
+  "raw_text": "{\"answers\": {\"formwork\": \"yes\", \"rebar\": \"yes\", \"slab\": \"yes\", \"below_grade\": \"no\", \"above_grade\": \"yes\", \"pit_bottom_prepared\": \"no\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"yes\", \"waterproofing\": \"no\", \"earthwork\": \"no\", \"soil_pile\": \"no\", \"backfill\": \"no\", \"crane\": \"yes\", \"formwork_floor\": \"yes\", \"unfinished_top\": \"yes\", \"cladding\": \"no\", \"roof_superstructures\": \"no\", \"steel_frame\": \"no\", \"masonry\": \"no\", \"window_openings_empty\": \"no\"}, \"comment\": \"Видны арматура, опалубка и залитая плита на уровне земли, что указывает на этап устройства нулевого этажа.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 1581,
+    "cached_tokens": 4,
+    "completion_tokens": 205,
+    "cost_usd": 0.0006577999999999999,
+    "latency_ms": 3051
+   }
+  ]
+ },
+ "f1096748c0e0e1855fa8ddeedb8fe2a2de81647f": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"side\",\n  \"description\": \"На стройплощадке ведётся возведение монолитного каркаса здания. На верхнем этаже видна бетонная плита перекрытия, ниже — несущие конструкции и опалубка.\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 1, \"working\": 0, \"evidence\": \"Кран стоит неподвижно, стрелы нет в движении\"},\n    {\"type\": \"concrete_mixer\", \"total\": 1, \"working\": 0, \"evidence\": \"Машина стоит на площадке, барабан не вращается\"}\n  ],\n  \"workers_count\": null,\n  \"floors_built\": 1,\n  \"floors_glazed\": 0,\n  \"facade_clad_pct\": 0,\n  \"pit_area_pct\": null,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 1, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 2192,
+    "cached_tokens": 4,
+    "completion_tokens": 257,
+    "cost_usd": 0.0008879000000000001,
+    "latency_ms": 7663
+   }
+  ]
+ },
+ "59a004cbea2272a92457f586acca6e2c3e1e7c84": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"unsure\".",
+  "raw_text": "{\"answers\": {\"fence\": \"no\", \"cabins\": \"no\", \"cleared\": \"no\", \"pit\": \"no\", \"above_grade\": \"yes\", \"old_building\": \"no\", \"debris\": \"no\", \"tree_felling\": \"no\", \"utility_trench\": \"no\", \"pipes_stock\": \"no\", \"temp_road\": \"no\", \"gate_checkpoint\": \"no\", \"crane\": \"yes\", \"formwork_floor\": \"yes\", \"unfinished_top\": \"yes\", \"cladding\": \"no\", \"concrete_pour\": \"no\", \"roof_superstructures\": \"no\", \"steel_frame\": \"no\", \"masonry\": \"no\", \"window_openings_empty\": \"no\"}, \"comment\": \"Здание возвышается над землёй, видна опалубка перекрытий и незавершённый верхний этаж.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 1660,
+    "cached_tokens": 4,
+    "completion_tokens": 196,
+    "cost_usd": 0.0006734,
+    "latency_ms": 8139
+   }
+  ]
+ },
+ "b562a9d76ab6273f6a29078e633cd5dbc0aa8c50": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"side\",\n  \"description\": \"На стройплощадке ведётся возведение монолитного каркаса здания. Рабочие в жёлтых жилетах находятся на уровне верхнего этажа.\",\n  \"equipment\": [],\n  \"workers_count\": 5,\n  \"floors_built\": 3,\n  \"floors_glazed\": 0,\n  \"facade_clad_pct\": 0,\n  \"pit_area_pct\": null,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 1, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3795,
+    "cached_tokens": 4,
+    "completion_tokens": 166,
+    "cost_usd": 0.0012869000000000001,
+    "latency_ms": 4756
+   }
+  ]
+ },
+ "dfdff5aa29edfd7b68fbd1f05746864765195b8c": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"unsure\".",
+  "raw_text": "{\"answers\": {\"fence\": \"no\", \"cabins\": \"no\", \"cleared\": \"no\", \"pit\": \"no\", \"above_grade\": \"yes\", \"old_building\": \"no\", \"debris\": \"no\", \"tree_felling\": \"no\", \"utility_trench\": \"no\", \"pipes_stock\": \"no\", \"temp_road\": \"no\", \"gate_checkpoint\": \"no\", \"crane\": \"no\", \"formwork_floor\": \"yes\", \"unfinished_top\": \"yes\", \"cladding\": \"no\", \"concrete_pour\": \"no\", \"roof_superstructures\": \"no\", \"steel_frame\": \"no\", \"masonry\": \"no\", \"window_openings_empty\": \"yes\"}, \"comment\": \"Виден каркас здания выше уровня земли, опалубка перекрытий и незавершённый верхний этаж.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 3263,
+    "cached_tokens": 171,
+    "completion_tokens": 193,
+    "cost_usd": 0.00110985,
+    "latency_ms": 8042
+   }
+  ]
+ },
+ "233c7a1b69cc9eaf444d0c91861ff2f675b168eb": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"fog_rain\",\n  \"view\": \"side\",\n  \"description\": \"На снимке виден фасад многоэтажного здания в процессе строительства. На верхнем уровне видны строительные леса и материалы, закрытые синими тентами.\",\n  \"equipment\": [],\n  \"workers_count\": null,\n  \"floors_built\": 4,\n  \"floors_glazed\": 0,\n  \"facade_clad_pct\": 100,\n  \"pit_area_pct\": null,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 0.9, \"6\": 0.1, \"7\": 0.9, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3795,
+    "cached_tokens": 4,
+    "completion_tokens": 172,
+    "cost_usd": 0.0012923,
+    "latency_ms": 9839
+   }
+  ]
+ },
+ "1da76caf20ce9eb6322b6bf2d857c148a5a47014": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"unsure\".",
+  "raw_text": "{\"answers\": {\"above_grade\": \"yes\", \"crane\": \"no\", \"formwork_floor\": \"no\", \"unfinished_top\": \"no\", \"cladding\": \"yes\", \"concrete_pour\": \"no\", \"roof_superstructures\": \"no\", \"steel_frame\": \"no\", \"masonry\": \"no\", \"window_openings_empty\": \"yes\", \"scaffold\": \"no\", \"glazing\": \"no\", \"bare_concrete\": \"no\", \"insulation\": \"no\", \"facade_subframe\": \"no\", \"entrance_finished\": \"no\"}, \"comment\": \"Здание возвышается над землёй, фасад закрыт панелями, но оконные проёмы пустые, без отделки входов и опалубки.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2920,
+    "cached_tokens": 171,
+    "completion_tokens": 171,
+    "cost_usd": 0.0009871499999999998,
+    "latency_ms": 4554
+   }
+  ]
+ },
+ "38ed2b6787b8e44e5eb58116ad849d6c082740ea": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"side\",\n  \"description\": \"На снимке виден фасад многоэтажного здания в процессе строительства. На крыше здания установлена строительная сетка, что указывает на продолжение работ на верхних этажах.\",\n  \"equipment\": [],\n  \"workers_count\": null,\n  \"floors_built\": 4,\n  \"floors_glazed\": 4,\n  \"facade_clad_pct\": 100,\n  \"pit_area_pct\": null,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 0.8, \"6\": 0.2, \"7\": 0.9, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3795,
+    "cached_tokens": 171,
+    "completion_tokens": 173,
+    "cost_usd": 0.00125145,
+    "latency_ms": 6862
+   }
+  ]
+ },
+ "efeb00effe20ecfa14034c5bb77dc6a4c5d5dcf1": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"unsure\".",
+  "raw_text": "{\"answers\": {\"above_grade\": \"yes\", \"crane\": \"no\", \"formwork_floor\": \"no\", \"unfinished_top\": \"no\", \"cladding\": \"yes\", \"concrete_pour\": \"no\", \"roof_superstructures\": \"no\", \"steel_frame\": \"no\", \"masonry\": \"no\", \"window_openings_empty\": \"no\", \"scaffold\": \"no\", \"glazing\": \"yes\", \"bare_concrete\": \"no\", \"insulation\": \"no\", \"facade_subframe\": \"no\", \"entrance_finished\": \"no\"}, \"comment\": \"Здание имеет несколько этажей с установленными окнами и навесными панелями на фасаде.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2920,
+    "cached_tokens": 4,
+    "completion_tokens": 154,
+    "cost_usd": 0.0010136,
+    "latency_ms": 5729
+   }
+  ]
+ },
+ "08f20c2d0bca030286fb717fa5f4ccbbcad67752": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"side\",\n  \"description\": \"На снимке виден фасад многоэтажного здания. Строительная площадка не видна.\",\n  \"equipment\": [],\n  \"workers_count\": null,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": null,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 0, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 2192,
+    "cached_tokens": 171,
+    "completion_tokens": 146,
+    "cost_usd": 0.0007462499999999998,
+    "latency_ms": 5238
+   }
+  ]
+ },
+ "420fdb58bf99b81ab13e874be28fe2737c06a9ac": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"unsure\".",
+  "raw_text": "{\"answers\": {\"fence\": \"no\", \"cabins\": \"no\", \"cleared\": \"no\", \"pit\": \"no\", \"above_grade\": \"yes\", \"old_building\": \"no\", \"debris\": \"no\", \"tree_felling\": \"no\", \"utility_trench\": \"no\", \"pipes_stock\": \"no\", \"temp_road\": \"no\", \"gate_checkpoint\": \"no\", \"rig\": \"no\", \"sheet_pile\": \"no\", \"pile_heads\": \"no\", \"pile_stock\": \"no\", \"rebar\": \"no\", \"formwork\": \"no\", \"capping_beam\": \"no\"}, \"comment\": \"На снимке видна многоэтажная стена здания, возвышающаяся над землёй, что подтверждает этап above_grade.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 1562,
+    "cached_tokens": 274,
+    "completion_tokens": 177,
+    "cost_usd": 0.0005593999999999999,
+    "latency_ms": 5795
+   }
+  ]
+ },
+ "8f075b8cb15ce88e07da70a002283f089cc7f20d": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На стройплощадке ведутся земляные работы: видны экскаваторы, копёр и гусеничный кран, а также открытый котлован с насыпями грунта.\",\n  \"equipment\": [\n    {\"type\": \"excavator\", \"total\": 2, \"working\": 2, \"evidence\": \"Ковши в грунте\"},\n    {\"type\": \"crawler_crane\", \"total\": 1, \"working\": 1, \"evidence\": \"Стрела над котлованом\"},\n    {\"type\": \"pile_driver\", \"total\": 1, \"working\": 1, \"evidence\": \"Молот над сваей\"}\n  ],\n  \"workers_count\": 2,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": 60,\n  \"latest_stage\": 3,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0.1, \"3\": 0.9, \"4\": 0.1, \"5\": 0, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 88,
+    "completion_tokens": 281,
+    "cost_usd": 0.0014006000000000001,
+    "latency_ms": 5746
+   }
+  ]
+ },
+ "3f23ac2067948701531ca056c0b1cab7ef2e276b": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"above_grade\": \"no\", \"struts\": \"no\", \"pit_bottom_prepared\": \"no\", \"formwork\": \"no\", \"rebar\": \"no\", \"slab\": \"no\", \"below_grade\": \"no\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfill\": \"no\"}, \"comment\": \"На площадке виден открытый котлован, отвал грунта и работающая землеройная техника, что указывает на этап земляных работ.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2922,
+    "cached_tokens": 88,
+    "completion_tokens": 158,
+    "cost_usd": 0.0009968,
+    "latency_ms": 10421
+   }
+  ]
+ },
+ "b33988b3e3044a8fa9c09d935d04d1fa9dc53307": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На стройплощадке ведутся земляные работы в котловане, видна башня башенного крана, экскаватор и арматурные конструкции.\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 1, \"working\": 0, \"evidence\": \"Кран стоит неподвижно, стрела не развёрнута\"},\n    {\"type\": \"excavator\", \"total\": 1, \"working\": 1, \"evidence\": \"Ковш опущен в грунт\"},\n    {\"type\": \"truck\", \"total\": 1, \"working\": 0, \"evidence\": \"Стоит без видимых признаков работы\"}\n  ],\n  \"workers_count\": 4,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": 70,\n  \"latest_stage\": 3,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0.1, \"3\": 0.9, \"4\": 0.1, \"5\": 0, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 88,
+    "completion_tokens": 290,
+    "cost_usd": 0.0014087000000000001,
+    "latency_ms": 9471
+   }
+  ]
+ },
+ "217971b8360575b5572d3408b050033705da37cd": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"above_grade\": \"no\", \"struts\": \"no\", \"pit_bottom_prepared\": \"not_visible\", \"formwork\": \"no\", \"rebar\": \"yes\", \"slab\": \"no\", \"below_grade\": \"yes\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfill\": \"no\"}, \"comment\": \"На площадке виден котлован, земляные работы, арматура и техника — этап земляных работ и подготовки фундамента.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2922,
+    "cached_tokens": 88,
+    "completion_tokens": 154,
+    "cost_usd": 0.0009931999999999999,
+    "latency_ms": 9665
+   }
+  ]
+ },
+ "6984194a000a30c03645cbf5a78888bdde50c7b1": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На стройплощадке ведутся земляные работы в котловане, рядом с башенным краном и другими машинами. Рабочие в жёлтых жилетах находятся на разных участках площадки.\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 1, \"working\": 0, \"evidence\": \"Кран стоит неподвижно, стрелы нет\"},\n    {\"type\": \"excavator\", \"total\": 1, \"working\": 1, \"evidence\": \"Ковш в грунте\"},\n    {\"type\": \"wheel_loader\", \"total\": 1, \"working\": 1, \"evidence\": \"Ковш поднят\"},\n    {\"type\": \"skid_steer\", \"total\": 1, \"working\": 0, \"evidence\": \"Стоит без движения\"}\n  ],\n  \"workers_count\": 10,\n  \"floors_built\": 0,\n  \"floors_glazed\": 0,\n  \"facade_clad_pct\": 0,\n  \"pit_area_pct\": 70,\n  \"latest_stage\": 3,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0.1, \"3\": 0.9, \"4\": 0.1, \"5\": 0, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 88,
+    "completion_tokens": 326,
+    "cost_usd": 0.0014411,
+    "latency_ms": 12700
+   }
+  ]
+ },
+ "b8f9a475aaa7d5ec82d44653cdad3188a91940fc": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"above_grade\": \"no\", \"struts\": \"no\", \"pit_bottom_prepared\": \"yes\", \"formwork\": \"no\", \"rebar\": \"yes\", \"slab\": \"no\", \"below_grade\": \"yes\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfill\": \"no\"}, \"comment\": \"Котлован, земляные работы и подготовленное дно подтверждают этап земляных работ и подготовки основания.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2922,
+    "cached_tokens": 88,
+    "completion_tokens": 148,
+    "cost_usd": 0.0009878,
+    "latency_ms": 5287
+   }
+  ]
+ },
+ "64045da493107d529eefdf876d8d4adc2a60091f": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На стройплощадке ведутся работы по армированию монолитной плиты фундамента, рядом стоит башенный кран.\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 1, \"working\": 0, \"evidence\": \"Кран стоит неподвижно, стрелы нет в движении\"},\n    {\"type\": \"truck\", \"total\": 1, \"working\": 0, \"evidence\": \"Грузовик с платформой стоит без видимых признаков работы\"}\n  ],\n  \"workers_count\": 10,\n  \"floors_built\": 0,\n  \"floors_glazed\": 0,\n  \"facade_clad_pct\": 0,\n  \"pit_area_pct\": 50,\n  \"latest_stage\": 3,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0.9, \"4\": 0.1, \"5\": 0, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 194,
+    "completion_tokens": 253,
+    "cost_usd": 0.0013489,
+    "latency_ms": 7141
+   }
+  ]
+ },
+ "e0b1c3a1a44357e8d27b2afb46cf0285ee8b334e": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"no\", \"above_grade\": \"no\", \"struts\": \"no\", \"pit_bottom_prepared\": \"no\", \"formwork\": \"no\", \"rebar\": \"yes\", \"slab\": \"no\", \"below_grade\": \"yes\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfill\": \"no\"}, \"comment\": \"Виден котлован с арматурой, что указывает на подготовку подземной части здания.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2922,
+    "cached_tokens": 194,
+    "completion_tokens": 148,
+    "cost_usd": 0.0009613000000000001,
+    "latency_ms": 6202
+   }
+  ]
+ },
+ "c95ea2136e480d42153e75de37f216958daf9d9b": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "```json\n{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На строительной площадке ведутся работы по возведению монолитного каркаса. Видны рабочие на перекрытии и строительная техника.\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 2, \"working\": 0, \"evidence\": \"Краны стоят на месте, стрелы не вращаются, нет видимых грузов на крюках.\"},\n    {\"type\": \"concrete_mixer\", \"total\": 1, \"working\": 0, \"evidence\": \"Машина стоит на площадке, барабан не вращается.\"},\n    {\"type\": \"truck\", \"total\": 1, \"working\": 0, \"evidence\": \"Грузовик стоит на площадке, не производит погрузочно-разгрузочных работ.\"}\n  ],\n  \"workers_count\": 5,\n  \"floors_built\": 1,\n  \"floors_glazed\": 0,\n  \"facade_clad_pct\": 0,\n  \"pit_area_pct\": 0,\n  \"latest_stage\": 5,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 1, \"6\": 0, \"7\": 0, \"8\": 0}\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 2296,
+    "cached_tokens": 88,
+    "completion_tokens": 313,
+    "cost_usd": 0.0009485,
+    "latency_ms": 12214
+   }
+  ]
+ },
+ "4ae952ecccba3d8fb78d9be05011690f7f52517b": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"above_grade\": \"yes\", \"crane\": \"yes\", \"formwork_floor\": \"not_visible\", \"unfinished_top\": \"yes\", \"cladding\": \"no\", \"concrete_pour\": \"not_visible\", \"roof_superstructures\": \"not_visible\", \"steel_frame\": \"not_visible\", \"masonry\": \"not_visible\", \"window_openings_empty\": \"not_visible\", \"roof_work\": \"not_visible\", \"roof_cover\": \"no\", \"parapet\": \"not_visible\"}, \"comment\": \"Здание возвышается над землёй, виден башенный кран, верхний этаж незавершён, фасад не закрыт.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 1179,
+    "cached_tokens": 4,
+    "completion_tokens": 150,
+    "cost_usd": 0.0004877,
+    "latency_ms": 4230
+   }
+  ]
+ },
+ "8769f21e564855f04a739640d1241883e633f4b7": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "```json\n{\n  \"quality\": \"good\",\n  \"view\": \"side\",\n  \"description\": \"На стройплощадке ведутся работы по возведению монолитного каркаса здания. На объекте установлены башенные краны.\",\n  \"equipment\": [\n    {\n      \"type\": \"tower_crane\",\n      \"total\": 2,\n      \"working\": 0,\n      \"evidence\": \"Краны стоят на месте, стрелы не вращаются, нет видимых грузов на крюках.\"\n    }\n  ],\n  \"workers_count\": null,\n  \"floors_built\": 1,\n  \"floors_glazed\": 0,\n  \"facade_clad_pct\": 0,\n  \"pit_area_pct\": null,\n  \"latest_stage\": 5,\n  \"stage_likelihood\": {\n    \"1\": 0,\n    \"2\": 0,\n    \"3\": 0,\n    \"4\": 0,\n    \"5\": 0.9,\n    \"6\": 0.1,\n    \"7\": 0,\n    \"8\": 0\n  }\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 2296,
+    "cached_tokens": 194,
+    "completion_tokens": 241,
+    "cost_usd": 0.0008572,
+    "latency_ms": 16153
+   }
+  ]
+ },
+ "6d49627b7d0ceb428515724bf5b8a9dc4b285814": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"above_grade\": \"yes\", \"crane\": \"yes\", \"formwork_floor\": \"yes\", \"unfinished_top\": \"yes\", \"cladding\": \"no\", \"concrete_pour\": \"no\", \"roof_superstructures\": \"not_visible\", \"steel_frame\": \"no\", \"masonry\": \"not_visible\", \"window_openings_empty\": \"not_visible\", \"roof_work\": \"not_visible\", \"roof_cover\": \"no\", \"parapet\": \"not_visible\"}, \"comment\": \"Виден каркас здания с опалубкой, башенный кран и незавершённый верхний этаж без фасада.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 1179,
+    "cached_tokens": 1073,
+    "completion_tokens": 144,
+    "cost_usd": 0.00021505000000000002,
+    "latency_ms": 3786
+   }
+  ]
+ },
+ "35654d394973640b2a21dcefe4d9f9dd4f0dc1b1": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"side\",\n  \"description\": \"На стройплощадке ведётся возведение монолитного каркаса здания. Рабочие в жёлтых жилетах находятся на верхнем уровне конструкции.\",\n  \"equipment\": [],\n  \"workers_count\": 5,\n  \"floors_built\": 3,\n  \"floors_glazed\": 0,\n  \"facade_clad_pct\": 0,\n  \"pit_area_pct\": null,\n  \"latest_stage\": 5,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 1, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 88,
+    "completion_tokens": 173,
+    "cost_usd": 0.0013034000000000001,
+    "latency_ms": 5231
+   }
+  ]
+ },
+ "cea08664960883e678607f719a46a8067c0d3270": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"above_grade\": \"yes\", \"crane\": \"not_visible\", \"formwork_floor\": \"yes\", \"unfinished_top\": \"yes\", \"cladding\": \"no\", \"concrete_pour\": \"not_visible\", \"roof_superstructures\": \"not_visible\", \"steel_frame\": \"no\", \"masonry\": \"not_visible\", \"window_openings_empty\": \"yes\", \"roof_work\": \"not_visible\", \"roof_cover\": \"no\", \"parapet\": \"not_visible\"}, \"comment\": \"Здание возвышается над землёй, видна опалубка и незавершённый верхний этаж с пустыми проёмами.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2782,
+    "cached_tokens": 258,
+    "completion_tokens": 148,
+    "cost_usd": 0.0009033,
+    "latency_ms": 6840
+   }
+  ]
+ },
+ "e1d2e82a059140caae4d6f8ef13f0c2c8d01e88c": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"side\",\n  \"description\": \"Виден фасад многоэтажного здания с установленными панелями облицовки и окнами. На верхнем этаже видны строительные леса и материалы.\",\n  \"equipment\": [],\n  \"workers_count\": null,\n  \"floors_built\": 4,\n  \"floors_glazed\": 4,\n  \"facade_clad_pct\": 100,\n  \"pit_area_pct\": null,\n  \"latest_stage\": 7,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 0, \"6\": 0, \"7\": 1, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 2190,
+    "completion_tokens": 172,
+    "cost_usd": 0.000777,
+    "latency_ms": 7589
+   }
+  ]
+ },
+ "455a71da4ee44ec3639ef6f22065b83f109063d2": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"scaffold\": \"no\", \"cladding\": \"yes\", \"glazing\": \"yes\", \"bare_concrete\": \"no\", \"window_openings_empty\": \"no\", \"insulation\": \"not_visible\", \"facade_subframe\": \"no\", \"entrance_finished\": \"not_visible\", \"paving\": \"not_visible\", \"landscaping\": \"not_visible\", \"amenities\": \"not_visible\", \"bare_ground\": \"not_visible\", \"utility_trench\": \"not_visible\", \"pipes_stock\": \"not_visible\", \"grading\": \"not_visible\", \"curbs\": \"not_visible\", \"asphalt_work\": \"not_visible\", \"lighting_poles\": \"not_visible\", \"permanent_fence\": \"not_visible\"}, \"comment\": \"Фасад закрыт навесными панелями, установлены окна — этап отделки фасада.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 3171,
+    "cached_tokens": 258,
+    "completion_tokens": 188,
+    "cost_usd": 0.001056,
+    "latency_ms": 9938
+   }
+  ]
+ },
+ "65d6c4812a7c20c62d2dcdf6962651bf4ae12171": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"side\",\n  \"description\": \"Виден фасад многоэтажного здания с установленными панелями облицовки и окнами. На крыше здания установлена строительная сетка.\",\n  \"equipment\": [],\n  \"workers_count\": null,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": 100,\n  \"pit_area_pct\": null,\n  \"latest_stage\": 7,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 0, \"6\": 0, \"7\": 1, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 2190,
+    "completion_tokens": 167,
+    "cost_usd": 0.0007725,
+    "latency_ms": 6629
+   }
+  ]
+ },
+ "4af546616cf7b43d5f492b8b6913fee3c862f8d5": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"scaffold\": \"yes\", \"cladding\": \"yes\", \"glazing\": \"yes\", \"bare_concrete\": \"no\", \"window_openings_empty\": \"no\", \"insulation\": \"not_visible\", \"facade_subframe\": \"not_visible\", \"entrance_finished\": \"not_visible\", \"paving\": \"not_visible\", \"landscaping\": \"not_visible\", \"amenities\": \"not_visible\", \"bare_ground\": \"not_visible\", \"utility_trench\": \"not_visible\", \"pipes_stock\": \"not_visible\", \"grading\": \"not_visible\", \"curbs\": \"not_visible\", \"asphalt_work\": \"not_visible\", \"lighting_poles\": \"not_visible\", \"permanent_fence\": \"not_visible\"}, \"comment\": \"Фасад закрыт навесными панелями, установлены окна, видны леса на крыше.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 3171,
+    "cached_tokens": 258,
+    "completion_tokens": 191,
+    "cost_usd": 0.0010587,
+    "latency_ms": 6399
+   }
+  ]
+ },
+ "cbb24d74e54fd8519d31f9f5a4c7de373908e4d0": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "```json\n{\n  \"quality\": \"good\",\n  \"view\": \"side\",\n  \"description\": \"На снимке виден фасад многоэтажного здания с установленными окнами и облицовкой. Строительная площадка не видна.\",\n  \"equipment\": [],\n  \"workers_count\": null,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": 100,\n  \"pit_area_pct\": null,\n  \"latest_stage\": 7,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 0, \"6\": 0, \"7\": 1, \"8\": 0}\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 2296,
+    "cached_tokens": 2190,
+    "completion_tokens": 167,
+    "cost_usd": 0.00029160000000000004,
+    "latency_ms": 3499
+   }
+  ]
+ },
+ "9cd8d548b30feed1cedfaec6b886808d9fbb8bbf": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"scaffold\": \"no\", \"cladding\": \"yes\", \"glazing\": \"no\", \"bare_concrete\": \"no\", \"window_openings_empty\": \"no\", \"insulation\": \"not_visible\", \"facade_subframe\": \"no\", \"entrance_finished\": \"not_visible\", \"paving\": \"not_visible\", \"landscaping\": \"not_visible\", \"amenities\": \"not_visible\", \"bare_ground\": \"not_visible\", \"utility_trench\": \"not_visible\", \"pipes_stock\": \"not_visible\", \"grading\": \"not_visible\", \"curbs\": \"not_visible\", \"asphalt_work\": \"not_visible\", \"lighting_poles\": \"not_visible\", \"permanent_fence\": \"not_visible\"}, \"comment\": \"Фасад закрыт навесными панелями, что подтверждает этап отделки.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 1568,
+    "cached_tokens": 1462,
+    "completion_tokens": 186,
+    "cost_usd": 0.0002723,
+    "latency_ms": 5464
+   }
+  ]
+ },
+ "85059ed7c1eb3bf6929ebf054a540d6f269d7971": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"above_grade\": \"no\", \"struts\": \"no\", \"pit_bottom_prepared\": \"no\", \"formwork\": \"no\", \"rebar\": \"no\", \"slab\": \"no\", \"below_grade\": \"no\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfilling\": \"no\", \"backfill\": \"no\"}, \"comment\": \"На площадке виден открытый котлован, отвал грунта и работающая землеройная техника, что указывает на этап земляных работ.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2994,
+    "cached_tokens": 194,
+    "completion_tokens": 166,
+    "cost_usd": 0.0009991,
+    "latency_ms": 8015
+   }
+  ]
+ },
+ "9e9ee22fa25b464942a54e5183eb70b87283f593": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"above_grade\": \"no\", \"struts\": \"no\", \"pit_bottom_prepared\": \"no\", \"formwork\": \"no\", \"rebar\": \"yes\", \"slab\": \"no\", \"below_grade\": \"yes\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfilling\": \"no\", \"backfill\": \"no\"}, \"comment\": \"Виден котлован, земляные работы, арматура, но нет бетонных конструкций или гидроизоляции.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2994,
+    "cached_tokens": 948,
+    "completion_tokens": 160,
+    "cost_usd": 0.0008052,
+    "latency_ms": 8733
+   }
+  ]
+ },
+ "e0d64d1c9066d2eae533ca2c8ef46786f139ad1a": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"above_grade\": \"no\", \"struts\": \"no\", \"pit_bottom_prepared\": \"yes\", \"formwork\": \"no\", \"rebar\": \"yes\", \"slab\": \"no\", \"below_grade\": \"yes\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfilling\": \"no\", \"backfill\": \"no\"}, \"comment\": \"Котлован, земляные работы и подготовленное дно с арматурой подтверждают этап земляных работ и подготовки основания.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2994,
+    "cached_tokens": 88,
+    "completion_tokens": 160,
+    "cost_usd": 0.0010202,
+    "latency_ms": 4049
+   }
+  ]
+ },
+ "7807ecce4330dbf441c6a35bb7674463d1c8af90": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"no\", \"above_grade\": \"no\", \"struts\": \"no\", \"pit_bottom_prepared\": \"no\", \"formwork\": \"no\", \"rebar\": \"yes\", \"slab\": \"no\", \"below_grade\": \"yes\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfilling\": \"no\", \"backfill\": \"no\"}, \"comment\": \"На площадке виден котлован, кучи грунта и арматурные каркасы, что указывает на этап подготовки фундамента.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2994,
+    "cached_tokens": 1285,
+    "completion_tokens": 164,
+    "cost_usd": 0.0007245499999999999,
+    "latency_ms": 7594
+   }
+  ]
+ },
+ "199bc87219bfeea4fd2857599f3b985b2bed68e5": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"above_grade\": \"no\", \"struts\": \"not_visible\", \"pit_bottom_prepared\": \"not_visible\"}, \"comment\": \"На площадке виден котлован, кучи грунта и работающая землеройная техника, что подтверждает этап земляных работ.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2376,
+    "cached_tokens": 556,
+    "completion_tokens": 89,
+    "cost_usd": 0.0006539,
+    "latency_ms": 5423
+   }
+  ]
+ },
+ "ddcb128776ca80e59931ce3773e7bcfccd91ee69": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"formwork\": \"no\", \"rebar\": \"no\", \"slab\": \"no\", \"below_grade\": \"no\", \"above_grade\": \"no\", \"pit_bottom_prepared\": \"no\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfilling\": \"no\", \"backfill\": \"no\"}, \"comment\": \"На площадке видны земляные работы и техника, но нет бетонных конструкций или опалубки — этап подготовки котлована.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2730,
+    "cached_tokens": 258,
+    "completion_tokens": 133,
+    "cost_usd": 0.0008742,
+    "latency_ms": 7248
+   }
+  ]
+ },
+ "e448bc33bdda7b4ea31393fbb163d152187d8d3c": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"above_grade\": \"no\", \"struts\": \"not_visible\", \"pit_bottom_prepared\": \"not_visible\"}, \"comment\": \"Котлован, земляные работы и отвал грунта подтверждают этап земляных работ.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2376,
+    "cached_tokens": 4,
+    "completion_tokens": 78,
+    "cost_usd": 0.0007820000000000001,
+    "latency_ms": 4746
+   }
+  ]
+ },
+ "b60daa82468122ece61109961eb5fafd892d950b": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"formwork\": \"yes\", \"rebar\": \"yes\", \"slab\": \"no\", \"below_grade\": \"yes\", \"above_grade\": \"no\", \"pit_bottom_prepared\": \"no\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfilling\": \"no\", \"backfill\": \"no\"}, \"comment\": \"Видны арматурные каркасы и опалубка, котлован не засыпан, бетонирование не ведётся.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2730,
+    "cached_tokens": 258,
+    "completion_tokens": 134,
+    "cost_usd": 0.0008751000000000001,
+    "latency_ms": 6615
+   }
+  ]
+ },
+ "25adddbe5fb2fa83d0b05fdc837164466a4cd7c8": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"yes\", \"above_grade\": \"no\", \"struts\": \"not_visible\", \"pit_bottom_prepared\": \"not_visible\"}, \"comment\": \"На площадке виден котлован, отвал грунта и работающая техника, что подтверждает этап земляных работ.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2376,
+    "cached_tokens": 667,
+    "completion_tokens": 85,
+    "cost_usd": 0.0006225499999999999,
+    "latency_ms": 4134
+   }
+  ]
+ },
+ "37fc0618e4bd6ca9091b9b9a24750a1f56e6785f": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"formwork\": \"yes\", \"rebar\": \"yes\", \"slab\": \"no\", \"below_grade\": \"yes\", \"above_grade\": \"no\", \"pit_bottom_prepared\": \"yes\", \"concrete_pour\": \"no\", \"basement_walls\": \"yes\", \"zero_slab\": \"no\", \"waterproofing\": \"not_visible\", \"backfilling\": \"no\", \"backfill\": \"no\"}, \"comment\": \"Видны опалубка, арматура и бетонные стены подземного этажа в котловане, что подтверждает этап строительства фундамента.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2730,
+    "cached_tokens": 258,
+    "completion_tokens": 139,
+    "cost_usd": 0.0008796,
+    "latency_ms": 3569
+   }
+  ]
+ },
+ "15f79ece83d5f70487902fcbdea8a9d723bbdeea": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"pit\": \"yes\", \"soil_pile\": \"yes\", \"earthwork\": \"no\", \"above_grade\": \"no\", \"struts\": \"not_visible\", \"pit_bottom_prepared\": \"not_visible\"}, \"comment\": \"Котлован и отвал грунта видны, но дно котлована и распорки не различимы, техника не работает, здание не возвышается.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2376,
+    "cached_tokens": 667,
+    "completion_tokens": 95,
+    "cost_usd": 0.0006315499999999999,
+    "latency_ms": 6487
+   }
+  ]
+ },
+ "7fadfe2619539138b09e26689be9c70d845c92ed": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"formwork\": \"yes\", \"rebar\": \"yes\", \"slab\": \"no\", \"below_grade\": \"yes\", \"above_grade\": \"no\", \"pit_bottom_prepared\": \"no\", \"concrete_pour\": \"no\", \"basement_walls\": \"no\", \"zero_slab\": \"no\", \"waterproofing\": \"no\", \"backfilling\": \"no\", \"backfill\": \"no\"}, \"comment\": \"Видны арматурные каркасы и опалубка на дне котлована, конструкции ниже уровня земли, бетонирование не ведётся.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2730,
+    "cached_tokens": 88,
+    "completion_tokens": 137,
+    "cost_usd": 0.0009203,
+    "latency_ms": 5802
+   }
+  ]
+ },
+ "0662e6e38a44863adfcfc0bce7a6a4c578a88607": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"above_grade\": \"yes\", \"crane\": \"yes\", \"formwork_floor\": \"not_visible\", \"unfinished_top\": \"yes\", \"cladding\": \"no\", \"concrete_pour\": \"not_visible\", \"roof_superstructures\": \"not_visible\", \"steel_frame\": \"not_visible\", \"masonry\": \"not_visible\", \"window_openings_empty\": \"not_visible\"}, \"comment\": \"Здание возвышается над землёй, виден башенный кран и незавершённый верхний этаж с арматурой.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 996,
+    "cached_tokens": 258,
+    "completion_tokens": 125,
+    "cost_usd": 0.0003468,
+    "latency_ms": 6182
+   }
+  ]
+ },
+ "9d92137ede6c985ac219f432a49c080c7ab9a2ad": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"roof_work\": \"yes\", \"roof_cover\": \"no\", \"parapet\": \"not_visible\", \"roof_superstructures\": \"yes\"}, \"comment\": \"На крыше видны люди и материалы, кровля не покрыта, есть надстройки.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 643,
+    "cached_tokens": 258,
+    "completion_tokens": 62,
+    "cost_usd": 0.0001842,
+    "latency_ms": 3109
+   }
+  ]
+ },
+ "6f17f47b74205125af9b47af191e1047c64405c6": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"above_grade\": \"yes\", \"crane\": \"yes\", \"formwork_floor\": \"yes\", \"unfinished_top\": \"yes\", \"cladding\": \"no\", \"concrete_pour\": \"no\", \"roof_superstructures\": \"not_visible\", \"steel_frame\": \"no\", \"masonry\": \"not_visible\", \"window_openings_empty\": \"not_visible\"}, \"comment\": \"На стройплощадке виден каркас здания, башенный кран, опалубка и незавершённый верхний этаж.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 996,
+    "cached_tokens": 88,
+    "completion_tokens": 121,
+    "cost_usd": 0.00038569999999999994,
+    "latency_ms": 2647
+   }
+  ]
+ },
+ "8dbeb7fec328276f5c2188e000f47ec88df75b16": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"roof_work\": \"yes\", \"roof_cover\": \"no\", \"parapet\": \"not_visible\", \"roof_superstructures\": \"yes\"}, \"comment\": \"На крыше видны материалы и надстройки, но кровля не закрыта.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 643,
+    "cached_tokens": 258,
+    "completion_tokens": 60,
+    "cost_usd": 0.00018240000000000002,
+    "latency_ms": 2956
+   }
+  ]
+ },
+ "ae5b89fd17f1c470834452962c49dd988b357c34": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"above_grade\": \"yes\", \"crane\": \"not_visible\", \"formwork_floor\": \"yes\", \"unfinished_top\": \"yes\", \"cladding\": \"no\", \"concrete_pour\": \"not_visible\", \"roof_superstructures\": \"not_visible\", \"steel_frame\": \"no\", \"masonry\": \"not_visible\", \"window_openings_empty\": \"yes\"}, \"comment\": \"Здание возвышается над землёй, видна опалубка и незавершённый верхний этаж с пустыми проёмами.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2599,
+    "cached_tokens": 258,
+    "completion_tokens": 124,
+    "cost_usd": 0.0008267999999999999,
+    "latency_ms": 5801
+   }
+  ]
+ },
+ "6f1098517073ba269ea1ac4397f489922dea61cd": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"roof_work\": \"not_visible\", \"roof_cover\": \"not_visible\", \"parapet\": \"not_visible\", \"roof_superstructures\": \"not_visible\"}, \"comment\": \"На снимке видны этажи здания в стадии строительства, но крыша не попала в кадр.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2246,
+    "cached_tokens": 537,
+    "completion_tokens": 67,
+    "cost_usd": 0.0005998499999999999,
+    "latency_ms": 3875
+   }
+  ]
+ },
+ "640a4274131bb8ad11f4c0a4bbd95d8fdc6739c9": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"scaffold\": \"no\", \"cladding\": \"yes\", \"glazing\": \"yes\", \"bare_concrete\": \"no\", \"window_openings_empty\": \"no\", \"insulation\": \"no\", \"facade_subframe\": \"no\", \"entrance_finished\": \"not_visible\"}, \"comment\": \"Фасад закрыт навесными панелями, установлены окна — этап отделки фасада в процессе.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2507,
+    "cached_tokens": 258,
+    "completion_tokens": 97,
+    "cost_usd": 0.0007748999999999999,
+    "latency_ms": 3974
+   }
+  ]
+ },
+ "38043656c9c5730b47e6f35423ecc6e3dd751435": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"paving\": \"not_visible\", \"landscaping\": \"not_visible\", \"amenities\": \"not_visible\", \"bare_ground\": \"not_visible\", \"utility_trench\": \"not_visible\", \"pipes_stock\": \"not_visible\", \"grading\": \"not_visible\", \"curbs\": \"not_visible\", \"asphalt_work\": \"not_visible\", \"lighting_poles\": \"not_visible\", \"permanent_fence\": \"not_visible\"}, \"comment\": \"На снимке видна только часть фасада здания, территория стройплощадки не попала в кадр.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2665,
+    "cached_tokens": 258,
+    "completion_tokens": 127,
+    "cost_usd": 0.0008493,
+    "latency_ms": 6980
+   }
+  ]
+ },
+ "86d54aa580c03847a3b05d95abb971f5d495b870": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"scaffold\": \"yes\", \"cladding\": \"yes\", \"glazing\": \"yes\", \"bare_concrete\": \"no\", \"window_openings_empty\": \"no\", \"insulation\": \"no\", \"facade_subframe\": \"no\", \"entrance_finished\": \"not_visible\"}, \"comment\": \"Фасад закрыт панелями, установлены окна, видны леса на крыше — этап отделки фасада.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2507,
+    "cached_tokens": 258,
+    "completion_tokens": 100,
+    "cost_usd": 0.0007775999999999999,
+    "latency_ms": 10831
+   }
+  ]
+ },
+ "8f92560f64dc843753b6a24f88c11403523bb3a6": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"paving\": \"not_visible\", \"landscaping\": \"not_visible\", \"amenities\": \"not_visible\", \"bare_ground\": \"not_visible\", \"utility_trench\": \"not_visible\", \"pipes_stock\": \"not_visible\", \"grading\": \"not_visible\", \"curbs\": \"not_visible\", \"asphalt_work\": \"not_visible\", \"lighting_poles\": \"not_visible\", \"permanent_fence\": \"not_visible\"}, \"comment\": \"На снимке видна только фасадная часть здания, территория стройплощадки не попала в кадр.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 2665,
+    "cached_tokens": 258,
+    "completion_tokens": 128,
+    "cost_usd": 0.0008502000000000001,
+    "latency_ms": 5812
+   }
+  ]
+ },
+ "711590d7a58b6ef93a9a5402b2ce6e1ab4f824b0": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"scaffold\": \"no\", \"cladding\": \"yes\", \"glazing\": \"no\", \"bare_concrete\": \"no\", \"window_openings_empty\": \"no\", \"insulation\": \"no\", \"facade_subframe\": \"no\", \"entrance_finished\": \"not_visible\"}, \"comment\": \"Фасад закрыт облицовочными панелями, что подтверждает этап отделки.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 904,
+    "cached_tokens": 194,
+    "completion_tokens": 95,
+    "cost_usd": 0.0003082,
+    "latency_ms": 4069
+   }
+  ]
+ },
+ "58ab456bd98eed6003f1f5bce38926b5b6e802d8": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"paving\": \"not_visible\", \"landscaping\": \"not_visible\", \"amenities\": \"not_visible\", \"bare_ground\": \"not_visible\", \"utility_trench\": \"not_visible\", \"pipes_stock\": \"not_visible\", \"grading\": \"not_visible\", \"curbs\": \"not_visible\", \"asphalt_work\": \"not_visible\", \"lighting_poles\": \"not_visible\", \"permanent_fence\": \"not_visible\"}, \"comment\": \"Кадр показывает только верхнюю часть здания, территория стройплощадки не видна.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 1062,
+    "cached_tokens": 258,
+    "completion_tokens": 123,
+    "cost_usd": 0.00036480000000000003,
+    "latency_ms": 4135
+   }
+  ]
+ },
+ "a4e80600dd446054e16b33a9874bda62f068c73b": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "```json\n{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"Строительная площадка с земляными работами, гусеничный экскаватор и гусеничный кран, склад строительных материалов\",\n  \"equipment\": [\n    {\"type\": \"excavator\", \"total\": 2, \"working\": 1, \"evidence\": \"один экскаватор находится над котлованом, возможно, работает\"},\n    {\"type\": \"crawler_crane\", \"total\": 1, \"working\": 0, \"evidence\": \"кран стоит неподвижно, стрелы не развёрнуты\"},\n    {\"type\": \"other\", \"total\": 1, \"working\": 0, \"evidence\": \"белый гусеничный трактор, возможно, для транспортировки или поддержки\"}\n  ],\n  \"workers_count\": null,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": 100,\n  \"latest_stage\": 2,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 1, \"3\": 0, \"4\": 0, \"5\": 0, \"6\": 0, \"7\": 0, \"8\": 0}\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 0,
+    "completion_tokens": 294,
+    "cost_usd": 0.0,
+    "latency_ms": 13313
+   }
+  ]
+ },
+ "81dbf8abb501262ec80d74cd8900a52f0498f248": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "```json\n{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"Строительная площадка с башенным краном, экскаватором и другими машинами, земляные работы и ограждение котлована\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 1, \"working\": false, \"evidence\": \"Стрела не развёрнута, опоры зафиксированы\"},\n    {\"type\": \"excavator\", \"total\": 1, \"working\": false, \"evidence\": \"Ковш не в земле, машина стоит\"},\n    {\"type\": \"other\", \"total\": 1, \"working\": false, \"evidence\": \"Красный бетононасос или генератор, стоящий без признаков работы\"}\n  ],\n  \"workers_count\": null,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": 100,\n  \"latest_stage\": 2,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 1, \"3\": 0, \"4\": 0, \"5\": 0, \"6\": 0, \"7\": 0, \"8\": 0}\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 0,
+    "completion_tokens": 290,
+    "cost_usd": 0.0,
+    "latency_ms": 7270
+   }
+  ]
+ },
+ "d4c6d9619bc415ce21493d689ce206862bd1c5bc": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "```json\n{\n  \"answers\": {\n    \"rig\": \"yes\",\n    \"sheet_pile\": \"yes\",\n    \"pile_heads\": \"no\",\n    \"above_grade\": \"no\",\n    \"pile_stock\": \"no\",\n    \"rebar\": \"yes\",\n    \"formwork\": \"no\",\n    \"capping_beam\": \"no\",\n    \"pit\": \"yes\",\n    \"soil_pile\": \"yes\",\n    \"earthwork\": \"yes\",\n    \"struts\": \"no\",\n    \"pit_bottom_prepared\": \"no\"\n  },\n  \"comment\": \"На площадке виден котлован, шпунтовое ограждение, сваи, арматура, экскаватор и отвал грунта. Строение не возвышается над уровнем земли.\"\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 2830,
+    "cached_tokens": 0,
+    "completion_tokens": 173,
+    "cost_usd": 0.0,
+    "latency_ms": 4650
+   }
+  ]
+ },
+ "cc132c0dc43d2cd40d1b4a0ad66cf4cf3be32422": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "```json\n{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"Строительная площадка с башенным краном, рабочими на армировании фундамента и строительными материалами\",\n  \"equipment\": [\n    {\n      \"type\": \"tower_crane\",\n      \"total\": 2,\n      \"working\": false,\n      \"evidence\": \"Стрелы не развёрнуты, краны стоят неподвижно\"\n    }\n  ],\n  \"workers_count\": 12,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": 60,\n  \"latest_stage\": 3,\n  \"stage_likelihood\": {\n    \"1\": 0,\n    \"2\": 0,\n    \"3\": 1,\n    \"4\": 0,\n    \"5\": 0,\n    \"6\": 0,\n    \"7\": 0,\n    \"8\": 0\n  }\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 0,
+    "completion_tokens": 228,
+    "cost_usd": 0.0,
+    "latency_ms": 4872
+   }
+  ]
+ },
+ "92e0e34370b7e2bfdd009858c831a94f0c9fa6c9": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "```json\n{\n  \"answers\": {\n    \"pit\": \"yes\",\n    \"soil_pile\": \"yes\",\n    \"earthwork\": \"no\",\n    \"above_grade\": \"no\",\n    \"struts\": \"no\",\n    \"pit_bottom_prepared\": \"yes\",\n    \"formwork\": \"yes\",\n    \"rebar\": \"yes\",\n    \"slab\": \"yes\",\n    \"below_grade\": \"yes\",\n    \"concrete_pour\": \"no\",\n    \"basement_walls\": \"yes\",\n    \"zero_slab\": \"no\",\n    \"waterproofing\": \"no\",\n    \"backfilling\": \"no\",\n    \"backfill\": \"no\"\n  },\n  \"comment\": \"На фото виден готовый подвал с арматурой и стенами, но котлован еще не засыпан.\"\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 2994,
+    "cached_tokens": 0,
+    "completion_tokens": 183,
+    "cost_usd": 0.0,
+    "latency_ms": 4685
+   }
+  ]
+ },
+ "afe1180b860346b491e1c2d7c9ef40dc7b61f304": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На строительной площадке видны рабочие, башенные краны, открытый котлован и свежеуложенная бетонная плита\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 2, \"working\": null, \"evidence\": \"краны стоят, но их работа не видна\"},\n    {\"type\": \"concrete_pump\", \"total\": 1, \"working\": true, \"evidence\": \"распространяется бетон на площадке\"},\n    {\"type\": \"excavator\", \"total\": 1, \"working\": null, \"evidence\": \"не видно признаков работы\"}\n  ],\n  \"workers_count\": 7,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": 50,\n  \"latest_stage\": 4,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 1, \"5\": 0, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 2296,
+    "cached_tokens": 0,
+    "completion_tokens": 275,
+    "cost_usd": 0.0,
+    "latency_ms": 5566
+   }
+  ]
+ },
+ "e459ce693c8c15ab50ff4b55d4859815d2ecc2c5": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "```json\n{\n  \"answers\": {\n    \"formwork\": \"not_visible\",\n    \"rebar\": \"not_visible\",\n    \"slab\": \"yes\",\n    \"below_grade\": \"not_visible\",\n    \"above_grade\": \"not_visible\",\n    \"pit_bottom_prepared\": \"yes\",\n    \"concrete_pour\": \"no\",\n    \"basement_walls\": \"not_visible\",\n    \"zero_slab\": \"not_visible\",\n    \"waterproofing\": \"not_visible\",\n    \"backfilling\": \"not_visible\",\n    \"backfill\": \"not_visible\",\n    \"crane\": \"yes\",\n    \"formwork_floor\": \"not_visible\",\n    \"unfinished_top\": \"not_visible\",\n    \"cladding\": \"not_visible\",\n    \"roof_superstructures\": \"not_visible\",\n    \"steel_frame\": \"not_visible\",\n    \"masonry\": \"not_visible\",\n    \"window_openings_empty\": \"not_visible\"\n  },\n  \"comment\": \"На фото видна залитая бетонная плита и башенный кран, что указывает на завершение подготовки котлована и начало бетонирования верхних конструкций.\"\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 1604,
+    "cached_tokens": 0,
+    "completion_tokens": 245,
+    "cost_usd": 0.0,
+    "latency_ms": 4353
+   }
+  ]
+ },
+ "c31bb1481dab1ebdcc57ccf04aa035ada4fc93e6": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"top\",\n  \"description\": \"На строительной площадке виден каркас здания с уже возведёнными этажами и перекрытиями, на крыше — строительные блоки и оборудование, рядом — башенный кран\",\n  \"equipment\": [\n    {\"type\": \"tower_crane\", \"total\": 1, \"working\": false, \"evidence\": \"Кран стоит неподвижно, стрелы не видны в движении\"},\n    {\"type\": \"other\", \"total\": 1, \"working\": false, \"evidence\": \"Строительные блоки или плиты на крыше здания, не относящиеся к перечисленной технике\"}\n  ],\n  \"workers_count\": null,\n  \"floors_built\": 2,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": 0,\n  \"latest_stage\": 5,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 1, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 2296,
+    "cached_tokens": 0,
+    "completion_tokens": 268,
+    "cost_usd": 0.0,
+    "latency_ms": 6343
+   }
+  ]
+ },
+ "4fa1004d168afa9a6e73bd57d97a6b1ea981311f": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "{\"answers\": {\"above_grade\": \"yes\", \"crane\": \"yes\", \"formwork_floor\": \"yes\", \"unfinished_top\": \"yes\", \"cladding\": \"no\", \"concrete_pour\": \"no\", \"roof_superstructures\": \"no\", \"steel_frame\": \"yes\", \"masonry\": \"no\", \"window_openings_empty\": \"not_visible\", \"roof_work\": \"no\", \"roof_cover\": \"no\", \"parapet\": \"no\"}, \"comment\": \"Здание выше уровня земли, виден кран, опалубка на верхнем этаже, арматура торчит, металлоконструкции видны.\"}",
+  "calls": [
+   {
+    "prompt_tokens": 1179,
+    "cached_tokens": 0,
+    "completion_tokens": 143,
+    "cost_usd": 0.0,
+    "latency_ms": 4808
+   }
+  ]
+ },
+ "a7778eb62626be2ffab6da4ab9a6b2e4a9dc4d5b": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"obstructed\",\n  \"view\": \"side\",\n  \"description\": \"На стройплощадке видна частичная конструкция здания с несколькими этажами каркаса и работниками на верхних этажах, огороженная зелёной сеткой\",\n  \"equipment\": [],\n  \"workers_count\": 4,\n  \"floors_built\": 4,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": null,\n  \"pit_area_pct\": null,\n  \"latest_stage\": 5,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 1, \"6\": 0, \"7\": 0, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 0,
+    "completion_tokens": 173,
+    "cost_usd": 0.0,
+    "latency_ms": 6490
+   }
+  ]
+ },
+ "e6daabb243c4d64aa825f38501af8cf75209e624": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "```json\n{\n  \"answers\": {\n    \"above_grade\": \"yes\",\n    \"crane\": \"not_visible\",\n    \"formwork_floor\": \"no\",\n    \"unfinished_top\": \"yes\",\n    \"cladding\": \"no\",\n    \"concrete_pour\": \"no\",\n    \"roof_superstructures\": \"not_visible\",\n    \"steel_frame\": \"no\",\n    \"masonry\": \"no\",\n    \"window_openings_empty\": \"no\",\n    \"roof_work\": \"not_visible\",\n    \"roof_cover\": \"not_visible\",\n    \"parapet\": \"not_visible\"\n  },\n  \"comment\": \"Здание выше уровня земли, верхний этаж незавершён, нет опалубки или кровельного покрытия\"\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 2782,
+    "cached_tokens": 0,
+    "completion_tokens": 159,
+    "cost_usd": 0.0,
+    "latency_ms": 4629
+   }
+  ]
+ },
+ "1c1829efccc5996783c63e33e7531dfe0128c2ba": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"obstructed\",\n  \"view\": \"side\",\n  \"description\": \"Видно фасад здания с установленными оконными проемами и облицовкой. На верхних этажах видны строительные леса и материалы.\",\n  \"equipment\": [],\n  \"workers_count\": null,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": 100,\n  \"pit_area_pct\": null,\n  \"latest_stage\": 7,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 0, \"6\": 0, \"7\": 1, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 0,
+    "completion_tokens": 168,
+    "cost_usd": 0.0,
+    "latency_ms": 6114
+   }
+  ]
+ },
+ "4e4205fa4944a119082b2456cf5033a4b19c22d5": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "```json\n{\n  \"answers\": {\n    \"scaffold\": \"not_visible\",\n    \"cladding\": \"yes\",\n    \"glazing\": \"no\",\n    \"bare_concrete\": \"no\",\n    \"window_openings_empty\": \"no\",\n    \"insulation\": \"not_visible\",\n    \"facade_subframe\": \"not_visible\",\n    \"entrance_finished\": \"not_visible\",\n    \"paving\": \"not_visible\",\n    \"landscaping\": \"not_visible\",\n    \"amenities\": \"not_visible\",\n    \"bare_ground\": \"not_visible\",\n    \"utility_trench\": \"not_visible\",\n    \"pipes_stock\": \"not_visible\",\n    \"grading\": \"not_visible\",\n    \"curbs\": \"not_visible\",\n    \"asphalt_work\": \"not_visible\",\n    \"lighting_poles\": \"not_visible\",\n    \"permanent_fence\": \"not_visible\"\n  },\n  \"comment\": \"Фасад здания частично облицован панелями, видны окна с рамами\"\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 3171,
+    "cached_tokens": 0,
+    "completion_tokens": 215,
+    "cost_usd": 0.0,
+    "latency_ms": 8784
+   }
+  ]
+ },
+ "5e27c1abf401521853c970d3efc8ef3feb38231f": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"obstructed\",\n  \"view\": \"side\",\n  \"description\": \"Видно фасад многоэтажного здания с установленными окнами и частичной облицовкой стен плиткой. На верхних этажах видна строительная защита (пленка, леса).\",\n  \"equipment\": [],\n  \"workers_count\": null,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": 50,\n  \"pit_area_pct\": null,\n  \"latest_stage\": 7,\n  \"stage_likelihood\": {\"1\": 0, \"2\": 0, \"3\": 0, \"4\": 0, \"5\": 0, \"6\": 0, \"7\": 1, \"8\": 0}\n}",
+  "calls": [
+   {
+    "prompt_tokens": 3899,
+    "cached_tokens": 0,
+    "completion_tokens": 178,
+    "cost_usd": 0.0,
+    "latency_ms": 5468
+   }
+  ]
+ },
+ "640c551e14f12ec16be59105737589034bf70561": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "```json\n{\n  \"answers\": {\n    \"scaffold\": \"not_visible\",\n    \"cladding\": \"yes\",\n    \"glazing\": \"yes\",\n    \"bare_concrete\": \"no\",\n    \"window_openings_empty\": \"no\",\n    \"insulation\": \"not_visible\",\n    \"facade_subframe\": \"not_visible\",\n    \"entrance_finished\": \"not_visible\",\n    \"paving\": \"not_visible\",\n    \"landscaping\": \"not_visible\",\n    \"amenities\": \"not_visible\",\n    \"bare_ground\": \"not_visible\",\n    \"utility_trench\": \"not_visible\",\n    \"pipes_stock\": \"not_visible\",\n    \"grading\": \"not_visible\",\n    \"curbs\": \"not_visible\",\n    \"asphalt_work\": \"not_visible\",\n    \"lighting_poles\": \"not_visible\",\n    \"permanent_fence\": \"not_visible\"\n  },\n  \"comment\": \"Фасад здания полностью облицован панелями, окна установлены\"\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 3171,
+    "cached_tokens": 0,
+    "completion_tokens": 211,
+    "cost_usd": 0.0,
+    "latency_ms": 5388
+   }
+  ]
+ },
+ "f23dfb4094dffbba41e02bdb64708dfb7355ebbd": {
+  "step": "Шаг 1. Общий разбор кадра.",
+  "raw_text": "{\n  \"quality\": \"good\",\n  \"view\": \"side\",\n  \"description\": \"Вид на фасад многоэтажного здания с установленными окнами и облицовкой\",\n  \"equipment\": [],\n  \"workers_count\": null,\n  \"floors_built\": null,\n  \"floors_glazed\": null,\n  \"facade_clad_pct\": 100,\n  \"pit_area_pct\": null,\n  \"latest_stage\": 7,\n  \"stage_likelihood\": {\n    \"1\": 0,\n    \"2\": 0,\n    \"3\": 0,\n    \"4\": 0,\n    \"5\": 0,\n    \"6\": 0,\n    \"7\": 1,\n    \"8\": 0\n  }\n}",
+  "calls": [
+   {
+    "prompt_tokens": 2296,
+    "cached_tokens": 0,
+    "completion_tokens": 163,
+    "cost_usd": 0.0,
+    "latency_ms": 5495
+   }
+  ]
+ },
+ "bf4c90d99ed24ea6602231869266bcfaaa88b6be": {
+  "step": "Шаг 2. Чек-лист этапа. На каждый вопрос ответь \"yes\", \"no\" или \"not_visible\".",
+  "raw_text": "```json\n{\n  \"answers\": {\n    \"scaffold\": \"not_visible\",\n    \"cladding\": \"yes\",\n    \"glazing\": \"no\",\n    \"bare_concrete\": \"no\",\n    \"window_openings_empty\": \"no\",\n    \"insulation\": \"not_visible\",\n    \"facade_subframe\": \"not_visible\",\n    \"entrance_finished\": \"not_visible\",\n    \"paving\": \"not_visible\",\n    \"landscaping\": \"not_visible\",\n    \"amenities\": \"not_visible\",\n    \"bare_ground\": \"not_visible\",\n    \"utility_trench\": \"not_visible\",\n    \"pipes_stock\": \"not_visible\",\n    \"grading\": \"not_visible\",\n    \"curbs\": \"not_visible\",\n    \"asphalt_work\": \"not_visible\",\n    \"lighting_poles\": \"not_visible\",\n    \"permanent_fence\": \"not_visible\"\n  },\n  \"comment\": \"Фасад здания полностью облицован панелями, видны окна с рамами\"\n}\n```",
+  "calls": [
+   {
+    "prompt_tokens": 1568,
+    "cached_tokens": 0,
+    "completion_tokens": 214,
+    "cost_usd": 0.0,
+    "latency_ms": 7790
+   }
+  ]
+ }
+}
