@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}{{ cam.name }}{% endblock %}
+{% block content %}
+
+<div class="flex items-start mb-6">
+  <div>
+    <h1 class="text-xl font-semibold">{{ cam.name }}</h1>
+    <div class="text-sm text-slate-500">
+      <a href="/sites/{{ cam.site_id }}" class="hover:text-slate-900">← к объекту</a>
+      {% if source_total %}
+      · {{ "кадров в серии" if cam.source_type == "stream" else "кадров в источнике" }}:
+      {{ source_total }}
+      {% endif %}
+    </div>
+  </div>
+  {% if frames_count %}
+  <a href="/cameras/{{ cam.id }}/frames"
+     class="ml-auto bg-slate-900 text-white text-sm rounded px-4 py-2 hover:bg-slate-700">
+    {{ "Принятые кадры" if cam.source_type == "stream" else "Результаты прогона" }}
+    ({{ frames_count }})
+  </a>
+  {% endif %}
+</div>
+
+{% if err %}
+<div class="mb-6 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-4 py-3">
+  {{ err }}
+</div>
+{% endif %}
+
+{% if first_err %}
+<div class="mb-6 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-4 py-3">
+  {{ first_err }}
+  <div class="text-xs text-red-600 mt-1">
+    {% if cam.source_type == "stream" %}
+    Камера — отдельный сервис, и поднимается он своей командой:
+    <code>.venv/bin/python -m simcam --folder ПАПКА --port 9101 --name "{{ cam.name }}"</code>.
+    Адрес камеры указан при её заведении: <code>{{ cam.source_uri or "не задан" }}</code>.
+    {% else %}
+    Папка выбирается при добавлении камеры кнопкой «Выбрать папку…».
+    Имена файлов должны содержать метку времени вида
+    <code>doric_2006_11_23_12_30_21.jpg</code>.
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if state.mask_approved %}
+{# ------------------------------------------------------------------ #}
+{# Маска уже задана — показываем её состояние                           #}
+{# ------------------------------------------------------------------ #}
+<section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
+  <div class="flex items-start mb-4">
+    <div>
+      <h2 class="font-medium">Маска фона задана</h2>
+      <p class="text-xs text-slate-500 mt-1">
+        Дальше она может только сжиматься: растущее здание отвоёвывает её обратно.
+      </p>
+    </div>
+    <form method="post" action="/cameras/{{ cam.id }}/reset-mask" class="ml-auto"
+          onsubmit="return confirm('Сбросить маску и нарисовать заново?')">
+      <button class="text-sm text-red-600 hover:text-red-800">Нарисовать заново</button>
+    </form>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+    <div>
+      <div class="text-slate-500 text-xs">скрыто кадра</div>
+      <div class="text-lg font-medium">{{ "%.1f"|format(state.masked_ratio * 100) }}%</div>
+    </div>
+    <div>
+      <div class="text-slate-500 text-xs">маски цело</div>
+      <div class="text-lg font-medium">{{ "%.0f"|format(state.retained * 100) }}%</div>
+    </div>
+    <div>
+      <div class="text-slate-500 text-xs">окон обработано</div>
+      <div class="text-lg font-medium">{{ state.windows_accumulated }}</div>
+    </div>
+    <div>
+      <div class="text-slate-500 text-xs">верхняя граница</div>
+      <div class="text-lg font-medium">
+        {{ state.mask_top_edge_px if state.mask_top_edge_px is not none else "—" }}
+      </div>
+    </div>
+  </div>
+
+  {% if state.masked_ratio is not none and state.masked_ratio < 0.03 %}
+  <div class="mt-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+    Скрывать почти нечего — маска на этой камере выигрыша не даёт,
+    модель получит практически полный кадр.
+  </div>
+  {% endif %}
+
+  <div class="mt-5 grid md:grid-cols-2 gap-4">
+    {% if first_url %}
+    <div>
+      <div class="text-xs text-slate-500 mb-1">опорный кадр</div>
+      <img src="{{ first_url }}" class="w-full rounded border border-slate-200">
+    </div>
+    {% endif %}
+    {% if initial_url %}
+    <div>
+      <div class="text-xs text-slate-500 mb-1">исходная маска (белое — скрыто)</div>
+      <img src="{{ initial_url }}" class="w-full rounded border border-slate-200 bg-black">
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% elif first_url %}
+{# ------------------------------------------------------------------ #}
+{# Редактор маски                                                       #}
+{# ------------------------------------------------------------------ #}
+<section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
+  <h2 class="font-medium mb-1">Закрасьте фон</h2>
+  <p class="text-sm text-slate-600 mb-1">
+    Красным отметьте всё, что <b>не относится к стройке</b>: соседние дома,
+    улицу, горизонт, деревья. Незакрашенное система считает нашим объектом.
+  </p>
+  <p class="text-xs text-slate-500 mb-4">
+    Ошибиться не страшно. Закрасите лишнего — стройка меняется, алгоритм сам
+    откроет эту область. Закрасите мало — часть фона останется видимой, это
+    не хуже работы вообще без маски.
+  </p>
+
+  <div class="flex flex-wrap items-center gap-2 mb-3">
+    <button type="button" data-mode="paint" class="ring-2 ring-slate-900 bg-slate-100 text-sm rounded px-3 py-1.5">
+      Кисть
+    </button>
+    <button type="button" data-mode="erase" class="bg-slate-100 text-sm rounded px-3 py-1.5">
+      Ластик
+    </button>
+    <button type="button" id="btn-band" class="bg-slate-100 text-sm rounded px-3 py-1.5">
+      Закрасить всё выше клика
+    </button>
+    <button type="button" id="btn-undo" class="bg-slate-100 text-sm rounded px-3 py-1.5">
+      Отменить
+    </button>
+    <button type="button" id="btn-clear" class="bg-slate-100 text-sm rounded px-3 py-1.5">
+      Очистить
+    </button>
+
+    <label class="flex items-center gap-2 text-sm ml-2">
+      размер
+      <input type="range" id="brush-size" min="4" max="80" value="24" class="w-32">
+      <span id="brush-size-label" class="w-6 text-slate-500">24</span>
+    </label>
+
+    <div class="ml-auto text-sm text-slate-500">
+      закрашено: <span id="cover-label" class="font-medium text-slate-900">0%</span>
+    </div>
+  </div>
+
+  <div class="relative inline-block w-full">
+    <img id="mask-photo" src="{{ first_url }}" class="w-full rounded select-none"
+         draggable="false">
+    <canvas id="mask-canvas"
+            class="absolute left-0 top-0 rounded cursor-crosshair touch-none"></canvas>
+  </div>
+
+  <form method="post" action="/cameras/{{ cam.id }}/mask" id="mask-form" class="mt-4">
+    <input type="hidden" name="mask_png" id="mask-payload">
+    <button class="bg-slate-900 text-white rounded px-5 py-2 hover:bg-slate-700">
+      Подтвердить маску
+    </button>
+    <span class="text-xs text-slate-500 ml-3">
+      {% if cam.source_type == "stream" %}
+      После подтверждения камеру можно подключать — кадры начнут разбираться
+      по мере поступления.
+      {% else %}
+      Сразу после подтверждения начнётся разбор истории — он идёт минуты,
+      прогресс будет виден на этой же странице.
+      {% endif %}
+    </span>
+  </form>
+</section>
+
+<script src="/static/mask_editor.js"></script>
+{% endif %}
+
+{% if state.mask_approved and cam.source_type == "stream" %}
+{# ------------------------------------------------------------------ #}
+{# Поток. Кадр приходит — маска двигается, модель отвечает, график      #}
+{# объекта перерисовывается. Кнопки «прогнать датасет» здесь нет:       #}
+{# прогонять нечего, история появляется по мере съёмки.                 #}
+{# ------------------------------------------------------------------ #}
+<section class="bg-white border border-slate-200 rounded-lg p-6">
+  <div class="mb-4">
+    <h2 class="font-medium">Живой поток</h2>
+    <p class="text-sm text-slate-600 mt-1">
+      Каждый принятый кадр сразу проходит маску и уходит модели Б.
+      Диаграмма этапов объекта перерисовывается по мере накопления ответов.
+    </p>
+  </div>
+
+  {% include "_live.html" %}
+
+  <details class="mt-6 text-xs text-slate-500">
+    <summary class="cursor-pointer">Параметры подключения</summary>
+    <div class="mt-2 space-y-1 font-mono break-all">
+      <div>адрес камеры: {{ cam.source_uri or "—" }}</div>
+      <div>приёмник: {{ ingest_url }}</div>
+      <div>ключ камеры: {{ cam.ingest_key }}</div>
+    </div>
+    <p class="mt-2 font-sans">
+      Ключ уходит камере в момент подключения — на самой камере он не хранится.
+    </p>
+  </details>
+</section>
+
+{% elif state.mask_approved %}
+<section class="bg-white border border-slate-200 rounded-lg p-6">
+  <div class="flex items-start mb-3">
+    <div>
+      <h2 class="font-medium">Разбор истории</h2>
+      <p class="text-sm text-slate-600 mt-1">
+        Без галочки считается только маска. С моделью Б кадры ещё и
+        разбираются по чек-листам — дольше, но появляется факт на диаграмме
+        этапов объекта.
+      </p>
+    </div>
+    {% if not run %}
+    <form method="post" action="/cameras/{{ cam.id }}/run" class="ml-auto"
+          {% if frames_count %}
+          onsubmit="return confirm('Пересчитать заново? Прежние кадры этой камеры будут заменены.')"
+          {% endif %}>
+      <label class="flex items-center gap-2 text-xs text-slate-600 mb-2">
+        <input type="checkbox" name="model_b">
+        разбирать чек-листы моделью Б
+      </label>
+      <button class="bg-slate-100 text-sm rounded px-4 py-2 hover:bg-slate-200">
+        {% if frames_count %}Пересчитать{% else %}Запустить разбор{% endif %}
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if run %}
+  {% include "_progress.html" %}
+  {% elif frames_count %}
+  <p class="text-sm text-slate-600">
+    Обработано кадров: <b>{{ frames_count }}</b>.
+    <a href="/cameras/{{ cam.id }}/frames" class="text-slate-900 underline">Смотреть результаты</a>
+  </p>
+  {% else %}
+  <p class="text-sm text-slate-500">
+    Кадры ещё не разбирались.
+  </p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

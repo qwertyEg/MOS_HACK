@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Вход{% endblock %}
+{% block content %}
+<div class="max-w-sm mx-auto mt-20 bg-white rounded-lg border border-slate-200 p-8">
+  <h1 class="text-lg font-semibold mb-6">Мониторинг строительных площадок</h1>
+
+  {% if error %}
+  <div class="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/login" class="space-y-4">
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Логин</label>
+      <input name="login" value="admin" autofocus
+             class="w-full border border-slate-300 rounded px-3 py-2">
+    </div>
+    <div>
+      <label class="block text-sm text-slate-600 mb-1">Пароль</label>
+      <input name="password" type="password" value="admin"
+             class="w-full border border-slate-300 rounded px-3 py-2">
+    </div>
+    <button class="w-full bg-slate-900 text-white rounded py-2 hover:bg-slate-700">
+      Войти
+    </button>
+  </form>
+</div>
+{% endblock %}
