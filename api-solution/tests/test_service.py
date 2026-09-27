@@ -15,7 +15,7 @@ from PIL import Image
 from conftest import triage
 from core import config, service
 from core.analyzer import Analyzer
-from core.glm import GLMError, Reply, Usage
+from core.vlm import Reply, Usage, VLMError as GLMError
 from core.images import date_from_name, prepare
 from core.plan import typical_plan
 from core.storage import Storage
@@ -36,10 +36,13 @@ class GroundTruthClient:
     def __init__(self, checklist, by_url, fail=()):
         self.checklist, self.by_url, self.fail = checklist, by_url, set(fail)
         self.calls = 0
+        self.prompts = []  # (имя файла, текст запроса) — чтобы проверить контекст
 
-    def ask_json(self, system, image_url, text, max_tokens):
+    def ask_json(self, system, image_url, prompt, max_tokens):
+        text = prompt if isinstance(prompt, str) else "\n\n".join(p for p in prompt if p)
         self.calls += 1
         name = self.by_url[image_url]
+        self.prompts.append((name, text))
         if name in self.fail:
             raise GLMError("HTTP 500: тест")
         t = TRUTH[name]
@@ -59,8 +62,12 @@ def env(tmp_path, monkeypatch, checklist):
     monkeypatch.setattr(config, "IMAGES_DIR", tmp_path / "img")
     storage = Storage(tmp_path / "db.sqlite")
     oid = storage.create_object("Doric", "Офисно-деловой центр", 7)
-    storage.save_plan(oid, typical_plan(date(2005, 10, 1)))
+    storage.save_plan(oid, typical_plan(date(2005, 10, 1)), "manual")
     return storage, oid
+
+
+def site_obj(storage):
+    return storage.list_objects()[0]
 
 
 def ingest_all(storage, oid):
@@ -110,9 +117,9 @@ def test_full_series_report(env, checklist):
     client = client_for(storage, oid, checklist)
     analyzer = Analyzer(checklist, storage, client)
 
-    spent, errors = service.analyze_frames(analyzer, storage.list_frames(oid))
+    spent, errors = service.analyze_frames(storage, analyzer, site_obj(storage))
     assert errors == [] and spent > 0
-    assert service.pending(storage, analyzer, oid) == []
+    assert service.pending(storage, analyzer, site_obj(storage)) == []
 
     obj = storage.list_objects()[0]
     frames, plan, tl = service.report(checklist, storage, analyzer, obj)
@@ -134,9 +141,9 @@ def test_second_run_is_free(env, checklist):
     ingest_all(storage, oid)
     client = client_for(storage, oid, checklist)
     analyzer = Analyzer(checklist, storage, client)
-    service.analyze_frames(analyzer, storage.list_frames(oid))
+    service.analyze_frames(storage, analyzer, site_obj(storage))
     calls = client.calls
-    spent, _ = service.analyze_frames(analyzer, storage.list_frames(oid))
+    spent, _ = service.analyze_frames(storage, analyzer, site_obj(storage))
     assert spent == 0 and client.calls == calls
 
 
@@ -145,9 +152,10 @@ def test_one_failed_frame_does_not_stop_the_rest(env, checklist):
     ingest_all(storage, oid)
     client = client_for(storage, oid, checklist, fail={FILES[3]})
     analyzer = Analyzer(checklist, storage, client)
-    _, errors = service.analyze_frames(analyzer, storage.list_frames(oid))
+    _, errors = service.analyze_frames(storage, analyzer, site_obj(storage))
     assert len(errors) == 1 and FILES[3] in errors[0]
-    assert [f["filename"] for f in service.pending(storage, analyzer, oid)] == [FILES[3]]
+    # сбойный кадр и все после него: когда он разберётся, их история изменится
+    assert [f["filename"] for f in service.pending(storage, analyzer, site_obj(storage))] == FILES[3:]
     # Отчёт строится по разобранным кадрам, неразобранный просто пропускается.
     obj = storage.list_objects()[0]
     _, _, tl = service.report(checklist, storage, analyzer, obj)
@@ -158,9 +166,88 @@ def test_changing_model_keeps_old_results_visible(env, checklist):
     storage, oid = env
     ingest_all(storage, oid)
     client = client_for(storage, oid, checklist)
-    service.analyze_frames(Analyzer(checklist, storage, client), storage.list_frames(oid))
+    service.analyze_frames(storage, Analyzer(checklist, storage, client), site_obj(storage))
     client.model = "glm-4.6v-flash"
     other = Analyzer(checklist, storage, client)
-    assert len(service.pending(storage, other, oid)) == len(FILES)
-    frames = service.frames_with_analysis(storage, other, oid)
+    assert len(service.pending(storage, other, site_obj(storage))) == len(FILES)
+    frames = service.frames_with_analysis(storage, other, site_obj(storage))
     assert all(f["analysis"] for f in frames)
+
+
+# --- автоплан по датам фото ---
+
+def test_auto_plan_spans_photo_dates(tmp_path, monkeypatch, checklist):
+    monkeypatch.setattr(config, "IMAGES_DIR", tmp_path / "img")
+    storage = Storage(tmp_path / "db.sqlite")
+    oid = storage.create_object("Doric", "Офисно-деловой центр", 7)
+    assert storage.get_plan_source(oid) == "auto" and storage.get_plan(oid) == {}
+
+    service.ingest(storage, oid, FILES[0], (PHOTOS / FILES[0]).read_bytes())
+    assert storage.get_plan(oid) == {}  # один день — периода нет
+
+    ingest_all(storage, oid)
+    plan = {k: (date.fromisoformat(s), date.fromisoformat(e)) for k, (s, e) in storage.get_plan(oid).items()}
+    first, last = date(2005, 12, 23), date(2007, 11, 28)
+    assert plan[1][0] == first and max(e for _, e in plan.values()) == last
+    assert all(first <= s <= e <= last for s, e in plan.values())
+    assert plan[5][1] - plan[5][0] > plan[6][1] - plan[6][0]  # каркас дольше кровли — типовые пропорции
+
+    last_frame = storage.list_frames(oid)[-1]
+    service.delete_frame(storage, oid, last_frame["id"])
+    assert max(date.fromisoformat(e) for _, e in storage.get_plan(oid).values()) == date(2007, 9, 3)
+
+
+def test_manual_plan_is_not_overwritten(env):
+    storage, oid = env  # в env план сохранён как manual
+    before = storage.get_plan(oid)
+    ingest_all(storage, oid)
+    assert storage.get_plan(oid) == before and storage.get_plan_source(oid) == "manual"
+
+
+# --- контекст стройки между разборами ---
+
+def test_each_frame_sees_history_of_earlier_frames(env, checklist):
+    storage, oid = env
+    ingest_all(storage, oid)
+    client = client_for(storage, oid, checklist)
+    service.analyze_frames(storage, Analyzer(checklist, storage, client), site_obj(storage))
+    triage = [(n, t) for n, t in client.prompts if t.startswith("Шаг 1")]
+    assert [n for n, _ in triage] == FILES  # строго по датам
+    assert "Контекст этой стройки" not in triage[0][1]
+    assert "по 5 предыдущим снимкам" in triage[5][1]
+    assert "достигнутый этап: 5" in triage[7][1]  # после трёх кадров каркаса
+
+
+def test_backdated_photo_reopens_later_frames(env, checklist):
+    storage, oid = env
+    for n in FILES[1:]:
+        service.ingest(storage, oid, n, (PHOTOS / n).read_bytes())
+    client = client_for(storage, oid, checklist)
+    analyzer = Analyzer(checklist, storage, client)
+    service.analyze_frames(storage, analyzer, site_obj(storage))
+    assert service.pending(storage, analyzer, site_obj(storage)) == []
+
+    service.ingest(storage, oid, FILES[0], (PHOTOS / FILES[0]).read_bytes())  # фото задним числом
+    client.by_url.update(client_for(storage, oid, checklist).by_url)
+    # у всех более поздних кадров изменилась история → их разборы устарели
+    assert [f["filename"] for f in service.pending(storage, analyzer, site_obj(storage))] == FILES
+    service.analyze_frames(storage, analyzer, site_obj(storage))
+    assert service.pending(storage, analyzer, site_obj(storage)) == []
+
+
+def test_history_conflict_becomes_deviation(env, checklist):
+    storage, oid = env
+    ingest_all(storage, oid)
+
+    class Conflicting(GroundTruthClient):
+        def ask_json(self, system, image_url, prompt, max_tokens):
+            reply = super().ask_json(system, image_url, prompt, max_tokens)
+            if self.by_url[image_url] == FILES[-1] and "stage_likelihood" in reply.data:
+                reply.data["context_conflict"] = "на снимке снова открытый котлован"
+            return reply
+
+    base = client_for(storage, oid, checklist)
+    analyzer = Analyzer(checklist, storage, Conflicting(checklist, base.by_url))
+    service.analyze_frames(storage, analyzer, site_obj(storage))
+    _, _, tl = service.report(checklist, storage, analyzer, site_obj(storage))
+    assert any(d["rule"] == "history_conflict" and "котлован" in d["detail"] for d in tl["deviations"])

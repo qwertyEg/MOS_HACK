@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS objects (
     name TEXT NOT NULL UNIQUE,
     object_type TEXT NOT NULL,
     floors_total INTEGER,
+    plan_source TEXT NOT NULL DEFAULT 'auto',  -- auto: по датам фото; manual; file
     created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS plan (
@@ -70,15 +71,28 @@ def _now():
 
 
 class Storage:
-    def __init__(self, path=config.DB_PATH):
-        self.path = path
-        path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, path=None):
+        # Путь берётся при создании, а не при импорте: тесты подменяют config.DB_PATH.
+        self.path = path or config.DB_PATH
+        self._init()
+
+    def _init(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         config.IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-        with self._conn() as c:
+        with self._conn(init=False) as c:
             c.executescript(SCHEMA)
+            # База, созданная до появления колонки: CREATE TABLE IF NOT EXISTS её не добавит.
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(objects)")}
+            if "plan_source" not in cols:
+                c.execute("ALTER TABLE objects ADD COLUMN plan_source TEXT NOT NULL DEFAULT 'auto'")
 
     @contextmanager
-    def _conn(self):
+    def _conn(self, init=True):
+        # Streamlit держит Storage в кэше весь срок жизни процесса. Если папку
+        # данных за это время удалили, sqlite падает с «unable to open database
+        # file» — пересоздаём пустую базу со схемой, а не роняем интерфейс.
+        if init and not self.path.exists():
+            self._init()
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
@@ -111,9 +125,16 @@ class Storage:
                              (object_id,))
             return {r["stage_id"]: (r["start"], r["end"]) for r in rows}
 
-    def save_plan(self, object_id, plan):
-        """plan: {stage_id: (начало, окончание)} — date или ISO-строка, либо None."""
+    def get_plan_source(self, object_id):
         with self._conn() as c:
+            row = c.execute("SELECT plan_source FROM objects WHERE id = ?", (object_id,)).fetchone()
+            return row["plan_source"] if row else None
+
+    def save_plan(self, object_id, plan, source):
+        """plan: {stage_id: (начало, окончание)} — date или ISO-строка, либо None.
+        source: auto — построен по датам фото, manual — введён руками, file — загружен."""
+        with self._conn() as c:
+            c.execute("UPDATE objects SET plan_source = ? WHERE id = ?", (source, object_id))
             c.execute("DELETE FROM plan WHERE object_id = ?", (object_id,))
             c.executemany("INSERT INTO plan (object_id, stage_id, start, end) VALUES (?, ?, ?, ?)",
                           [(object_id, sid, _iso(s), _iso(e)) for sid, (s, e) in plan.items()])
@@ -123,6 +144,7 @@ class Storage:
     def add_frame(self, object_id, sha, filename, taken_at, date_source, jpeg):
         path = config.IMAGES_DIR / f"{sha}.jpg"
         if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(jpeg)
         with self._conn() as c:
             c.execute("""INSERT INTO frames (object_id, sha256, filename, taken_at, date_source, image_path)

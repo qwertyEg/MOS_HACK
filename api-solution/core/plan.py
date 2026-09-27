@@ -26,6 +26,15 @@ def typical_plan(start: date):
     return {sid: (start + timedelta(days=off), start + timedelta(days=off + dur)) for sid, off, dur in TYPICAL}
 
 
+def plan_between(start: date, end: date):
+    """Типовые пропорции этапов, растянутые на период [start, end]: этап 1 начинается
+    в start, последний этап заканчивается в end, перекрытия сохраняются."""
+    span = max(off + dur for _, off, dur in TYPICAL)
+    scale = (end - start).days / span
+    return {sid: (start + timedelta(days=round(off * scale)), start + timedelta(days=round((off + dur) * scale)))
+            for sid, off, dur in TYPICAL}
+
+
 _STAGE_COLS = ("stage_id", "stage", "этап", "id", "№")
 _START_COLS = ("start", "начало", "дата начала", "plan_start")
 _END_COLS = ("end", "окончание", "конец", "дата окончания", "plan_end")

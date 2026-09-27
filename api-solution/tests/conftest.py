@@ -25,7 +25,8 @@ class FakeClient:
         self.yes, self.no = set(yes), set(no)
         self.requests = []
 
-    def ask_json(self, system, image_url, text, max_tokens):
+    def ask_json(self, system, image_url, prompt, max_tokens):
+        text = prompt if isinstance(prompt, str) else "\n\n".join(p for p in prompt if p)
         self.requests.append(text)
         usage = Usage(prompt_tokens=3000, cached_tokens=1500, completion_tokens=300, cost_usd=0.001)
         if text.startswith("Шаг 1"):

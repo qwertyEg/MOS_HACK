@@ -17,6 +17,9 @@ ACTIVE_CREDIT = 0.5  # вклад идущего подэтапа, если не
 # Разведка назвала этап самым поздним видимым — это сильнее, чем вероятность
 # «работы идут сейчас», которая для готового фасада близка к нулю.
 LATEST_PRIOR = 0.7
+# Мин. вероятность из разведки, при которой этап выше latest_stage можно открыть
+# одним отличительным признаком; иначе нужен балл чек-листа ≥ FRONT_THRESHOLD.
+SIGN_OPENS_MIN_LIKELIHOOD = 0.3
 
 
 def _likelihood(triage, sid):
@@ -89,9 +92,14 @@ def evaluate(checklist, analysis, answers=None, floors_total=None):
         lk = _likelihood(triage, sid)
         score = lk if evidence is None else evidence
         distinct = checklist.distinctive[sid]
-        seen = any(status in (ACTIVE, DONE) and any(answers.get(k) == "yes" for k in
-                                                   set(sub["active_when"] + sub["done_when"]) & distinct)
-                   for sub, status in zip(stage["substages"], subs.values()))
+        by_sign = any(status in (ACTIVE, DONE) and any(answers.get(k) == "yes" for k in
+                                                      set(sub["active_when"] + sub["done_when"]) & distinct)
+                      for sub, status in zip(stage["substages"], subs.values()))
+        # Одним признаком подэтапа этап открывается, только если разведка его допускает.
+        # Замер: на армировании фундаментной плиты «опалубка наверху» = да (модель
+        # приняла опалубку стен подвала) открывала каркас, хотя разведка дала ему 0.
+        latest = triage.get("latest_stage")
+        seen = by_sign and ((latest is not None and sid <= latest) or lk >= SIGN_OPENS_MIN_LIKELIHOOD)
         stages[sid] = {"score": round(score, 3), "evidence": evidence, "likelihood": lk,
                        "substages": subs, "seen": seen or score >= FRONT_THRESHOLD}
 

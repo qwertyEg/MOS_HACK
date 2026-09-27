@@ -426,7 +426,7 @@
       "weight": 35,
       "view": "side",
       "summary": "Возведение каркаса этаж за этажом, металлоконструкции, кладка наружных стен. Самый длинный этап, прогресс — по числу этажей.",
-      "must_have": ["above_grade", "crane", "formwork_floor", "unfinished_top"],
+      "must_have": ["above_grade", "formwork_floor", "unfinished_top"],
       "must_not_have": ["cladding"],
       "equipment_expected": ["tower_crane", "concrete_pump", "concrete_mixer"],
       "equipment_optional": ["facade_hoist", "mobile_crane", "truck", "crane_manipulator", "telehandler", "crawler_crane"],

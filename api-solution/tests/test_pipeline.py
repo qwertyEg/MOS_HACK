@@ -199,3 +199,20 @@ def test_shared_earthwork_signs_do_not_open_next_stage(checklist):
     a, _ = analyze(checklist, {3: 0.9}, {"pit", "earthwork", "soil_pile"}, latest_stage=3)
     assert a["candidates"] == [3, 4]
     assert evaluate(checklist, a)["front"] == 3
+
+
+def test_single_sign_does_not_jump_over_triage(checklist):
+    # 2006-07-17, прогон с контекстом: этап 5 — кандидат из истории, «опалубка наверху» = да
+    # (модель приняла опалубку стен подвала), разведка этапу 5 дала 0 → остаётся этап 4
+    yes = {"below_grade", "rebar", "formwork", "basement_walls", "formwork_floor", "crane"}
+    a, _ = analyze(checklist, {4: 1.0}, yes, latest_stage=4)
+    assert a["candidates"] == [4, 5]
+    assert evaluate(checklist, a)["front"] == 4
+    # та же картина, но разведка допускает каркас — один признак этап открывает
+    a, _ = analyze(checklist, {4: 1.0, 5: 0.4}, yes, latest_stage=4)
+    assert evaluate(checklist, a)["front"] == 5
+
+
+def test_tower_crane_alone_is_not_superstructure(checklist):
+    # PLAN.md §3.1: башенный кран стоит с нулевого цикла — это не признак каркаса
+    assert "crane" not in checklist.stage_by_id[5]["must_have"]

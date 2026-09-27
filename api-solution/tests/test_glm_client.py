@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from core import glm
+from core import vlm
 from core.glm import GLMClient, GLMError
 
 
@@ -29,8 +29,8 @@ def http(monkeypatch):
         sent.append({"url": url, "body": json, "headers": headers})
         return queue.pop(0)
 
-    monkeypatch.setattr(glm.requests, "post", post)
-    monkeypatch.setattr(glm.time, "sleep", lambda s: None)
+    monkeypatch.setattr(vlm.requests, "post", post)
+    monkeypatch.setattr(vlm.time, "sleep", lambda s: None)
     return queue, sent
 
 

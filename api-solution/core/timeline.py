@@ -79,6 +79,10 @@ def build(checklist, frames, plan=None, floors_total=None):
         series.append((f["taken_at"], round(overall, 1)))
 
         devs = rules.frame_deviations(checklist, a, score)
+        conflict = a["triage"].get("context_conflict")
+        if conflict:
+            devs.append({"rule": "history_conflict", "severity": rules.INFO, "stage": score["front"],
+                         "title": "Снимок противоречит истории стройки", "detail": conflict})
         for dev in devs:
             deviations.append({**dev, "date": d, "frame_ids": [f["id"]]})
         out_frames.append({"id": f["id"], "date": d, "taken_at": f["taken_at"], "filename": f.get("filename"),

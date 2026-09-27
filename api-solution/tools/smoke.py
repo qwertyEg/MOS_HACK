@@ -1,6 +1,6 @@
 """Проверка ключа и модели на одном фото, без базы и без кэша.
 
-    .venv/bin/python tools/smoke.py photo.jpg [--model glm-4.6v-flash] [--thinking] [--strategy per_stage]
+    .venv/bin/python tools/smoke.py photo.jpg [--provider local] [--model glm-4.6v-flash] [--thinking] [--strategy per_stage]
 
 Печатает разведку, ответы чек-листа, оценку кадра и расход.
 """
@@ -12,10 +12,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core import config  # noqa: E402
 from core.analyzer import STRATEGIES, Analyzer  # noqa: E402
 from core.checklist import Checklist  # noqa: E402
-from core.glm import GLMClient  # noqa: E402
+from core.providers import PROVIDERS, make_client  # noqa: E402
 from core.images import data_url, prepare, sha256  # noqa: E402
 from core.scoring import evaluate  # noqa: E402
 
@@ -23,14 +22,15 @@ from core.scoring import evaluate  # noqa: E402
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("photo")
-    ap.add_argument("--model", default=config.DEFAULT_MODEL)
+    ap.add_argument("--provider", default="zai", choices=list(PROVIDERS))
+    ap.add_argument("--model", default=None)
     ap.add_argument("--thinking", action="store_true")
     ap.add_argument("--strategy", default="two_step", choices=list(STRATEGIES))
     args = ap.parse_args()
 
     raw = Path(args.photo).read_bytes()
     checklist = Checklist()
-    analyzer = Analyzer(checklist, None, GLMClient(model=args.model, thinking=args.thinking), args.strategy)
+    analyzer = Analyzer(checklist, None, make_client(args.provider, args.model, args.thinking), args.strategy)
     result, _ = analyzer.analyze(sha256(raw), lambda: data_url(prepare(raw)))
     score = evaluate(checklist, result)
 

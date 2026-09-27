@@ -19,9 +19,10 @@ class CassetteMiss(Exception):
 
 
 class CassetteClient:
-    def __init__(self, path: Path, real=None, model="glm-4.6v", thinking=False):
+    def __init__(self, path: Path, real=None, model="glm-4.6v", thinking=False, provider="zai"):
         self.path = path
         self.real = real
+        self.provider = real.provider if real else provider
         self.model = real.model if real else model
         self.thinking = real.thinking if real else thinking
         self.tape = json.loads(path.read_text()) if path.exists() else {}
@@ -30,10 +31,13 @@ class CassetteClient:
 
     def _key(self, system, image_url, text):
         img = hashlib.sha1(image_url.encode()).hexdigest()
-        raw = "\x1f".join([self.model, str(self.thinking), system, text, img])
+        # Прежние записи (только z.ai) — без провайдера в ключе, чтобы не пропали.
+        head = [self.model] if self.provider == "zai" else [self.provider, self.model]
+        raw = "\x1f".join(head + [str(self.thinking), system, text, img])
         return hashlib.sha1(raw.encode()).hexdigest()
 
-    def ask_json(self, system, image_url, text, max_tokens):
+    def ask_json(self, system, image_url, prompt, max_tokens):
+        text = prompt if isinstance(prompt, str) else "\n\n".join(t for t in prompt if t)
         key = self._key(system, image_url, text)
         if key in self.tape:
             item = self.tape[key]
@@ -44,7 +48,7 @@ class CassetteClient:
             return Reply(extract_json(item["raw_text"]), item["raw_text"], total, calls)
         if self.real is None:
             raise CassetteMiss("нет записи ответа и нет ключа API")
-        reply = self.real.ask_json(system, image_url, text, max_tokens)
+        reply = self.real.ask_json(system, image_url, prompt, max_tokens)
         self.tape[key] = {"step": text.split("\n", 1)[0], "raw_text": reply.raw_text,
                           "calls": [asdict(c) for c in reply.calls]}
         # Пишем сразу: если прогон упадёт на середине, оплаченное не потеряется.
