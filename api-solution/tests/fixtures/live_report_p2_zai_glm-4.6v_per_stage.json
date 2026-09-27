@@ -1,0 +1,477 @@
+{
+ "model": "glm-4.6v",
+ "strategy": "per_stage",
+ "thinking": false,
+ "stage_accuracy": "7/10",
+ "exact_stage": 6,
+ "view_accuracy": 9,
+ "frames_with_hallucinated_equipment": 0,
+ "missed_equipment": 0,
+ "cost_usd": 0.02324,
+ "cost_per_photo": 0.00232,
+ "prompt_tokens": 75038,
+ "cached_tokens": 13295,
+ "completion_tokens": 4502,
+ "recorded_calls": 20,
+ "replayed_calls": 10,
+ "timeline": {
+  "overall_pct": 90.0,
+  "front": 7,
+  "verdict": "отставание",
+  "deviations": [
+   "2005-12-23 Экскаватор работает без самосвалов",
+   "2006-03-08 Экскаватор работает без самосвалов",
+   "2006-05-08 Экскаватор работает без самосвалов",
+   "2006-10-05 Техника на площадке не работает",
+   "2007-11-28 Этап «Наружные сети и благоустройство» не завершён в срок"
+  ]
+ },
+ "rows": [
+  {
+   "photo": "2005_12_23",
+   "truth": 2,
+   "accept": [
+    1,
+    2
+   ],
+   "frame_stage": 3,
+   "timeline_stage": 3,
+   "ok": false,
+   "candidates": [
+    3,
+    4
+   ],
+   "likelihood": {
+    "3": 0.9
+   },
+   "view": "top",
+   "view_ok": true,
+   "equipment": {
+    "excavator": "2/2",
+    "crawler_crane": "1/1",
+    "pile_driver": "1/1"
+   },
+   "hallucinated": [],
+   "missed": [],
+   "yes": [
+    "earthwork",
+    "pit",
+    "soil_pile"
+   ],
+   "unsure_share": 0.06,
+   "usage": {
+    "prompt_tokens": 9005,
+    "cached_tokens": 902,
+    "completion_tokens": 503,
+    "cost_usd": 0.0029287000000000002,
+    "latency_ms": 18417
+   },
+   "comment": [
+    "На площадке виден котлован, кучи грунта и работающая землеройная техника, что подтверждает этап земляных работ.",
+    "На площадке видны земляные работы и техника, но нет бетонных конструкций или опалубки — этап подготовки котлована."
+   ],
+   "description": "На стройплощадке ведутся земляные работы: видны экскаваторы, копёр и гусеничный кран, а также открытый котлован с насыпями грунта."
+  },
+  {
+   "photo": "2006_03_08",
+   "truth": 3,
+   "accept": [
+    2,
+    3,
+    4
+   ],
+   "frame_stage": 4,
+   "timeline_stage": 4,
+   "ok": true,
+   "candidates": [
+    3,
+    4
+   ],
+   "likelihood": {
+    "3": 0.9
+   },
+   "view": "top",
+   "view_ok": true,
+   "equipment": {
+    "tower_crane": "0/1",
+    "excavator": "1/1",
+    "truck": "0/1"
+   },
+   "hallucinated": [],
+   "missed": [],
+   "yes": [
+    "below_grade",
+    "earthwork",
+    "formwork",
+    "pit",
+    "rebar",
+    "soil_pile"
+   ],
+   "unsure_share": 0.06,
+   "usage": {
+    "prompt_tokens": 9005,
+    "cached_tokens": 350,
+    "completion_tokens": 502,
+    "cost_usd": 0.0030658000000000005,
+    "latency_ms": 20832
+   },
+   "comment": [
+    "Котлован, земляные работы и отвал грунта подтверждают этап земляных работ.",
+    "Видны арматурные каркасы и опалубка, котлован не засыпан, бетонирование не ведётся."
+   ],
+   "description": "На стройплощадке ведутся земляные работы в котловане, видна башня башенного крана, экскаватор и арматурные конструкции."
+  },
+  {
+   "photo": "2006_05_08",
+   "truth": 4,
+   "accept": [
+    3,
+    4
+   ],
+   "frame_stage": 4,
+   "timeline_stage": 4,
+   "ok": true,
+   "candidates": [
+    3,
+    4
+   ],
+   "likelihood": {
+    "3": 0.9
+   },
+   "view": "top",
+   "view_ok": true,
+   "equipment": {
+    "tower_crane": "0/1",
+    "excavator": "1/1",
+    "wheel_loader": "1/1",
+    "skid_steer": "0/1"
+   },
+   "hallucinated": [],
+   "missed": [],
+   "yes": [
+    "basement_walls",
+    "below_grade",
+    "earthwork",
+    "formwork",
+    "pit",
+    "pit_bottom_prepared",
+    "rebar",
+    "soil_pile"
+   ],
+   "unsure_share": 0.12,
+   "usage": {
+    "prompt_tokens": 9005,
+    "cached_tokens": 1013,
+    "completion_tokens": 550,
+    "cost_usd": 0.00294325,
+    "latency_ms": 20403
+   },
+   "comment": [
+    "На площадке виден котлован, отвал грунта и работающая техника, что подтверждает этап земляных работ.",
+    "Видны опалубка, арматура и бетонные стены подземного этажа в котловане, что подтверждает этап строительства фундамента."
+   ],
+   "description": "На стройплощадке ведутся земляные работы в котловане, рядом с башенным краном и другими машинами. Рабочие в жёлтых жилетах находятся на разных участках площадки."
+  },
+  {
+   "photo": "2006_07_17",
+   "truth": 4,
+   "accept": [
+    4,
+    5
+   ],
+   "frame_stage": 4,
+   "timeline_stage": 4,
+   "ok": true,
+   "candidates": [
+    3,
+    4
+   ],
+   "likelihood": {
+    "3": 0.9
+   },
+   "view": "top",
+   "view_ok": true,
+   "equipment": {
+    "tower_crane": "0/1",
+    "truck": "0/1"
+   },
+   "hallucinated": [],
+   "missed": [],
+   "yes": [
+    "below_grade",
+    "formwork",
+    "pit",
+    "rebar",
+    "soil_pile"
+   ],
+   "unsure_share": 0.06,
+   "usage": {
+    "prompt_tokens": 9005,
+    "cached_tokens": 949,
+    "completion_tokens": 485,
+    "cost_usd": 0.00290075,
+    "latency_ms": 19430
+   },
+   "comment": [
+    "Котлован и отвал грунта видны, но дно котлована и распорки не различимы, техника не работает, здание не возвышается.",
+    "Видны арматурные каркасы и опалубка на дне котлована, конструкции ниже уровня земли, бетонирование не ведётся."
+   ],
+   "description": "На стройплощадке ведутся работы по армированию монолитной плиты фундамента, рядом стоит башенный кран."
+  },
+  {
+   "photo": "2006_10_05",
+   "truth": 5,
+   "accept": [
+    4,
+    5
+   ],
+   "frame_stage": 6,
+   "timeline_stage": 6,
+   "ok": false,
+   "candidates": [
+    5,
+    6
+   ],
+   "likelihood": {
+    "5": 1.0
+   },
+   "view": "top",
+   "view_ok": true,
+   "equipment": {
+    "tower_crane": "0/2",
+    "concrete_mixer": "0/1",
+    "truck": "0/1"
+   },
+   "hallucinated": [],
+   "missed": [],
+   "yes": [
+    "above_grade",
+    "crane",
+    "roof_superstructures",
+    "roof_work",
+    "unfinished_top"
+   ],
+   "unsure_share": 0.46,
+   "usage": {
+    "prompt_tokens": 3935,
+    "cached_tokens": 604,
+    "completion_tokens": 500,
+    "cost_usd": 0.0014795000000000001,
+    "latency_ms": 21505
+   },
+   "comment": [
+    "Здание возвышается над землёй, виден башенный кран и незавершённый верхний этаж с арматурой.",
+    "На крыше видны люди и материалы, кровля не покрыта, есть надстройки."
+   ],
+   "description": "На строительной площадке ведутся работы по возведению монолитного каркаса. Видны рабочие на перекрытии и строительная техника."
+  },
+  {
+   "photo": "2007_01_31",
+   "truth": 5,
+   "accept": [
+    5
+   ],
+   "frame_stage": 6,
+   "timeline_stage": 6,
+   "ok": false,
+   "candidates": [
+    5,
+    6
+   ],
+   "likelihood": {
+    "5": 0.9
+   },
+   "view": "side",
+   "view_ok": false,
+   "equipment": {
+    "tower_crane": "0/2"
+   },
+   "hallucinated": [],
+   "missed": [],
+   "yes": [
+    "above_grade",
+    "crane",
+    "formwork_floor",
+    "roof_superstructures",
+    "roof_work",
+    "unfinished_top"
+   ],
+   "unsure_share": 0.23,
+   "usage": {
+    "prompt_tokens": 3935,
+    "cached_tokens": 540,
+    "completion_tokens": 422,
+    "cost_usd": 0.0014253,
+    "latency_ms": 21756
+   },
+   "comment": [
+    "На стройплощадке виден каркас здания, башенный кран, опалубка и незавершённый верхний этаж.",
+    "На крыше видны материалы и надстройки, но кровля не закрыта."
+   ],
+   "description": "На стройплощадке ведутся работы по возведению монолитного каркаса здания. На объекте установлены башенные краны."
+  },
+  {
+   "photo": "2007_03_22",
+   "truth": 5,
+   "accept": [
+    5
+   ],
+   "frame_stage": 5,
+   "timeline_stage": 5,
+   "ok": true,
+   "candidates": [
+    5,
+    6
+   ],
+   "likelihood": {
+    "5": 1.0
+   },
+   "view": "side",
+   "view_ok": true,
+   "equipment": {},
+   "hallucinated": [],
+   "missed": [],
+   "yes": [
+    "above_grade",
+    "formwork_floor",
+    "unfinished_top",
+    "window_openings_empty"
+   ],
+   "unsure_share": 0.54,
+   "usage": {
+    "prompt_tokens": 8744,
+    "cached_tokens": 883,
+    "completion_tokens": 364,
+    "cost_usd": 0.00273005,
+    "latency_ms": 14907
+   },
+   "comment": [
+    "Здание возвышается над землёй, видна опалубка и незавершённый верхний этаж с пустыми проёмами.",
+    "На снимке видны этажи здания в стадии строительства, но крыша не попала в кадр."
+   ],
+   "description": "На стройплощадке ведётся возведение монолитного каркаса здания. Рабочие в жёлтых жилетах находятся на верхнем уровне конструкции."
+  },
+  {
+   "photo": "2007_07_12",
+   "truth": 7,
+   "accept": [
+    5,
+    6,
+    7
+   ],
+   "frame_stage": 7,
+   "timeline_stage": 7,
+   "ok": true,
+   "candidates": [
+    7,
+    8
+   ],
+   "likelihood": {
+    "7": 1.0
+   },
+   "view": "side",
+   "view_ok": true,
+   "equipment": {},
+   "hallucinated": [],
+   "missed": [],
+   "yes": [
+    "cladding",
+    "glazing"
+   ],
+   "unsure_share": 0.63,
+   "usage": {
+    "prompt_tokens": 9071,
+    "cached_tokens": 2706,
+    "completion_tokens": 396,
+    "cost_usd": 0.0024012,
+    "latency_ms": 18543
+   },
+   "comment": [
+    "Фасад закрыт навесными панелями, установлены окна — этап отделки фасада в процессе.",
+    "На снимке видна только часть фасада здания, территория стройплощадки не попала в кадр."
+   ],
+   "description": "Виден фасад многоэтажного здания с установленными панелями облицовки и окнами. На верхнем этаже видны строительные леса и материалы."
+  },
+  {
+   "photo": "2007_09_03",
+   "truth": 7,
+   "accept": [
+    6,
+    7
+   ],
+   "frame_stage": 7,
+   "timeline_stage": 7,
+   "ok": true,
+   "candidates": [
+    7,
+    8
+   ],
+   "likelihood": {
+    "7": 1.0
+   },
+   "view": "side",
+   "view_ok": true,
+   "equipment": {},
+   "hallucinated": [],
+   "missed": [],
+   "yes": [
+    "cladding",
+    "glazing",
+    "scaffold"
+   ],
+   "unsure_share": 0.63,
+   "usage": {
+    "prompt_tokens": 9071,
+    "cached_tokens": 2706,
+    "completion_tokens": 395,
+    "cost_usd": 0.0024003,
+    "latency_ms": 23272
+   },
+   "comment": [
+    "Фасад закрыт панелями, установлены окна, видны леса на крыше — этап отделки фасада.",
+    "На снимке видна только фасадная часть здания, территория стройплощадки не попала в кадр."
+   ],
+   "description": "Виден фасад многоэтажного здания с установленными панелями облицовки и окнами. На крыше здания установлена строительная сетка."
+  },
+  {
+   "photo": "2007_11_28",
+   "truth": 7,
+   "accept": [
+    6,
+    7,
+    8
+   ],
+   "frame_stage": 7,
+   "timeline_stage": 7,
+   "ok": true,
+   "candidates": [
+    7,
+    8
+   ],
+   "likelihood": {
+    "7": 1.0
+   },
+   "view": "side",
+   "view_ok": true,
+   "equipment": {},
+   "hallucinated": [],
+   "missed": [],
+   "yes": [
+    "cladding"
+   ],
+   "unsure_share": 0.63,
+   "usage": {
+    "prompt_tokens": 4262,
+    "cached_tokens": 2642,
+    "completion_tokens": 385,
+    "cost_usd": 0.0009646000000000001,
+    "latency_ms": 11703
+   },
+   "comment": [
+    "Фасад закрыт облицовочными панелями, что подтверждает этап отделки.",
+    "Кадр показывает только верхнюю часть здания, территория стройплощадки не видна."
+   ],
+   "description": "На снимке виден фасад многоэтажного здания с установленными окнами и облицовкой. Строительная площадка не видна."
+  }
+ ]
+}
