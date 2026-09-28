@@ -274,8 +274,8 @@ class EquipmentEngine:
                 self._switch(tr, plate_uid, t, merged)                  # номер — безусловно
             elif tr.unit_id is None:
                 tr.unit_id = ((candidates[0] if candidates else None)
-                              or self._revive(cls, cam, d.site_xy, t)
-                              or (self._resume(tr, cls, cam, d.site_xy, t, after_gap, taken | mine)
+                              or self._revive(cls, cam, d.site_xy, t, busy=taken | mine)
+                              or (self._resume(tr, cls, cam, d.site_xy, t, taken | mine)
                                   if after_gap is not None else None)
                               or self._new_unit(cls, t))
             elif candidates and self._young_single(tr.unit_id, t):
@@ -298,7 +298,8 @@ class EquipmentEngine:
                 tr.unit_id = keep
             elif self._drifted(tr, d, t, cam):
                 log.info("трек %s отделён от единицы %s: разошлись на плане", tr.track_id, tr.unit_id)
-                tr.unit_id = self._revive(cls, cam, d.site_xy, t, exclude=tr.unit_id) or self._new_unit(cls, t)
+                tr.unit_id = (self._revive(cls, cam, d.site_xy, t, exclude=tr.unit_id, busy=taken | mine)
+                              or self._new_unit(cls, t))
 
             if tr.unit_id in taken:
                 # Две рамки одного кадра не могут быть одной машиной (след
@@ -384,7 +385,8 @@ class EquipmentEngine:
             return True
         return False
 
-    def _revive(self, cls: str, cam: str, xy, t: dt.datetime, exclude: str | None = None) -> str | None:
+    def _revive(self, cls: str, cam: str, xy, t: dt.datetime, exclude: str | None = None,
+                busy: set[str] = frozenset()) -> str | None:
         """Уехавшая машина того же типа вернулась в ту же камеру/место — тот же unit_id.
 
         Без номера различить две одинаковые машины нельзя; зато челночные
@@ -397,7 +399,10 @@ class EquipmentEngine:
         best = None
         for uid, u in self._units.items():
             st = u.state
-            if uid == exclude or st.status != UnitStatus.DEPARTED or st.plate:
+            # busy — единицы, уже занятые рамками этого кадра: статус DEPARTED пересчитывается
+            # только после кадра, и без этого две вернувшиеся машины получали одну и ту же
+            # единицу, а вторая — новую («Самосвал №3» при двух уехавших самосвалах).
+            if uid == exclude or uid in busy or st.status != UnitStatus.DEPARTED or st.plate:
                 continue
             if not taxonomy.confusable(st.cls, cls) or st.last_seen > t or t - st.last_seen > horizon:
                 continue
@@ -409,8 +414,7 @@ class EquipmentEngine:
                 best = (rank, uid)
         return best[1] if best else None
 
-    def _resume(self, tr, cls: str, cam: str, xy, t: dt.datetime, gap: dt.timedelta,
-                busy: set[str]) -> str | None:
+    def _resume(self, tr, cls: str, cam: str, xy, t: dt.datetime, busy: set[str]) -> str | None:
         """Кадр после долгого молчания камеры: машина того же типа, которую эта камера
         уже видела, — та же единица, если сейчас её не ведёт ни один трек.
 
@@ -419,20 +423,22 @@ class EquipmentEngine:
         Канберры) или после ночного перерыва, экскаватор к следующему снимку
         переставили — трекер его не узнаёт, а вчерашняя единица ещё «стоит». Без
         этого каждый снимок заводил новые единицы: 582 «машины» на Эдинбурге при
-        парке в десяток. Горизонт — не меньше revive_within_h и не меньше недели
-        снимков этой камеры: пропуск детектора на паре снимков единицу не рвёт.
+        парке в десяток. Горизонта нет: без номера машины одного типа не различить, и
+        единиц у камеры становится столько, сколько машин она видела одновременно
+        (замер на сохранённых детекциях Эдинбурга: горизонт в неделю снимков — 247
+        единиц, в месяц — 90, без горизонта — 34, из них башенных кранов 5 на три
+        камеры при двух настоящих). Пропуск детектора на неделю единицу не рвёт.
         Движение по такому кадру не оценивается (трекер помечает разрыв), так что
         ошибочное «та же машина» моточасов не приписывает.
         """
         window = dt.timedelta(minutes=self.cfg.merge_window_min)
-        horizon = max(dt.timedelta(hours=self.cfg.revive_within_h), 7 * gap)
         gray = self.cfg.merge_radius_m * self.cfg.merge_gray_factor
         best = None
         for uid, u in self._units.items():
             st = u.state
             if uid in busy or st.plate or cam not in st.cameras:
                 continue
-            if not taxonomy.confusable(st.cls, cls) or st.last_seen > t - window or t - st.last_seen > horizon:
+            if not taxonomy.confusable(st.cls, cls) or st.last_seen > t - window:
                 continue
             # За ночь машину могли перегнать через всю площадку — место не запрет,
             # а только порядок: сначала тот же класс, потом стоявшая рядом, потом недавняя.

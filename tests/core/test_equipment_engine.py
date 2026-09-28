@@ -268,14 +268,28 @@ def test_daily_camera_does_not_breed_units_when_machines_are_moved_overnight():
     assert ivs == []
 
 
-def test_daily_camera_machine_absent_for_many_snapshots_is_a_new_unit():
-    """Горизонт узнавания — неделя снимков камеры: камера снимала каждый день, экскаватора
-    не было десять снимков подряд — появившийся экскаватор уже другая единица."""
+def test_daily_camera_machine_back_after_many_snapshots_is_the_same_unit():
+    """Без номера машины одного типа не различить: экскаватор, которого суточная камера
+    не видела десять снимков, — та же единица, а не «Экскаватор №2»."""
     eng = EquipmentEngine()
     for day in range(11):
         dets = [S.det("excavator", (100 + 600 * (day == 10), 300, 160, 110))] if day in (0, 10) else []
         eng.process(fi("c1", 24 * 60 * day, day), None, dets, None, [], [])
-    assert len(eng.units()) == 2
+    assert len(eng.units()) == 1
+
+
+def test_two_departed_machines_coming_back_together_keep_their_units():
+    """Два самосвала уехали (камера снимала без них больше departed_after_h) и вернулись
+    вместе: каждый получает одну из прежних единиц, третьей не появляется."""
+    eng = EquipmentEngine()
+    trucks = lambda x0: [S.det("dump_truck", (x0, 300, 200, 130)), S.det("dump_truck", (x0 + 500, 300, 200, 130))]  # noqa: E731
+    eng.process(fi("c1", 0, 0), None, trucks(100), None, [], [])
+    for k in range(1, 9):
+        eng.process(fi("c1", 25 * k, k), None, [], None, [], [])
+    assert {u.status for u in eng.units()} == {UnitStatus.DEPARTED}
+    upd = eng.process(fi("c1", 25 * 9, 9), None, trucks(300), None, [], [])
+    assert len({d.unit_id for d in upd.detections}) == 2
+    assert len(eng.units()) == 2, [u.label for u in eng.units()]
 
 
 def test_regular_camera_keeps_separate_units_for_a_second_machine():
