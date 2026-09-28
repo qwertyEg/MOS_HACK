@@ -323,3 +323,31 @@
 `proxies` нужно три — `http`, `https` и `all`; без `all` обход не работает,
 потому что requests сначала дописывает прокси из окружения, а уже потом
 выбрасывает ключи со значением None.
+
+### 2026-09-28 · Егор / egor-unified · интеграция модулей в СтройВзор
+
+Сделано: в `egor-unified` слиты модули объединённого сервиса — план + аналитика
+(`core/plan`, `core/analytics`), модель Б (`core/stage`, `core/vlm_client.py`),
+модель А (`core/equipment`), бэкенд (`app/`), UI (`app/templates`, `app/static`).
+Договор модулей — `docs/ARCHITECTURE.md`, типы — `core/contracts.py`. Наследие
+удалено после проверки переноса: `api-solution/`, `app/pipeline/*`, старые
+шаблоны и статика, `tests/test_{aggregate,gantt,mask,parse_answer}.py`
+(свойства покрыты `tests/core`, случаи разбора ответа перенесены),
+`tools/{mask_replay,mask_bench,vlm_bench,parse_workbook}.py`.
+
+Почему так: маска (только сжимается, яркость, опорные клетки, разность медиан) —
+перенесена в `core/stage/mask.py` без изменения алгоритма, замеры — в его
+докстринге; окно маски теперь по суткам, начальная маска — автоматически по
+статике (ручная кисть — `DynamicMask.set_background`). Чек-лист с тернарным
+ответом, темп в активных днях и вердикт по объекту целиком сохранены
+(`core/stage/scoring.py`, `core/analytics/timeline.py`).
+
+Отвергнуто: оставить старый конвейер рядом с новым — два источника правды о
+маске и этапах. Порог SigLIP «k модели + 0.62/0.38» — на 9 демо-объектах SigLIP
+отвечал «да» почти на всё; калибровка k = 35, 0.8/0.46 (см. докстринг
+`core/stage/checklist_clip.py`, выборка мала, оценка оптимистична).
+
+Задевает: всех — UI теперь Alpine.js + ECharts + собранный Tailwind поверх JSON API
+(не HTMX); модель Б по умолчанию — SigLIP2 на CPU, локальная VLM — провайдер
+`local_vlm` (`VLM_BASE_URL`, `VLM_MODEL`); запуск — `python -m app`, тесты —
+`python -m pytest -q` (462 теста, без сети и GPU).
