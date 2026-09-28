@@ -19,7 +19,8 @@
 - по времени съёмки (если есть) считается высота солнца над Москвой или над
   городом часового пояса объекта (`config_for_timezone`, формулы NOAA):
   солнце ниже −6° (гражданские сумерки) — ночь, если кадр не
-  ярок и не цветен (тогда вероятнее, что врут часы или часовой пояс);
+  ярок и не цветен (тогда вероятнее, что врут часы или часовой пояс) или
+  залит оранжевым светом натриевых прожекторов (R − B ≥ 40);
   солнце выше горизонта — день, если кадр не тёмный; монохромный, но светлый
   кадр днём — ч/б камера, а не ночь; в сумерках решает яркость.
 
@@ -126,6 +127,7 @@ class QualityConfig:
     mono_day_brightness: float = 70.0      # монохромный, но светлый днём — ч/б камера, не ночь
     clock_override_brightness: float = 95.0   # «по часам ночь», а кадр ярок и цветной — часы врут
     clock_override_saturation: float = 25.0
+    clock_override_max_warm: float = 40.0     # … но не с оранжевым светом прожекторов (R − B выше)
     sun_night_deg: float = -6.0
     sun_day_deg: float = 0.0
     latitude: float = MOSCOW_LAT
@@ -164,6 +166,7 @@ class QualityMetrics:
     soft_drops: int
     highlighted_drops: int
     sun_elevation: float | None = None
+    warm_cast: float = 0.0          # средняя разность R − B: оранжевый свет натриевых прожекторов
     extra: dict = field(default_factory=dict)
 
 
@@ -293,6 +296,7 @@ def measure(image_bgr: np.ndarray, captured_at: dt.datetime | None = None,
         highlighted_drops=highlighted,
         sun_elevation=(sun_elevation_deg(captured_at, cfg.latitude, cfg.longitude)
                        if captured_at is not None else None),
+        warm_cast=float((r - b).mean()),
     )
 
 
@@ -303,8 +307,12 @@ def _is_night(mt: QualityMetrics, cfg: QualityConfig) -> bool:
     if sun is None:
         return dark or mono
     if sun < cfg.sun_night_deg:
+        # Яркий цветной кадр ночью «по часам» — вероятнее, врут часы. Но не оранжевый:
+        # стройка под натриевыми прожекторами так же ярка (архив Чикаго: яркость ~100,
+        # R − B 50–83 ночью против −2…17 днём), и без этой оговорки ночь шла в модель Б.
         clearly_day = (mt.brightness >= cfg.clock_override_brightness
-                       and mt.saturation >= cfg.clock_override_saturation)
+                       and mt.saturation >= cfg.clock_override_saturation
+                       and mt.warm_cast < cfg.clock_override_max_warm)
         return not clearly_day
     if sun >= cfg.sun_day_deg:
         return dark or (mono and mt.brightness < cfg.mono_day_brightness)

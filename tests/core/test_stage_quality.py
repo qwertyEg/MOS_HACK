@@ -119,6 +119,12 @@ def test_clock_night_is_overridden_only_by_clearly_daylit_frame():
     assert Q.assess(night_scene(), NIGHT_DEC).is_night
     # по часам ночь, а кадр яркий и цветной — вероятнее, что врут часы или часовой пояс
     assert not Q.assess(scene(), NIGHT_DEC).is_night
+    # …но не оранжевый: стройка под натриевыми прожекторами ярка так же, как днём (архив Чикаго)
+    sodium = np.clip(scene().astype(np.float32) * (0.45, 0.85, 1.35), 0, 255).astype(np.uint8)
+    mt = Q.measure(sodium, NIGHT_DEC)
+    assert mt.brightness >= 95 and mt.warm_cast >= 40, (mt.brightness, mt.warm_cast)
+    assert Q.assess(sodium, NIGHT_DEC).is_night
+    assert not Q.assess(sodium, NOON_JUNE).is_night, "днём тёплый свет ночью не делает"
 
 
 def test_blurred_frame_is_rejected_as_defect():
