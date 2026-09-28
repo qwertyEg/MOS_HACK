@@ -35,7 +35,11 @@ STATUS_RU = {
 
 
 def compute_status(unit: UnitState, now: dt.datetime, camera_last_frame: Mapping[str, dt.datetime],
-                   config: EquipmentConfig, in_parking_zone: bool = False) -> UnitStatus:
+                   config: EquipmentConfig, in_parking_zone: bool = False,
+                   still_until: dt.datetime | None | object = ...) -> UnitStatus:
+    """still_until — до какого момента машину видели стоящей: последний кадр, сравненный с
+    прошлым без разрыва (по умолчанию last_seen). None — ни разу (камера снимает раз в
+    сутки): сколько она стоит, неизвестно, и PARKED по времени не ставится."""
     cfg = config
     if _absent(unit, now, camera_last_frame) > dt.timedelta(hours=cfg.departed_after_h):
         return UnitStatus.DEPARTED
@@ -46,7 +50,8 @@ def compute_status(unit: UnitState, now: dt.datetime, camera_last_frame: Mapping
     # Сколько стоит — до последнего раза, когда её ВИДЕЛИ стоящей: если камера
     # молчала сутки, мы не знаем, что машина всё это время стояла.
     still_since = unit.last_moved or unit.first_seen
-    if unit.last_seen - still_since >= dt.timedelta(hours=cfg.parked_after_h):
+    until = unit.last_seen if still_until is ... else still_until
+    if until is not None and until - still_since >= dt.timedelta(hours=cfg.parked_after_h):
         return UnitStatus.PARKED
     return UnitStatus.IDLE
 

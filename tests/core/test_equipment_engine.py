@@ -266,6 +266,17 @@ def test_daily_camera_does_not_breed_units_when_machines_are_moved_overnight():
         assert len({d.unit_id for d in upd.detections}) == len(dets), "две рамки кадра — две машины"
     assert len(eng.units()) == 2, [u.label for u in eng.units()]
     assert ivs == []
+    # неделю в кадре, но движение по суточным снимкам не оценивается: «стоит», а не «на стоянке,
+    # ждёт вывоза» — иначе аналитика пишет «работы встали» там, где работу просто не видно
+    assert {u.status for u in eng.units()} == {UnitStatus.IDLE}
+
+
+def test_machine_seen_standing_for_two_days_by_a_regular_camera_is_parked():
+    """Обычная камера (25 мин) видит, что экскаватор не двигается больше parked_after_h, — PARKED."""
+    eng = EquipmentEngine()
+    for k in range(0, 50 * 60 // 25 + 1):
+        eng.process(fi("c1", 25 * k, k), None, [S.det("excavator", (300, 300, 160, 110))], None, [], [])
+    assert eng.units()[0].status == UnitStatus.PARKED
 
 
 def test_daily_camera_machine_back_after_many_snapshots_is_the_same_unit():

@@ -78,6 +78,10 @@ class _Unit:
     # Камера → стоит ли единица в зоне отстоя по её мнению. Только камеры с
     # размеченными зонами: камера без зон не должна «выпускать» машину со стоянки.
     parking: dict[str, bool] = field(default_factory=dict)
+    # До какого момента машину ВИДЕЛИ (стоящей или в работе): последний кадр, сравненный с
+    # прошлым без разрыва. У камеры, снимающей раз в сутки, движение не оценивается вовсе,
+    # и «на стоянке, ждёт вывоза» (PARKED) по времени ей не из чего вывести — «стоит».
+    judged_until: dt.datetime | None = None
 
 
 class EquipmentEngine:
@@ -108,6 +112,8 @@ class EquipmentEngine:
                 st = dataclasses.replace(us, cameras={str(c) for c in us.cameras})
                 u = _Unit(st, ordinal=_ordinal_from_label(st.label) or self._next_ordinal(st.cls),
                           credited=hours_mod.IntervalSet(floor=st.last_seen))
+                if st.status in (UnitStatus.ACTIVE, UnitStatus.PARKED):
+                    u.judged_until = st.last_seen
                 for _ in range(5):
                     u.votes.append((st.cls, 1.0))
                 if not st.label:
@@ -205,7 +211,8 @@ class EquipmentEngine:
 
         now = max(self._cam_last.values())
         for u in self._units.values():
-            u.state.status = compute_status(u.state, now, self._cam_last, cfg, any(u.parking.values()))
+            u.state.status = compute_status(u.state, now, self._cam_last, cfg, any(u.parking.values()),
+                                            still_until=u.judged_until)
 
         out = []
         for s in steps:
@@ -477,6 +484,7 @@ class EquipmentEngine:
         if a.state.last_moved and (b.state.last_moved is None or a.state.last_moved > b.state.last_moved):
             b.state.last_moved = a.state.last_moved
         b.state.cameras |= a.state.cameras
+        b.judged_until = max(filter(None, (a.judged_until, b.judged_until)), default=None)
         # Часы дубля переносим без пересечения с уже засчитанным у b (обе камеры
         # видели одну и ту же работу); часы дубля до рестарта движка — как есть.
         own = sum((e - s).total_seconds() / 3600 for s, e in a.credited)
@@ -505,6 +513,8 @@ class EquipmentEngine:
         st.last_seen = max(st.last_seen, t)
         st.first_seen = min(st.first_seen, t)
         st.cameras.add(cam)
+        if s.judged:
+            u.judged_until = t if u.judged_until is None else max(u.judged_until, t)
         # last_moved здесь не трогаем: его ставит _credit, когда работа
         # подтверждена серией интервалов, — чтобы статус ACTIVE и полоска
         # моточасов не противоречили друг другу.
