@@ -6,12 +6,20 @@
     p = σ(k · (s⁺ − s⁻)),
 
 где s± — косинусное сходство эмбеддинга кадра с усреднённым эмбеддингом позитивных
-/ негативных формулировок. При k = logit_scale модели это ровно вероятность
-двухклассового zero-shot-выбора между формулировками — поэтому k по умолчанию
-берётся из модели (у SigLIP ≈ 112, у CLIP 100), а не подбирается на глаз.
-p ≥ yes_threshold (0.62) → «да», p ≤ no_threshold (0.38) → «нет», иначе
-«не уверен» — такой ответ не голосует за этап (см. scoring). Пороги настраиваются
-в конфиге и переопределяются на признак (в конфиге или в sign_prompts.json).
+/ негативных формулировок. При k = logit_scale модели это вероятность двухклассового
+zero-shot-выбора между формулировками, но на реальных кадрах такой выбор слишком
+самоуверен: у SigLIP2 k ≈ 113, и при порогах 0.62/0.38 «да» ставилось уже при
+разности сходства 0.004 — модель отвечала «да» почти на всё (доля «не уверен» 7–10 %),
+и хронология уезжала на поздние этапы (расчистка участка → «монолит», карьер → «нет
+данных»). Поэтому k и пороги откалиброваны интегратором по сохранённым разностям
+сходства 1896 кадров 9 демо-объектов с разметкой этапов «на глаз»: k = 35,
+p ≥ 0.8 → «да» (разность ≥ 0.04), p ≤ 0.46 → «нет» (разность ≤ −0.0046), иначе
+«не уверен» — такой ответ не голосует за этап (см. scoring). Доля дней, где фронт
+совпал с разметкой, выросла с 0.32 до 0.68 (карьер, котлован двух камер, расчистка,
+сборный каркас стали верными; асфальтирование парковки стало неверным). Выборка мала
+и та же, на которой подбирали, — оценка оптимистична. `scale=None` возвращает k модели.
+Пороги настраиваются в конфиге и в UI (страница «Настройки») и переопределяются на
+признак (в конфиге или в sign_prompts.json).
 
 Этап целиком: те же эмбеддинги против описаний 8 этапов → softmax → stage_likelihood.
 Он только для показа и выбора кандидатов: этап открывают ответы чек-листа (scoring).
@@ -56,10 +64,10 @@ class ClipConfig:
     model_name: str = field(default_factory=lambda: os.getenv("STAGE_CLIP_MODEL", DEFAULT_MODEL))
     backend: str = field(default_factory=lambda: os.getenv("STAGE_CLIP_BACKEND", "transformers"))  # | open_clip
     device: str | None = field(default_factory=lambda: os.getenv("STAGE_CLIP_DEVICE") or None)
-    yes_threshold: float = 0.62
-    no_threshold: float = 0.38
-    scale: float | None = None                 # k; None — logit_scale модели
-    stage_scale: float | None = None           # температура softmax по этапам; None — как scale
+    yes_threshold: float = 0.8                 # калибровка по демо-объектам — см. докстринг модуля
+    no_threshold: float = 0.46
+    scale: float | None = 35.0                 # k; None — logit_scale модели (≈113 у SigLIP2 — слишком самоуверенно)
+    stage_scale: float | None = None           # температура softmax по этапам; None — logit_scale модели
     per_sign: dict[str, tuple[float, float]] = field(default_factory=dict)  # ключ → (yes, no)
     tile_grid: int = 1                         # 1 — только кадр целиком; 2 — ещё 2×2 фрагмента
     mask_mode: str = "darken"
@@ -358,7 +366,9 @@ class ClipChecklistClassifier:
             scores[key] = round(float(p), 4)
 
         ids, smat = self._stage_matrix()
-        ks = self.config.stage_scale or k
+        # распределение по этапам — для показа и кандидатов: температура модели, а не
+        # откалиброванный k чек-листа (с k = 35 softmax по 8 описаниям почти плоский)
+        ks = self.config.stage_scale or float(getattr(self.embedder, "logit_scale", 100.0))
         logits = ks * (img[0] @ smat.T)
         ex = np.exp(logits - logits.max())
         likelihood = {sid: round(float(v), 4) for sid, v in zip(ids, ex / ex.sum())}

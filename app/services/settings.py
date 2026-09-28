@@ -41,8 +41,8 @@ DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
         "live_gap_days": 3.0,         # auto: последний кадр свежее N дней → живая площадка, иначе архив
     },
     "stage": {
-        "yes_thr": 0.62,
-        "no_thr": 0.38,
+        "yes_thr": 0.8,               # пороги SigLIP-чек-листа (k = 35) — калибровка core/stage/checklist_clip.py
+        "no_thr": 0.46,
         "unsure_review_ratio": 0.5,   # доля «не уверен» выше — кадр в needs_review
     },
     "equipment": {},                  # заполняется из core.equipment.EquipmentConfig().to_dict()

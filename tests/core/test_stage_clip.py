@@ -14,12 +14,15 @@ import pytest
 from core import taxonomy
 from core.contracts import Answer, FrameInfo, Provider
 from core.stage import get_classifier
-from core.stage.checklist_clip import ClipChecklistClassifier, load_prompts
+from core.stage.checklist_clip import ClipChecklistClassifier, ClipConfig, load_prompts
 
 FRAME = FrameInfo(frame_id=1, camera_id=1, site_id=1, captured_at=dt.datetime(2026, 6, 1, 9, tzinfo=dt.timezone.utc),
                   width=640, height=480)
 PROMPTS = load_prompts()
 TEMPLATE = PROMPTS["template"]
+# Арифметика порогов проверяется в исходной постановке (k модели, 0.62/0.38);
+# откалиброванные умолчания — отдельным тестом ниже.
+LEGACY = dict(scale=None, yes_threshold=0.62, no_threshold=0.38)
 
 
 class BasisEmbedder:
@@ -70,7 +73,7 @@ def image(h=480, w=640, value=150):
 
 
 def test_thresholds_give_yes_no_unsure(fake):
-    clf = ClipChecklistClassifier(embedder=fake)
+    clf = ClipChecklistClassifier(embedder=fake, config=ClipConfig(**LEGACY))
     clf.assess(image(), FRAME, keys=["pit"])            # первый вызов строит словарь формулировок
     fake.lean("pit", 0.05)          # diff = √2·0.05 ≈ 0.07 → p = σ(7) ≈ 1
     fake.lean("cladding", -0.05)    # в сторону «нет»
@@ -84,19 +87,19 @@ def test_thresholds_give_yes_no_unsure(fake):
 
 
 def test_thresholds_are_configurable_globally_and_per_sign(fake):
-    clf = ClipChecklistClassifier(embedder=fake)
+    clf = ClipChecklistClassifier(embedder=fake, config=ClipConfig(**LEGACY))
     clf.assess(image(), FRAME, keys=["slab"])
     fake.lean("slab", 0.003)
     assert clf.assess(image(), FRAME, keys=["slab"]).answers["slab"] is Answer.UNSURE
-    per_sign = ClipChecklistClassifier(embedder=fake, per_sign={"slab": (0.55, 0.3)})
+    per_sign = ClipChecklistClassifier(embedder=fake, config=ClipConfig(**LEGACY), per_sign={"slab": (0.55, 0.3)})
     assert per_sign.assess(image(), FRAME, keys=["slab"]).answers["slab"] is Answer.YES
-    loose = get_classifier("siglip", embedder=fake, yes_threshold=0.55)
+    loose = get_classifier("siglip", embedder=fake, scale=None, yes_threshold=0.55)
     assert loose.config.yes_threshold == 0.55
     assert loose.assess(image(), FRAME, keys=["slab"]).answers["slab"] is Answer.YES
 
 
-def test_scale_is_taken_from_the_model(fake):
-    clf = ClipChecklistClassifier(embedder=fake)
+def test_scale_none_is_taken_from_the_model(fake):
+    clf = ClipChecklistClassifier(embedder=fake, config=ClipConfig(**LEGACY))
     clf.assess(image(), FRAME, keys=["slab"])
     fake.lean("slab", 0.003)
     p100 = clf.assess(image(), FRAME, keys=["slab"]).scores["slab"]
@@ -192,3 +195,16 @@ def test_features_accept_transformers5_output():
         pooler_output = t
 
     assert _features(Output()) is t               # transformers 5.x — BaseModelOutputWithPooling
+
+
+def test_calibrated_defaults_need_a_clear_margin_for_yes(fake):
+    """Умолчания (k = 35, 0.8/0.46): «да» — только при разности сходства ≥ 0.04; слабый перевес,
+    на котором SigLIP с k модели уже отвечал «да», теперь «не уверен» (калибровка по демо-объектам)."""
+    clf = ClipChecklistClassifier(embedder=fake)
+    assert (clf.config.scale, clf.config.yes_threshold, clf.config.no_threshold) == (35.0, 0.8, 0.46)
+    clf.assess(image(), FRAME, keys=["pit"])
+    fake.lean("pit", 0.035)         # diff ≈ 0.049 → p = σ(1.7) ≈ 0.85 → «да»
+    fake.lean("slab", 0.01)         # diff ≈ 0.014 → p ≈ 0.62 — раньше «да», теперь «не уверен»
+    fake.lean("cladding", -0.005)   # diff ≈ −0.007 → p ≈ 0.44 → «нет»
+    r = clf.assess(image(), FRAME, keys=["pit", "slab", "cladding"])
+    assert r.answers == {"pit": Answer.YES, "slab": Answer.UNSURE, "cladding": Answer.NO}

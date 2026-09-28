@@ -91,7 +91,7 @@ def test_settings_modes_thresholds_and_classes(env):
     s = c.put("/api/settings", json={"model_b": "local_vlm"}).json()
     assert s["mode"] == "local"
     s = c.put("/api/settings", json={"thresholds": {"stage": {"yes_thr": 0.7}, "equipment": {"parked_after_h": 24}}}).json()
-    assert s["thresholds"]["stage"]["yes_thr"] == 0.7 and s["thresholds"]["stage"]["no_thr"] == 0.38
+    assert s["thresholds"]["stage"]["yes_thr"] == 0.7 and s["thresholds"]["stage"]["no_thr"] == 0.46
     assert s["thresholds"]["equipment"]["parked_after_h"] == 24
     assert c.get("/api/settings").json()["thresholds"]["stage"]["yes_thr"] == 0.7
 
