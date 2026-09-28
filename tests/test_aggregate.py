@@ -1,13 +1,12 @@
-"""Свёртка хронологии чек-листов в активные этапы.
+"""Свёртка хронологии чек-листов в последовательность активных этапов.
 
-Сцена собрана так, чтобы проверить главное свойство метода: вывод об этапе
-делается по смене ответов во времени, а не по одному кадру. Стройка проходит
-три этапа подряд, и на каждом модель видит своё.
+Три свойства, ради которых модуль и написан:
 
-Отдельно проверяется случай, ради которого всё и затевалось: признак,
-который был виден, а потом перестал (котлован перекрыт выросшим зданием).
-Этап должен закончиться, а не «продолжаться» из-за того, что котлован
-когда-то был.
+- порядок нельзя нарушить скачком — кандидат на переход только следующий
+  этап, дальний не сравнивается вовсе, что бы он ни показывал;
+- закрытый этап не открывается снова — граница прогресса только растёт;
+- камера, которая просто не видит признак под своим углом, не должна
+  отменять наблюдение камеры, которая его видит.
 """
 
 import datetime as dt
@@ -21,20 +20,159 @@ from app.seed import load_checklists
 START = dt.date(2026, 1, 1)
 CHECKLISTS = load_checklists()
 
-# что видно на площадке в каждый период
+
+def day(offset: int) -> dt.date:
+    return START + dt.timedelta(days=offset)
+
+
+# ---------------------------------------------------------------------------
+# daily_answers: да перевешивает нет
+# ---------------------------------------------------------------------------
+
+def obs(day_offset: int, key: str, *answers: str) -> list[tuple[dt.datetime, str, Answer]]:
+    when = dt.datetime.combine(day(day_offset), dt.time(12, 0))
+    return [(when + dt.timedelta(minutes=i), key, Answer(a))
+            for i, a in enumerate(answers)]
+
+
+def test_one_yes_beats_any_number_of_no() -> None:
+    """Свая видна одной камере из трёх — значит, свая есть."""
+    days = A.daily_answers(obs(0, "pit", "no", "no", "yes"))
+    assert days[day(0)]["pit"] is Answer.YES
+
+
+def test_no_without_any_yes_stays_no() -> None:
+    days = A.daily_answers(obs(0, "pit", "no", "no"))
+    assert days[day(0)]["pit"] is Answer.NO
+
+
+def test_all_unsure_is_unsure_not_a_coin_flip() -> None:
+    days = A.daily_answers(obs(0, "pit", "unsure", "unsure"))
+    assert days[day(0)]["pit"] is Answer.UNSURE
+
+
+# ---------------------------------------------------------------------------
+# sequential_state: последовательность и её защита от скачков
+# ---------------------------------------------------------------------------
+
+def counts(*rows: dict[int, int]) -> list[tuple[dt.date, dict[int, tuple[int, int]]]]:
+    """Однозначные синтетические счётчики: total == transient (нет latching)."""
+    return [(day(i), {sid: (n, n) for sid, n in row.items()}) for i, row in enumerate(rows)]
+
+
+def counts_lt(*rows: dict[int, tuple[int, int]]
+             ) -> list[tuple[dt.date, dict[int, tuple[int, int]]]]:
+    """Счётчики с явным разделением (total, transient) — для теста latching."""
+    return [(day(i), row) for i, row in enumerate(rows)]
+
+
+def test_stays_on_current_while_nothing_beats_it() -> None:
+    assignment = A.sequential_state(counts({1: 3}, {1: 2}, {1: 1}), order=[1, 2, 3])
+    assert set(assignment.values()) == {1}
+
+
+def test_advances_after_a_streak_once_old_stage_falls_silent() -> None:
+    rows = counts({1: 0, 2: 3}, {1: 0, 2: 3}, {1: 0, 2: 3})
+    assignment = A.sequential_state(rows, order=[1, 2, 3], min_streak=3)
+    assert [assignment[day(i)] for i in range(3)] == [1, 1, 2]
+
+
+def test_single_day_spike_does_not_advance() -> None:
+    """Один шумный кадр — не переход: нужно несколько дней подряд."""
+    rows = counts({1: 0, 2: 5}, {1: 3, 2: 0}, {1: 0, 2: 5})
+    assignment = A.sequential_state(rows, order=[1, 2, 3], min_streak=3)
+    assert set(assignment.values()) == {1}, "переход случился по одному всплеску"
+
+
+def test_old_stage_feature_blocks_advance_even_if_next_leads() -> None:
+    """Пока у текущего этапа остался хоть один временный признак, переходить нельзя.
+
+    Именно это разрешает разные ракурсы: пока хоть одна камера видит сваю,
+    земляные работы не закрыты, даже если другая камера уже видит котлован.
+    """
+    rows = counts(*([{1: 1, 2: 5}] * 6))
+    assignment = A.sequential_state(rows, order=[1, 2, 3], min_streak=3)
+    assert set(assignment.values()) == {1}
+
+
+def test_latching_evidence_does_not_block_closing() -> None:
+    """Необратимый признак — это не «работа ещё идёт», а «работа сделана».
+
+    Закрытая кровля видна на каждом следующем кадре; если бы это держало
+    переход, этап кровли не закрывался бы никогда — она ведь так и не
+    исчезнет из кадра. Держат границу только временные признаки.
+    """
+    # 1: total=3 (в т.ч. latching), transient=0 — кровля закрыта, работ не видно
+    rows = counts_lt(*([{1: (3, 0), 2: (5, 5)}] * 6))
+    assignment = A.sequential_state(rows, order=[1, 2], min_streak=3)
+    assert [assignment[day(i)] for i in range(6)] == [1, 1, 2, 2, 2, 2]
+
+
+def test_transient_evidence_still_blocks_closing() -> None:
+    """Тот же счёт, но признак — временный: переход не должен случиться."""
+    rows = counts_lt(*([{1: (3, 3), 2: (5, 5)}] * 6))
+    assignment = A.sequential_state(rows, order=[1, 2], min_streak=3)
+    assert set(assignment.values()) == {1}
+
+
+def test_distant_stage_is_never_a_candidate() -> None:
+    """Этап через два — не кандидат вовсе, даже если у него больше всего признаков.
+
+    Ровно тот случай, который нельзя тихо проглотить: «благоустройство» с
+    самым высоким счётом на кадре, где котлован ещё не закрыт, — не должно
+    сдвинуть систему ни на шаг, сколько бы дней это ни продолжалось.
+    """
+    rows = counts(*([{1: 1, 2: 0, 3: 0, 4: 99}] * 10))
+    assignment = A.sequential_state(rows, order=[1, 2, 3, 4], min_streak=3)
+    assert set(assignment.values()) == {1}
+
+
+def test_closed_stage_never_reactivates() -> None:
+    """Граница только растёт: сильный сигнал старого этапа её не откатывает."""
+    rows = counts({1: 0, 2: 3}, {1: 0, 2: 3}, {1: 0, 2: 3},   # переход на 2
+                  {1: 9, 2: 0}, {1: 9, 2: 0}, {1: 9, 2: 0})   # 1 «ожил»
+    assignment = A.sequential_state(rows, order=[1, 2], min_streak=3)
+    assert [assignment[day(i)] for i in range(6)] == [1, 1, 2, 2, 2, 2]
+
+
+def test_frontier_can_advance_more_than_one_stage_over_time() -> None:
+    """За несколько раздельных переходов граница может уйти далеко вперёд —
+    просто не одним скачком через нерассмотренный этап."""
+    rows = counts(
+        {1: 0, 2: 3}, {1: 0, 2: 3}, {1: 0, 2: 3},   # 1 → 2
+        {1: 0, 2: 0, 3: 3}, {1: 0, 2: 0, 3: 3}, {1: 0, 2: 0, 3: 3},  # 2 → 3
+    )
+    assignment = A.sequential_state(rows, order=[1, 2, 3], min_streak=3)
+    assert assignment[day(5)] == 3
+
+
+# ---------------------------------------------------------------------------
+# build_curves: сквозной разбор
+# ---------------------------------------------------------------------------
+
+# Все семь этапов подряд, по своим характерным (must_have) признакам.
+# Ключ, не упомянутый в фазе, просто отсутствует в ответах дня — это не
+# «нет», а «не спрошено», и на счёт (`daily_feature_counts`) влияет
+# одинаково: не прибавляет ни одному этапу.
 SCENE = [
-    # (первый день, последний день, {ключ: ответ})
-    (0, 40, {"pit": "yes", "soil_pile": "yes", "earthwork": "yes",
-             "above_grade": "no", "cladding": "no", "glazing": "no",
-             "is_construction": "yes"}),
-    (41, 85, {"pit": "unsure", "soil_pile": "no", "earthwork": "no",
-              "above_grade": "yes", "crane": "yes", "formwork_floor": "yes",
-              "unfinished_top": "yes", "cladding": "no", "glazing": "no",
-              "is_construction": "yes"}),
-    (86, 130, {"pit": "unsure", "above_grade": "yes", "crane": "no",
-               "formwork_floor": "no", "unfinished_top": "no",
-               "scaffold": "yes", "cladding": "yes", "glazing": "yes",
-               "bare_concrete": "no", "is_construction": "yes"}),
+    (0, 14,   {"cleared": "yes", "old_building": "yes", "debris": "yes",
+               "tree_felling": "yes", "flat_ground": "yes"}),
+    (15, 29,  {"pile_rig": "yes", "pile_stock": "yes", "pile_heads": "yes",
+               "sheet_pile": "yes", "capping_beam": "yes"}),
+    (30, 44,  {"pit": "yes", "earthwork": "yes", "soil_pile": "yes",
+               "struts": "yes", "pit_bottom_bare": "yes"}),
+    (45, 59,  {"pit_bottom_prepared": "yes", "formwork": "yes", "rebar": "yes",
+               "basement_walls": "yes", "backfill": "yes"}),
+    (60, 74,  {"above_grade": "yes", "formwork_floor": "yes",
+               "unfinished_top": "yes", "masonry": "yes",
+               "bare_concrete": "yes"}),
+    # Кровля и фасад закрыты (cladding, glazing, roof_cover — необратимые,
+    # признаны навсегда) и больше не мешают перейти к благоустройству:
+    # держат границу только леса и открытый утеплитель.
+    (75, 89,  {"cladding": "yes", "glazing": "yes", "scaffold": "yes",
+               "insulation": "yes", "roof_cover": "yes"}),
+    (90, 104, {"paving": "yes", "landscaping": "yes", "amenities": "yes",
+               "asphalt_work": "yes", "no_heavy_equipment": "yes"}),
 ]
 
 
@@ -43,8 +181,7 @@ def observations() -> list[tuple[dt.datetime, str, Answer]]:
     out = []
     for lo, hi, scene in SCENE:
         for offset in range(lo, hi + 1):
-            when = dt.datetime.combine(START + dt.timedelta(days=offset),
-                                       dt.time(12, 0))
+            when = dt.datetime.combine(day(offset), dt.time(12, 0))
             for key, value in scene.items():
                 for shot in range(2):
                     out.append((when + dt.timedelta(hours=shot), key,
@@ -54,64 +191,87 @@ def observations() -> list[tuple[dt.datetime, str, Answer]]:
 
 @pytest.fixture(scope="module")
 def curves() -> dict[int, A.StageCurve]:
-    stages = [(sid, f"этап {sid}", qs) for sid, qs in CHECKLISTS.items()]
+    stages = [(sid, f"этап {sid}", qs) for sid, qs in sorted(CHECKLISTS.items())]
     return {c.stage_id: c for c in A.build_curves(observations(), stages)}
 
 
 def covers(curve: A.StageCurve, offset: int) -> bool:
-    day = START + dt.timedelta(days=offset)
-    return any(a <= day <= b for a, b in curve.intervals)
+    d = day(offset)
+    return any(a <= d <= b for a, b in curve.intervals)
 
 
-def test_earthwork_detected_at_start(curves) -> None:
-    assert covers(curves[3], 20), "котлован не опознан, когда он открыт"
+def test_earthwork_detected_in_its_phase(curves) -> None:
+    assert covers(curves[3], 40), "котлован не опознан, когда он открыт"
 
 
-def test_earthwork_ends_when_building_rises(curves) -> None:
-    """Главное: признак пропал из кадра — этап закончился.
+def test_earthwork_ends_once_construction_moves_on(curves) -> None:
+    """Признак пропал из кадра — этап закончился и назад уже не вернётся."""
+    assert not covers(curves[3], 95), "котлован «идёт» через три этапа после засыпки"
 
-    Если бы «котлован» считался вечным (был же когда-то), этап тянулся бы
-    до конца стройки и весь график съехал бы.
+
+def test_facade_stage_does_not_get_stuck_on_its_own_permanent_evidence(curves) -> None:
+    """Ровно тот сценарий, ради которого признаки разделили на два счёта.
+
+    Облицовка и остекление видны и после того, как фасадные работы кончились;
+    держали бы они границу — этап не закрылся бы никогда, ведь фасад с дома
+    не исчезнет. Держат её только леса и открытый утеплитель, а они уходят.
     """
-    assert not covers(curves[3], 110), "котлован «идёт» спустя месяцы после засыпки"
+    assert covers(curves[6], 85), "фасад не опознан в своей фазе"
+    assert covers(curves[7], 100), "благоустройство не наступило — граница застряла"
 
 
-def test_frame_stage_detected_in_middle(curves) -> None:
-    assert covers(curves[5], 60), "монолит надземной части не опознан"
-    assert not covers(curves[5], 10), "монолит опознан там, где ещё котлован"
+def test_exactly_one_stage_active_per_day(curves) -> None:
+    """Последовательность мутуально исключающая: активен ровно один этап."""
+    for offset in (8, 40, 70, 85, 100):
+        active = [sid for sid, c in curves.items() if covers(c, offset)]
+        assert len(active) == 1, f"на день {offset} активными вышли {active}"
 
 
-def test_facade_detected_at_end(curves) -> None:
-    assert covers(curves[7], 110), "фасад не опознан"
-    assert not covers(curves[7], 20), "фасад опознан в начале стройки"
+def test_reached_marks_stages_the_frontier_passed(curves) -> None:
+    assert curves[3].reached, "котлован пройден, а граница ушла дальше"
+    assert not curves[7].reached, "текущий этап не может быть отмечен пройденным"
 
 
-def test_stages_do_not_all_fire_at_once(curves) -> None:
-    """Мультилейбл — норма, но не все восемь этапов разом."""
-    day = 60
-    active = [sid for sid, c in curves.items() if covers(c, day)]
-    assert 1 <= len(active) <= 3, f"на день {day} активными вышли {active}"
+# ---------------------------------------------------------------------------
+# инвариант справочника
+# ---------------------------------------------------------------------------
+
+def test_every_stage_has_a_transient_gate() -> None:
+    """У каждого этапа обязан быть признак, который замолкает по его окончании.
+
+    Это не вкусовщина, а условие работоспособности. Граница прогресса
+    сдвигается только когда у текущего этапа замолчали временные признаки.
+    Этап, у которого все `must_have` необратимы, замолчать не может никогда —
+    на нём граница встанет насмерть, и дальше стройка «не пойдёт» вообще.
+    Проверяется на живом справочнике, а не на выдуманных данных.
+    """
+    for sid, questions in sorted(CHECKLISTS.items()):
+        must = [q for q in questions if q["polarity"] == "must_have"]
+        transient = [q["key"] for q in must if not q["latching"]]
+        assert transient, (
+            f"этап {sid}: все признаки необратимые — граница застрянет навсегда")
 
 
-def test_reached_survives_occlusion(curves) -> None:
-    """Котлован перекрыт, но веха пройдена — это разные вещи."""
-    assert curves[3].reached, "этап не отмечен пройденным, хотя признак видели"
+def test_stages_have_comparable_number_of_features() -> None:
+    """Счёт признаков сравнивается между этапами напрямую, без нормировки.
+
+    Значит этап с вдвое большим числом вопросов побеждал бы просто за счёт
+    их количества. Разброс держим нулевым.
+    """
+    counts = {sid: sum(1 for q in qs if q["polarity"] == "must_have")
+              for sid, qs in CHECKLISTS.items()}
+    assert len(set(counts.values())) == 1, f"признаков по этапам вразнобой: {counts}"
 
 
-def test_unsure_does_not_vote() -> None:
-    """Кадр, на котором ничего не разглядеть, не должен опускать оценку."""
-    questions = CHECKLISTS[5]
-    blind = {q["key"]: Answer.UNSURE for q in questions}
-    point = A.stage_score(blind, questions)
-    assert point.votes == 0
-    assert point.confidence == 0.0
+def test_gap_in_observations_breaks_the_interval() -> None:
+    """Дыра в наблюдениях не склеивается в один этап.
 
-
-def test_confidence_reflects_visibility() -> None:
-    questions = CHECKLISTS[7]
-    half = {}
-    voting = [q for q in questions if q["polarity"] != "context"]
-    for i, q in enumerate(voting):
-        half[q["key"]] = Answer.YES if i % 2 == 0 else Answer.UNSURE
-    point = A.stage_score(half, questions)
-    assert 0.0 < point.confidence < 1.0
+    Без обрыва последнее наблюдение архива и первое наблюдение сегодняшней
+    съёмки оказывались бы краями одного двадцатилетнего отрезка.
+    """
+    rows = ([(day(i), {1: (3, 3)}) for i in range(5)]
+           + [(day(i), {1: (3, 3)}) for i in range(200, 205)])
+    assignment = A.sequential_state(rows, order=[1])
+    runs = A._runs_from_assignment(assignment)
+    assert len(runs[1]) == 2, "наблюдения через полгода склеились в один этап"
+    assert runs[1][0][1] < runs[1][1][0]

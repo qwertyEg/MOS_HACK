@@ -79,9 +79,10 @@
       <div class="text-lg font-medium">{{ live.pending if live else 0 }}</div>
     </div>
     <div>
-      <div class="text-slate-500 text-xs">маска скрывает</div>
+      <div class="text-slate-500 text-xs">маска</div>
       <div class="text-lg font-medium">
-        {{ "%.1f"|format(state.masked_ratio * 100) if state else "—" }}%
+        {% if not cam.use_mask %}выключена
+        {% else %}{{ "%.1f"|format(state.masked_ratio * 100) if state else "—" }}%{% endif %}
       </div>
     </div>
   </div>

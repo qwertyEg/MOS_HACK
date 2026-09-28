@@ -139,6 +139,16 @@ def initial_state(cam_state: CameraState) -> M.MaskState | None:
     return M.MaskState(shape=(cam_state.work_h, cam_state.work_w), background=bg)
 
 
+def blank_state(frame: np.ndarray) -> M.MaskState:
+    """Маска без единой закрашенной точки — для камер с выключенной маской.
+
+    Отдельной ветки «маски нет» в отрисовке и в модели Б не нужно: пустая
+    маска сама ведёт себя как её отсутствие. Кадр остаётся как есть,
+    `useful` ложно, и модель получает полный кадр.
+    """
+    return M.MaskState(shape=work_shape(frame))
+
+
 def site_questions(camera: Camera) -> list[dict]:
     """Объединение вопросов всех этапов объекта, без повторов.
 
@@ -232,16 +242,19 @@ def run(
     варианту, который на этих данных не работает.
     """
     cam_state = camera.state
-    if cam_state is None or not cam_state.mask_approved:
-        raise ValueError("маска не нарисована или не подтверждена")
+    st: M.MaskState | None = None
+    if camera.use_mask:
+        if cam_state is None or not cam_state.mask_approved:
+            raise ValueError("маска не нарисована или не подтверждена")
 
-    # Прогон считает папку целиком и стирает прежние кадры, поэтому и маска
-    # начинается заново — с той, что нарисовал оператор. Продолжить от текущей
-    # значило бы сжимать уже сжатое: второй прогон по тем же кадрам съедал бы
-    # маску вдвое, третий втрое, и результат зависел бы от числа запусков.
-    st = initial_state(cam_state)
-    if st is None:
-        raise ValueError("исходная маска не найдена — нарисуйте её заново")
+        # Прогон считает папку целиком и стирает прежние кадры, поэтому и
+        # маска начинается заново — с той, что нарисовал оператор. Продолжить
+        # от текущей значило бы сжимать уже сжатое: второй прогон по тем же
+        # кадрам съедал бы маску вдвое, третий втрое, и результат зависел бы
+        # от числа запусков.
+        st = initial_state(cam_state)
+        if st is None:
+            raise ValueError("исходная маска не найдена — нарисуйте её заново")
 
     items = list_frames(folder)
     if limit:
@@ -265,6 +278,8 @@ def run(
 
         ok, night, reason = assess_quality(frame)
         h, w = frame.shape[:2]
+        if st is None:                      # маска выключена: пустая, по первому кадру
+            st = blank_state(frame)
 
         row = Frame(camera_id=camera.id, captured_at=when, object_key="",
                     width=w, height=h, is_night=night,
@@ -272,7 +287,7 @@ def run(
 
         # Ночные кадры и брак в расчёт маски не идут: ИК-режим ломает
         # сравнение яркостей. Но сам кадр сохраняем — он нужен модели А.
-        if ok and not night:
+        if camera.use_mask and ok and not night:
             ring.append(M.daily_median([frame]))
             if len(ring) > window_days:
                 ring.pop(0)
@@ -288,7 +303,7 @@ def run(
         row.overlay_key = storage.put(f"{key}_overlay.jpg",
                                       _encode(M.render_overlay(frame, st)))
         row.masked_ratio = st.masked_ratio
-        row.retained = st.retained
+        row.retained = st.retained if camera.use_mask else 1.0   # см. live.py
         row.top_edge_px = st.top_edge()
         row.change_pct = prev_change
 
@@ -317,7 +332,9 @@ def run(
                             f"цела {st.retained:.0%}")
             on_progress(prog)
 
-    save_state(session, cam_state, st)
+    # Без маски сохранять нечего: состояние — это её счётчики и область.
+    if camera.use_mask and st is not None:
+        save_state(session, cam_state, st)
     session.commit()
     if on_progress:
         prog.message = "готово"

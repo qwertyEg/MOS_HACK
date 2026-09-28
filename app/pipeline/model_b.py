@@ -204,6 +204,18 @@ def build_schema(keys: list[str]) -> dict:
     }
 
 
+def question_line(q: dict) -> str:
+    """Строка вопроса для промпта: ключ, текст и «как выглядит».
+
+    Подсказка — не украшение. Без неё модель отвечает по названию признака,
+    а не по картинке: на «видно ли шпунтовое ограждение» она ищет знакомое
+    слово, а не гофрированную металлическую стенку по краю котлована.
+    Формулировки подсказок взяты из ветки `api-solution` коллеги.
+    """
+    hint = (q.get("hint") or "").strip()
+    return f'{q["key"]}: {q["text"]}' + (f" (как выглядит: {hint})" if hint else "")
+
+
 class ModelB:
     def __init__(self, base_url: str | None = None, model: str | None = None) -> None:
         self.base_url = (base_url or settings.vlm_base_url).rstrip("/")
@@ -256,7 +268,7 @@ class ModelB:
     def ask_batch(self, data_uri: str, questions: list[dict]) -> dict[str, Answer]:
         """Все вопросы одного чек-листа одним запросом, ответ по схеме."""
         keys = [q["key"] for q in questions]
-        body = "\n".join(f'{q["key"]}: {q["text"]}' for q in questions)
+        body = "\n".join(question_line(q) for q in questions)
         payload = {
             "model": self.model,
             "temperature": settings.vlm_temperature,
@@ -323,7 +335,7 @@ class ModelB:
         out = []
         for q in questions:
             try:
-                reply = self.ask(uri, q["text"])
+                reply = self.ask(uri, question_line(q))
             except Exception as exc:
                 out.append({**q, "answer": Answer.UNSURE,
                             "raw": f"ошибка: {exc}{note}", "latency_ms": 0})

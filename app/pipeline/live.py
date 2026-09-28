@@ -188,7 +188,7 @@ class _Worker(threading.Thread):
         if cam is None:
             return
         cam_state = cam.state
-        if cam_state is None or not cam_state.mask_approved:
+        if cam.use_mask and (cam_state is None or not cam_state.mask_approved):
             self.status.last_error = "маска не задана — кадр принят, но не разобран"
             return
 
@@ -205,17 +205,23 @@ class _Worker(threading.Thread):
             return
 
         if self._st is None:
-            self._st = resume_state(cam_state)
-            if self._st is None:
-                self.status.last_error = "состояние маски не найдено"
-                return
-            self._ring = load_ring(cam.id)
+            if cam.use_mask:
+                self._st = resume_state(cam_state)
+                if self._st is None:
+                    self.status.last_error = "состояние маски не найдено"
+                    return
+                self._ring = load_ring(cam.id)
+            else:
+                self._st = ingest.blank_state(frame)
 
         st = self._st
         ok, night, reason = ingest.assess_quality(frame)
         h, w = frame.shape[:2]
 
-        change_pct = self._advance_mask(cam.id, st, frame, when, ok and not night)
+        # Маска выключена — окно не копится и не сжимается, состояние не
+        # пишется: сжимать нечего, а хранить состояние пустой маски незачем.
+        change_pct = (self._advance_mask(cam.id, st, frame, when, ok and not night)
+                      if cam.use_mask else 0.0)
 
         row = Frame(camera_id=cam.id, captured_at=when, object_key="",
                     width=w, height=h, is_night=night, quality_ok=ok,
@@ -228,7 +234,9 @@ class _Worker(threading.Thread):
         row.overlay_key = storage.put(f"{key}_overlay.jpg",
                                       ingest._encode(M.render_overlay(frame, st)))
         row.masked_ratio = st.masked_ratio
-        row.retained = st.retained
+        # У пустой маски доля «уцелевшего» не определена (делить на нуль), и
+        # в галерее «цело 0%» читалось бы как съеденная маска. Маски нет — целы все 100%.
+        row.retained = st.retained if cam.use_mask else 1.0
         row.top_edge_px = st.top_edge()
         row.change_pct = change_pct
         session.add(row)
@@ -237,7 +245,8 @@ class _Worker(threading.Thread):
         if settings.live_model_b and ok and not night:
             self._ask_model_b(session, cam, row, frame, st, when)
 
-        ingest.save_state(session, cam_state, st)
+        if cam.use_mask:
+            ingest.save_state(session, cam_state, st)
         cam.last_seen_at = when
         session.commit()
 
@@ -296,6 +305,9 @@ class _Worker(threading.Thread):
     # --- сброс -------------------------------------------------------------
 
     def forget_state(self) -> None:
+        """Сброс всего, что поток помнит о маске. Зовётся и при смене режима:
+        включили маску — состояние поднимется из хранилища, выключили —
+        пустая маска строится заново по следующему кадру."""
         self._st = None
         self._ring = []
         self._buf = []
@@ -320,6 +332,13 @@ def worker(camera_id: int) -> _Worker:
 def submit(camera_id: int, data: bytes, when: dt.datetime, meta: dict) -> bool:
     """Кадр в очередь камеры. False — очередь переполнена."""
     return worker(camera_id).submit(data, when, meta)
+
+
+def drop_state(camera_id: int) -> None:
+    """Поток забывает маску из памяти — при смене режима маски."""
+    w = _workers.get(camera_id)
+    if w is not None:
+        w.forget_state()
 
 
 def status(camera_id: int) -> LiveStatus | None:

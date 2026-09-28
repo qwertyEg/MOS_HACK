@@ -22,7 +22,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
-from app import auth, netutil
+from app import auth, netutil, plan_import
 from app.config import settings
 from app.db import get_session, init_db
 from app.models import (Camera, CameraState, Deviation, Frame, MacroStage,
@@ -33,6 +33,17 @@ from app.pipeline.model_b import ModelB
 app = FastAPI(title="Мониторинг строительных площадок", docs_url="/api/docs")
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _dmy(value: dt.date | None) -> str:
+    """Дата в поле формы: дд/мм/гггг. Пусто, если даты нет."""
+    return value.strftime("%d/%m/%Y") if value else ""
+
+
+# Дату показываем день-первым. Полагаться на type="date" нельзя: браузер
+# рисует его по языку своего интерфейса, и на англоязычной системе
+# оператор видит мм/дд/гггг, что бы мы ни ставили в разметке.
+templates.env.filters["dmy"] = _dmy
 
 
 @app.on_event("startup")
@@ -124,6 +135,43 @@ BEHIND_TYPES = {"STAGE_BEHIND", "STAGE_NOT_STARTED", "TEMPO_DECAY",
 AHEAD_TYPES = {"STAGE_AHEAD"}
 
 
+def _catalog(s: Session) -> list[MacroStage]:
+    """Действующие макроэтапы справочника, в порядке плана.
+
+    Этапы с нулевым порядком выбыли из справочника (см. `seed._retire_stale_stages`)
+    и остались в базе только потому, что на них ссылаются старые планы.
+    Предлагать их для новых объектов нельзя — это уже не часть методики.
+    """
+    return list(s.scalars(select(MacroStage)
+                          .where(MacroStage.order_default > 0)
+                          .order_by(MacroStage.order_default)))
+
+
+def _latest_frame_date(s: Session, site_id: int) -> dt.date | None:
+    return s.scalar(select(func.max(Frame.captured_at))
+                    .join(Camera, Camera.id == Frame.camera_id)
+                    .where(Camera.site_id == site_id))
+
+
+def _today(s: Session, site: Site) -> dt.date:
+    """«Сегодня» для объекта.
+
+    По умолчанию это не настенные часы сервера, а дата **последнего принятого
+    кадра**: у камеры своя метка времени в имени файла, и именно она движет
+    красную черту на диаграмме вправо по мере того, как приходят снимки.
+    Настенное время объекта, который снимает архив 2005 года на ускоренном
+    показе, к происходящему на кадрах никакого отношения не имеет.
+
+    Ручная дата (`sim_today`) переопределяет это для экспериментов — отмотать
+    назад и посмотреть состояние на конкретный день. У объекта без единого
+    кадра брать неоткуда — тогда честно настоящая дата.
+    """
+    if site.sim_today:
+        return site.sim_today
+    latest = _latest_frame_date(s, site.id)
+    return latest.date() if latest else dt.date.today()
+
+
 def _site_cards(s: Session, q: str = "") -> tuple[list[dict], int]:
     """Карточки объектов со сводкой. Общее число — до фильтрации поиском."""
     sites = s.scalars(select(Site).order_by(Site.name)).all()
@@ -142,9 +190,9 @@ def _site_cards(s: Session, q: str = "") -> tuple[list[dict], int]:
         .join(Frame, Frame.camera_id == Camera.id)
         .group_by(Camera.site_id)).all())
 
-    today = dt.date.today()
     cards = []
     for site in sites:
+        today = _today(s, site)
         active = [st for st in site.stages
                   if st.enabled and st.planned_start and st.planned_end
                   and st.planned_start <= today <= st.planned_end]
@@ -205,9 +253,10 @@ def dashboard(request: Request, user: str = Depends(auth.require_user),
     # Какие этапы идут прямо сейчас по плану — в разрезе всех объектов.
     stage_load: dict[str, int] = {}
     for site in sites:
+        site_today = _today(s, site)
         for st in site.stages:
             if (st.enabled and st.planned_start and st.planned_end
-                    and st.planned_start <= today <= st.planned_end):
+                    and st.planned_start <= site_today <= st.planned_end):
                 stage_load[st.title] = stage_load.get(st.title, 0) + 1
     stage_load = dict(sorted(stage_load.items(), key=lambda kv: -kv[1]))
 
@@ -223,6 +272,8 @@ def dashboard(request: Request, user: str = Depends(auth.require_user),
     for cam in cameras:
         st = cam.state
         site = s.get(Site, cam.site_id)
+        if not cam.use_mask:
+            continue          # маска выключена осознанно — это не поломка
         if st is None or not st.mask_approved:
             attention.append({"camera": cam, "site": site,
                               "what": "маска не задана",
@@ -242,7 +293,8 @@ def dashboard(request: Request, user: str = Depends(auth.require_user),
         "user": user, "today": today,
         "sites_total": len(sites),
         "cameras_total": len(cameras),
-        "cameras_ready": sum(1 for c in cameras if c.state and c.state.mask_approved),
+        "cameras_ready": sum(1 for c in cameras
+                             if not c.use_mask or (c.state and c.state.mask_approved)),
         "frames_total": frames_total, "frames_ok": frames_ok,
         "status": status, "stage_load": stage_load,
         "dev_kinds": dev_kinds, "dev_total": len(open_devs),
@@ -269,8 +321,7 @@ def site_new(request: Request, user: str = Depends(auth.require_user),
     return templates.TemplateResponse(request, "site_new.html", {
         "user": user,
         "object_types": s.scalars(select(ObjectType).order_by(ObjectType.id)).all(),
-        "macro_stages": s.scalars(select(MacroStage)
-                                  .order_by(MacroStage.order_default)).all(),
+        "macro_stages": _catalog(s),
     })
 
 
@@ -287,7 +338,7 @@ def site_create(request: Request, user: str = Depends(auth.require_user),
     # типа объекта. Даты пользователь проставляет сам — организаторы сказали,
     # что привязка этапов к датам на нашей стороне.
     otype = s.get(ObjectType, object_type_id)
-    stages = s.scalars(select(MacroStage).order_by(MacroStage.order_default)).all()
+    stages = _catalog(s)
     for idx, ms in enumerate(stages):
         tpl = s.scalar(select(StageTemplate)
                        .where(StageTemplate.macro_stage_id == ms.id))
@@ -295,37 +346,37 @@ def site_create(request: Request, user: str = Depends(auth.require_user),
             site_id=site.id, macro_stage_id=ms.id, order_idx=idx,
             equipment_expected=tpl.equipment_expected if tpl else [],
             equipment_forbidden=tpl.equipment_forbidden if tpl else [],
+            # Снимок чек-листа берётся здесь же, а не при первом сохранении
+            # плана: иначе у только что созданного объекта этапы остаются
+            # без вопросов, и модели Б спрашивать нечего.
+            questions=tpl.questions if tpl else [],
         ))
     s.commit()
     return auth.redirect(f"/sites/{site.id}")
 
 
 def _chart(s: Session, site, today: dt.date) -> gantt.Chart | None:
-    """План против факта: диаграмма Ганта на общей шкале.
+    """План против факта одной диаграммой.
 
-    Факт строится по каждой камере отдельно. Две камеры смотрят на площадку
-    с разных сторон, и то, что одна видит этап, а другая нет, — сведение,
-    которое нельзя терять усреднением: чаще всего это значит, что работы
-    идут с той стороны, а не что модель ошиблась.
+    Факт один на объект, а не по камере. Камеры видят площадку с разных
+    сторон и спорят между собой — одна за день говорит «да», другая «не
+    видно», третья «нет». Свести этот спор в один ответ и есть работа
+    системы; показать вместо этого полосу на камеру значило бы вернуть на
+    экран сырые данные и переложить сведение на глаз смотрящего.
+
+    Сводит `aggregate`: ответы всех кадров дня по каждому признаку решаются
+    большинством, «не видно» не голосует вовсе.
     """
-    per_cam = aggregate.curves_by_camera(s, site)
-    names = {c.id: c.name for c in site.cameras}
-
-    sources = []
-    for i, cam_id in enumerate(sorted(per_cam)):
-        curves = per_cam[cam_id]
-        sources.append(gantt.Source(
-            key=f"cam{cam_id}",
-            label=names.get(cam_id, f"камера {cam_id}"),
-            color=gantt.PALETTE[i % len(gantt.PALETTE)],
-            intervals={c.stage_id: c.intervals for c in curves},
-            reached={c.stage_id for c in curves if c.reached},
-        ))
-
+    curves = aggregate.site_curves(s, site)
     stages = [{"id": st.id, "title": st.title,
                "planned_start": st.planned_start, "planned_end": st.planned_end}
               for st in site.stages]
-    return gantt.build(stages, sources, today)
+    return gantt.build(
+        stages,
+        fact={c.stage_id: c.intervals for c in curves},
+        reached={c.stage_id for c in curves if c.reached},
+        today=today,
+    )
 
 
 @app.get("/sites/{site_id}", response_class=HTMLResponse)
@@ -339,11 +390,15 @@ def site_detail(site_id: int, request: Request,
         select(Deviation).where(Deviation.site_id == site_id)
         .order_by(Deviation.detected_at.desc()).limit(50)).all()
     used = {st.macro_stage_id for st in site.stages}
-    catalog = s.scalars(select(MacroStage)
-                        .order_by(MacroStage.order_default)).all()
-    today = dt.date.today()
+    catalog = _catalog(s)
+    today = _today(s, site)
+    # Отчёт о загрузке плана показывается один раз: после перезагрузки страницы
+    # он уже не нужен, а висеть на ней вечно значило бы врать про текущее
+    # состояние.
+    plan_report = request.session.pop("plan_report", None)
     return templates.TemplateResponse(request, "site.html", {
         "user": user, "site": site, "deviations": deviations,
+        "plan_report": plan_report,
         "today": today,
         "catalog": catalog,
         "available": [m for m in catalog if m.id not in used],
@@ -354,6 +409,33 @@ def site_detail(site_id: int, request: Request,
     })
 
 
+@app.post("/sites/{site_id}/today")
+def site_today_set(site_id: int, user: str = Depends(auth.require_user),
+                   s: Session = Depends(get_session),
+                   action: str = Form("set"), date: str = Form("")):
+    """Указать «сегодня» для объекта — только для экспериментов.
+
+    Автоматический режим (`sim_today` пуст) уже следует за датой последнего
+    принятого кадра сама, живьём — см. `_today`. Эта ручка нужна для
+    противоположного: отмотать назад и посмотреть состояние объекта на
+    конкретный день (`set`), либо вернуться к автослежению (`auto`).
+    """
+    site = s.get(Site, site_id)
+    if site is None:
+        return HTMLResponse("Объект не найден", status_code=404)
+
+    if action == "auto":
+        site.sim_today = None
+    else:
+        parsed = plan_import.parse_date(date)
+        if parsed is None:
+            return HTMLResponse(f"Дата не разобрана: «{date}». Формат — дд/мм/гггг.",
+                                status_code=400)
+        site.sim_today = parsed
+    s.commit()
+    return auth.redirect(f"/sites/{site_id}")
+
+
 @app.get("/sites/{site_id}/chart", response_class=HTMLResponse)
 def site_chart(site_id: int, request: Request,
                user: str = Depends(auth.require_user),
@@ -362,7 +444,7 @@ def site_chart(site_id: int, request: Request,
     site = s.get(Site, site_id)
     if site is None:
         return HTMLResponse("")
-    today = dt.date.today()
+    today = _today(s, site)
     return templates.TemplateResponse(request, "_gantt.html", {
         "site": site, "chart": _chart(s, site, today), "today": today,
         "poll": any(c.source_type == "stream" for c in site.cameras),
@@ -422,10 +504,20 @@ async def stages_save(site_id: int, request: Request,
         # лишний этап теперь убирают из списка, а не снимают с него отметку.
         stage.enabled = True
         stage.order_idx = idx
-        start = form.get(f"start_{key}") or ""
-        end = form.get(f"end_{key}") or ""
-        stage.planned_start = dt.date.fromisoformat(start) if start else None
-        stage.planned_end = dt.date.fromisoformat(end) if end else None
+        start = str(form.get(f"start_{key}") or "").strip()
+        end = str(form.get(f"end_{key}") or "").strip()
+        stage.planned_start = plan_import.parse_date(start)
+        stage.planned_end = plan_import.parse_date(end)
+        # Непустое поле, которое не разобралось, — не «дата не задана», а
+        # ошибка оператора. Молча превратить её в пустую значило бы потерять
+        # то, что он ввёл, и не сказать об этом.
+        bad = [v for v, d in ((start, stage.planned_start), (end, stage.planned_end))
+               if v and d is None]
+        if bad:
+            s.rollback()
+            return HTMLResponse(
+                f"Дата не разобрана: {', '.join(bad)}. Формат — дд/мм/гггг.",
+                status_code=400)
         stage.dates_confirmed = bool(stage.planned_start and stage.planned_end)
 
     # Чего в форме не пришло — пользователь удалил со страницы.
@@ -437,11 +529,102 @@ async def stages_save(site_id: int, request: Request,
     return auth.redirect(f"/sites/{site_id}")
 
 
+def _template_of(s: Session, macro_id: int | None) -> StageTemplate | None:
+    if macro_id is None:
+        return None
+    return s.scalar(select(StageTemplate)
+                    .where(StageTemplate.macro_stage_id == macro_id))
+
+
+@app.post("/sites/{site_id}/plan-upload")
+async def plan_upload(site_id: int, request: Request,
+                      file: UploadFile = File(...),
+                      user: str = Depends(auth.require_user),
+                      s: Session = Depends(get_session)):
+    """Календарный план из файла: «Название: дд.мм.гггг - дд.мм.гггг».
+
+    Даты проставляются существующим этапам объекта; этап, которого в плане
+    ещё нет, добавляется из справочника. Что не удалось понять — в отчёт с
+    номером строки, а не в тишину: оператор загрузил восемь строк и должен
+    увидеть, что применились семь и почему не восьмая.
+
+    Порядок этапов файл не меняет. Порядок задаёт человек перетаскиванием, и
+    перетирать его из-за того, что в файле строки шли иначе, — неприятный
+    сюрприз; новые этапы встают в конец в порядке файла.
+    """
+    site = s.get(Site, site_id)
+    if site is None:
+        return HTMLResponse("Объект не найден", status_code=404)
+
+    raw = await file.read()
+    parsed = plan_import.parse(plan_import.decode(raw))
+
+    # Кого можно назвать по имени: этапы плана (по названию и по имени этапа
+    # справочника — у переименованного этапа они разные) и весь справочник.
+    in_plan: dict[str, SiteStage] = {}
+    for st in site.stages:
+        in_plan[plan_import.norm(st.title)] = st
+        if st.macro_stage:
+            in_plan.setdefault(plan_import.norm(st.macro_stage.name), st)
+    catalog = {plan_import.norm(m.name): m for m in _catalog(s)}
+
+    report = {"applied": 0, "added": [], "guessed": [], "unknown": [],
+              "errors": list(parsed.errors), "file": file.filename or ""}
+    seen: set[int] = set()
+    next_idx = max((st.order_idx for st in site.stages), default=-1) + 1
+
+    for row in parsed.rows:
+        stage, how = plan_import.match(row.name, in_plan)
+        if stage is None:
+            macro, how = plan_import.match(row.name, catalog)
+            if macro is not None:
+                stage = SiteStage(site_id=site.id, macro_stage_id=macro.id,
+                                  order_idx=next_idx)
+                tpl = _template_of(s, macro.id)
+                stage.equipment_expected = tpl.equipment_expected if tpl else []
+                stage.equipment_forbidden = tpl.equipment_forbidden if tpl else []
+                stage.questions = tpl.questions if tpl else []
+                s.add(stage)
+                s.flush()
+                in_plan[plan_import.norm(stage.title)] = stage
+                next_idx += 1
+                report["added"].append(macro.name)
+        if stage is None:
+            report["unknown"].append(f"строка {row.line}: «{row.name}»")
+            continue
+
+        if stage.id in seen:
+            report["errors"].append(
+                f"строка {row.line}: этап «{stage.title}» уже был в файле выше — "
+                "взята эта строка")
+        seen.add(stage.id)
+
+        stage.planned_start, stage.planned_end = row.start, row.end
+        stage.dates_confirmed = True
+        stage.enabled = True
+        if not stage.questions:
+            tpl = _template_of(s, stage.macro_stage_id)
+            stage.questions = tpl.questions if tpl else []
+        if how == "fuzzy":
+            report["guessed"].append(f"«{row.name}» → «{stage.title}»")
+        report["applied"] += 1
+
+    s.commit()
+
+    # В куку кладём коротко: она ограничена четырьмя килобайтами.
+    for key in ("errors", "unknown", "guessed"):
+        if len(report[key]) > 8:
+            extra = len(report[key]) - 8
+            report[key] = report[key][:8] + [f"… и ещё {extra}"]
+    request.session["plan_report"] = report
+    return auth.redirect(f"/sites/{site_id}")
+
+
 @app.post("/sites/{site_id}/cameras")
 def camera_add(site_id: int, user: str = Depends(auth.require_user),
                s: Session = Depends(get_session),
                name: str = Form(...), mode: str = Form("stream"),
-               source_uri: str = Form("")):
+               source_uri: str = Form(""), use_mask: str = Form("")):
     """Заведение камеры. Два режима — поток и папка, см. `Camera`.
 
     Ключ приёма выдаётся сразу и живёт с камерой: он нужен уже при первом
@@ -451,7 +634,10 @@ def camera_add(site_id: int, user: str = Depends(auth.require_user),
     cam = Camera(site_id=site_id, name=name,
                  source_type="folder" if mode == "folder" else "stream",
                  source_uri=source_uri.strip(),
-                 ingest_key=secrets.token_urlsafe(24))
+                 ingest_key=secrets.token_urlsafe(24),
+                 # Пустой чекбокс браузер не присылает вовсе: «нет поля» и
+                 # есть «выключено».
+                 use_mask=use_mask == "on")
     s.add(cam)
     s.flush()
     s.add(CameraState(camera_id=cam.id))
@@ -642,6 +828,28 @@ def camera_mask_save(camera_id: int, user: str = Depends(auth.require_user),
     return auth.redirect(f"/cameras/{camera_id}")
 
 
+@app.post("/cameras/{camera_id}/mask-mode")
+def camera_mask_mode(camera_id: int, user: str = Depends(auth.require_user),
+                     s: Session = Depends(get_session),
+                     use_mask: str = Form("")):
+    """Включить или выключить маску у уже заведённой камеры.
+
+    Переключение не стирает нарисованную маску: выключили на время, чтобы
+    сравнить разбор с маской и без, и включили обратно — маска на месте.
+    Но кадры, принятые в прежнем режиме, остаются как были. Смесь двух
+    режимов в одной истории — это две разные выборки, и оператору стоит
+    знать, что после переключения «Сбросить наблюдения» даёт чистое сравнение.
+    """
+    cam = s.get(Camera, camera_id)
+    if cam is None:
+        return HTMLResponse("Камера не найдена", status_code=404)
+    cam.use_mask = use_mask == "on"
+    s.commit()
+    # Поток держит маску в памяти: пусть перечитает состояние в новом режиме.
+    live.drop_state(camera_id)
+    return auth.redirect(f"/cameras/{camera_id}")
+
+
 @app.post("/cameras/{camera_id}/reset-mask")
 def camera_mask_reset(camera_id: int, user: str = Depends(auth.require_user),
                       s: Session = Depends(get_session)):
@@ -721,7 +929,9 @@ def camera_run(camera_id: int, user: str = Depends(auth.require_user),
                s: Session = Depends(get_session),
                model_b: str = Form("")):
     cam = s.get(Camera, camera_id)
-    if cam is None or cam.state is None or not cam.state.mask_approved:
+    if cam is None or cam.state is None:
+        return HTMLResponse("Камера не найдена", status_code=404)
+    if cam.use_mask and not cam.state.mask_approved:
         return HTMLResponse("Сначала нужно задать маску", status_code=400)
     runner.start(camera_id, model_b=model_b == "on")
     return auth.redirect(f"/cameras/{camera_id}")
@@ -770,8 +980,9 @@ def camera_connect(camera_id: int, user: str = Depends(auth.require_user),
 
     if cam.source_type != "stream":
         return back("камера заведена как папка, подключать нечего")
-    if cam.state is None or not cam.state.mask_approved:
-        return back("сначала нужно нарисовать маску: без неё кадр разбирать нечем")
+    if cam.use_mask and (cam.state is None or not cam.state.mask_approved):
+        return back("сначала нужно нарисовать маску — или отключите маску "
+                    "камеры, тогда кадры пойдут в модель целиком")
 
     # Приёмник поднимаем до команды: первый кадр может прийти через секунду.
     live.worker(camera_id)

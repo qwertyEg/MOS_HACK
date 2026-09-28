@@ -38,10 +38,10 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.db import SessionLocal, init_db
-from app.models import MacroStage, ObjectType, StageTemplate, WorkType
+from app.models import MacroStage, ObjectType, SiteStage, StageTemplate, WorkType
 
 REFERENCE = Path("reference")
 
@@ -77,8 +77,55 @@ def seed_object_types(s) -> dict[str, int]:
     return out
 
 
+RETIRED = " (устарел)"
+
+
+def _retire_stale_stages(s, keep: set[int]) -> None:
+    """Разбирается с макроэтапами, которых больше нет в справочнике.
+
+    Вызывается **до** обновления остальных, и это не косметика. Справочник
+    ужался с восьми этапов до семи (кровля и фасад слиты), из-за чего номера
+    сдвинулись: то, что раньше было этапом 8, теперь этап 7. Имя этапа в базе
+    уникально, поэтому переименовать седьмой в «Благоустройство», пока
+    восьмой ещё зовётся так же, нельзя — база откажет. Сначала освобождаем
+    имя, потом переименовываем.
+
+    Удалять можно только то, на что никто не ссылается. Если на старый этап
+    уже завязан чей-то календарный план, это чужие данные: такой этап
+    остаётся в базе, но помечается устаревшим — и из выпадающего списка
+    добавления этапа исчезает по имени, и человеку видно, что он лишний.
+    """
+    for st in s.scalars(select(MacroStage)).all():
+        if st.id in keep:
+            continue
+
+        used = s.scalars(select(SiteStage)
+                         .where(SiteStage.macro_stage_id == st.id)).all()
+        if not used:
+            s.execute(delete(StageTemplate).where(
+                StageTemplate.macro_stage_id == st.id))
+            s.delete(st)
+            print(f"  - удалён устаревший этап {st.id} «{st.name}»")
+            continue
+
+        if not st.name.endswith(RETIRED):
+            st.name += RETIRED
+        # Нулевой порядок — признак «вне плана». По нему этап исчезает из
+        # предзаполнения нового объекта и из списка добавления: иначе он
+        # продолжал бы всплывать там, где выбирают этап из справочника.
+        st.order_default = 0
+        sites = sorted({u.site_id for u in used})
+        print(f"  ! этап {st.id} «{st.name}» убран из справочника, но на него "
+              f"ссылаются планы объектов {sites}.")
+        print("    Строки оставлены, данные целы. Планы этих объектов стоит "
+              "перезалить: состав вопросов у них заморожен на момент "
+              "сохранения и остался восьмиэтапным.")
+    s.flush()
+
+
 def seed_macro_stages(s) -> int:
     rows = _rows("stages.csv")
+    _retire_stale_stages(s, {int(row["id"]) for row in rows})
     for row in rows:
         sid = int(row["id"])
         st = s.get(MacroStage, sid)
@@ -120,6 +167,10 @@ def load_checklists() -> dict[int, list[dict]]:
         q = {
             "key": key,
             "text": pool[key]["text"],
+            # «Как выглядит» — визуальный якорь для модели. Без него VLM
+            # отвечает по названию признака, а не по картинке: на вопрос про
+            # шпунт она ищет слово «шпунт», а не гофрированную стенку.
+            "hint": (pool[key].get("hint") or "").strip(),
             "polarity": row["polarity"].strip(),
             "latching": pool[key]["latching"].strip() in ("1", "true", "да"),
         }

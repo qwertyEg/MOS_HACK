@@ -89,3 +89,10 @@ html.dark svg circle[stroke="#f1f5f9"] { stroke: #27324a; }
 .theme-toggle .icon-dark  { display: none; }
 html.dark .theme-toggle .icon-dark  { display: block; }
 html.dark .theme-toggle .icon-light { display: none; }
+
+/* Поле даты с нераспознанным значением — видно сразу, до отправки формы. */
+input.date-invalid { border-color: #dc2626 !important; outline-color: #dc2626; }
+
+/* Зона загрузки плана при перетаскивании файла. */
+#plan-drop.drag-over { border-color: #0f172a; background: rgb(241 245 249 / 0.6); }
+html.dark #plan-drop.drag-over { border-color: #e2e8f0; background: rgb(51 65 85 / 0.4); }

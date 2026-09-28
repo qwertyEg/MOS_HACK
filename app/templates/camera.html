@@ -45,7 +45,34 @@
 </div>
 {% endif %}
 
-{% if state.mask_approved %}
+{% if not cam.use_mask %}
+{# ------------------------------------------------------------------ #}
+{# Маска выключена: кадр идёт в модель целиком                          #}
+{# ------------------------------------------------------------------ #}
+<section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
+  <div class="flex items-start">
+    <div>
+      <h2 class="font-medium">Маска отключена</h2>
+      <p class="text-sm text-slate-600 mt-1">
+        Кадры принимаются как есть: фон не гасится, окно динамической маски не
+        ведётся, модель Б получает кадр целиком. Рисовать маску не нужно.
+      </p>
+      {% if state.mask_approved %}
+      <p class="text-xs text-slate-500 mt-1">
+        Нарисованная ранее маска сохранена — при включении она вернётся.
+      </p>
+      {% endif %}
+    </div>
+    <form method="post" action="/cameras/{{ cam.id }}/mask-mode" class="ml-auto shrink-0">
+      <input type="hidden" name="use_mask" value="on">
+      <button class="bg-slate-100 text-sm rounded px-4 py-2 hover:bg-slate-200">
+        Включить маску
+      </button>
+    </form>
+  </div>
+</section>
+
+{% elif state.mask_approved %}
 {# ------------------------------------------------------------------ #}
 {# Маска уже задана — показываем её состояние                           #}
 {# ------------------------------------------------------------------ #}
@@ -57,10 +84,16 @@
         Дальше она может только сжиматься: растущее здание отвоёвывает её обратно.
       </p>
     </div>
-    <form method="post" action="/cameras/{{ cam.id }}/reset-mask" class="ml-auto"
-          onsubmit="return confirm('Сбросить маску и нарисовать заново?')">
-      <button class="text-sm text-red-600 hover:text-red-800">Нарисовать заново</button>
-    </form>
+    <div class="ml-auto flex items-center gap-4 shrink-0">
+      <form method="post" action="/cameras/{{ cam.id }}/mask-mode"
+            onsubmit="return confirm('Отключить маску? Новые кадры пойдут в модель целиком. Нарисованная маска сохранится.')">
+        <button class="text-sm text-slate-500 hover:text-slate-900">Отключить маску</button>
+      </form>
+      <form method="post" action="/cameras/{{ cam.id }}/reset-mask"
+            onsubmit="return confirm('Сбросить маску и нарисовать заново?')">
+        <button class="text-sm text-red-600 hover:text-red-800">Нарисовать заново</button>
+      </form>
+    </div>
   </div>
 
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -173,12 +206,18 @@
       {% endif %}
     </span>
   </form>
+
+  <form method="post" action="/cameras/{{ cam.id }}/mask-mode" class="mt-3">
+    <button class="text-xs text-slate-500 underline hover:text-slate-900">
+      Работать без маски — кадры пойдут в модель целиком
+    </button>
+  </form>
 </section>
 
 <script src="/static/mask_editor.js"></script>
 {% endif %}
 
-{% if state.mask_approved and cam.source_type == "stream" %}
+{% if (state.mask_approved or not cam.use_mask) and cam.source_type == "stream" %}
 {# ------------------------------------------------------------------ #}
 {# Поток. Кадр приходит — маска двигается, модель отвечает, график      #}
 {# объекта перерисовывается. Кнопки «прогнать датасет» здесь нет:       #}
@@ -208,7 +247,7 @@
   </details>
 </section>
 
-{% elif state.mask_approved %}
+{% elif state.mask_approved or not cam.use_mask %}
 <section class="bg-white border border-slate-200 rounded-lg p-6">
   <div class="flex items-start mb-3">
     <div>

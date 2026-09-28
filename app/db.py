@@ -19,6 +19,8 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 DRIFT = [
     "ALTER TABLE cameras ADD COLUMN IF NOT EXISTS ingest_key varchar(64) DEFAULT ''",
     "ALTER TABLE cameras ADD COLUMN IF NOT EXISTS last_seen_at timestamptz",
+    "ALTER TABLE sites ADD COLUMN IF NOT EXISTS sim_today date",
+    "ALTER TABLE cameras ADD COLUMN IF NOT EXISTS use_mask boolean NOT NULL DEFAULT true",
     "ALTER TABLE frames ADD COLUMN IF NOT EXISTS meta jsonb DEFAULT '{}'::jsonb",
     "ALTER TABLE macro_stages ADD COLUMN IF NOT EXISTS object_types varchar[] DEFAULT '{}'",
     "ALTER TABLE site_stages ADD COLUMN IF NOT EXISTS questions jsonb DEFAULT '[]'::jsonb",

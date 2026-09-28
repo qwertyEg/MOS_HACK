@@ -1,33 +1,48 @@
 """Хронология чек-листов → какие этапы шли на объекте и когда.
 
 Модель Б отвечает про один кадр и только про то, что видит. Она не знает ни
-про календарный план, ни про то, что было вчера. Весь вывод об этапах
-делается здесь, из накопленной истории ответов.
+про календарный план, ни про то, что было вчера. Весь вывод об этапах —
+включая порядок и то, что этап не может начаться заново, — делается здесь.
 
-**Почему ответ меняется во времени — это норма, а не сбой.** «Виден ли
-котлован» в начале стройки «да», после того как здание поднялось — «не видно».
-Именно эта смена и есть сигнал: этап шёл, а потом кончился. Если бы модель
-пыталась отвечать «логически» («котлован-то был, значит да»), сигнала бы не
-осталось вовсе — ответ был бы «да» до самой сдачи объекта.
+**Стройка — это последовательность, а не независимый выбор.** Экскаватор не
+выезжает копать котлован там, где уже льют фундамент. Значит и вывод должен
+быть последовательным: у объекта есть ровно одна граница прогресса
+(`frontier`) — самый ранний ещё не закрытый этап, — и она умеет двигаться
+только вперёд. Раз закрытый этап не открывается снова: если бы «подготовка
+территории» вдруг вновь возглавила счёт, пока благоустройство ещё не начато,
+это железно ошибка модели Б на одном кадре, а не разворот стройки во времени.
 
-**Два разных вопроса, которые легко перепутать.**
+**Кандидатов на «следующий» только два.** Сам текущий этап и тот, что сразу
+за ним. Этап через один в кандидаты не попадает вовсе — не порогом
+отсекается, а физически недостижим: одна шумная фотография не может
+перебросить систему через три этапа разом, потому что она в принципе не
+смотрит так далеко. Это и есть защита от той ошибки, которую нельзя тихо
+проглотить: «благоустройство» на кадре, где ещё не закрыт котлован, —
+кандидат вне окна, и мы просто ждём следующую фотографию.
 
-    идёт ли этап сейчас   — по свежим наблюдениям окна, без всякой памяти
-    пройден ли этап       — по необратимым признакам, с памятью навсегда
+**Закрыть этап можно только когда его СОБСТВЕННЫЕ признаки замолчали.** Пока
+хоть одна камера показывает хоть один характерный признак текущего этапа,
+переходить дальше нельзя — что бы ни показывал следующий этап. Это и
+разрешает три камеры с разных ракурсов: одна не видит сваи, потому что они
+за кадром, но раз другая их видит — сваи есть, и точка. Асимметрия
+заложена уже в `daily_answers`: «да» перевешивает любое число «нет» и «не
+видно», потому что молчание камеры не опровергает то, что увидела соседняя.
 
-Смешивать нельзя. Плита залита — это необратимо, бетон сам не исчезнет, и
-после того как её перекрыли этажи, честный ответ «не видно» ничего не
-отменяет. Но если считать плиту вечным подтверждением активности, этап
-подземного монолита останется «активным» до конца стройки. Поэтому
-необратимые признаки идут в «пройден», а активность считается только по
-тому, что видно в окне прямо сейчас.
+**Признак этапа — это его `must_have`-вопросы.** `must_not_have` и `context`
+в счёт не идут: это про исключение и общий фон, а не про то, что характерно
+именно для этого этапа. Разбор чек-листов по этому принципу будет продолжен
+отдельно.
 
-**Голосование.** У этапа есть вопросы двух полярностей: `must_have` (должно
-быть видно, если этап идёт) и `must_not_have` (не должно). Ответ «не видно»
-не голосует вовсе — это и есть смысл третьего значения. Доля подтверждающих
-среди проголосовавших даёт P(этап активен), а доля проголосовавших от всех
-вопросов — уверенность: если модель почти всё не разглядела, низкий P значит
-«нечего сказать», а не «этапа нет».
+**«Молчание» текущего этапа считается не по всем его признакам, а только по
+необратимым (`latching`).** Кровля, однажды закрытая кровельным покрытием,
+останется видна на каждом следующем кадре — это не значит, что кровельные
+работы всё ещё идут, это значит, что они закончились. Если бы такой признак
+удерживал переход, застройщик застрял бы на этапе кровли навсегда: она видна
+всегда, и своего признака этап «не лишится» никогда. Держат границу только
+временные признаки — сваебойная установка, открытый котлован, голая
+опалубка, — которые физически пропадают из кадра, когда работа кончается.
+Для голосования «кто сейчас лидирует» (сравнение счёта с соседним этапом)
+это разделение не нужно и не делается: там считаются все `must_have` разом.
 """
 
 from __future__ import annotations
@@ -38,39 +53,43 @@ from dataclasses import dataclass
 
 from app.models import Answer
 
-# Окно сглаживания. Дневной ответ шумит: облако, ракурс, случайно
-# заслонивший обзор грузовик. Этап за три дня не начинается и не кончается.
-SMOOTH_DAYS = 5
-ACTIVE_THRESHOLD = 0.6      # доля подтверждающих голосов, выше которой этап активен
-MIN_CONFIDENCE = 0.34       # ниже — считаем, что кадр про этот этап ничего не сказал
-MIN_RUN_DAYS = 3            # более короткие всплески — шум, а не этап
+# Разрыв в наблюдениях, после которого отрезок обрывается. Камеру сняли,
+# сервис лежал, площадку заволокло — за эти дни мы ничего не видели и
+# утверждать, что этап всё это время шёл, не имеем права. Без обрыва два
+# наблюдения по краям дыры склеивались бы в один отрезок через неё: на
+# объекте со старой камерой это давало этап длиной в двадцать лет.
+MAX_GAP_DAYS = 10
 
+# Кандидатов на переход — только текущий этап и следующий: см. докстринг
+# модуля. Значение больше единицы уже нарушало бы саму идею защиты.
+MAX_JUMP = 1
 
-@dataclass(slots=True)
-class DayPoint:
-    day: dt.date
-    p: float                # доля подтверждающих среди проголосовавших
-    confidence: float       # доля вопросов, на которые вообще ответили
-    votes: int
+# Переход необратим, а значит цена одной ошибочной фотографии — навсегда.
+# Требуем несколько дней подряд, где старый этап молчит, а новый лидирует,
+# прежде чем сдвинуть границу. Разовый всплеск — шум, не переход.
+MIN_STREAK_DAYS = 3
 
 
 @dataclass(slots=True)
 class StageCurve:
     stage_id: int
     title: str
-    points: list[DayPoint]
     intervals: list[tuple[dt.date, dt.date]]
-    reached: bool           # все необратимые признаки этапа когда-либо видели
+    reached: bool           # граница прогресса уже прошла этот этап
 
 
 def daily_answers(
     observations: list[tuple[dt.datetime, str, Answer]],
 ) -> dict[dt.date, dict[str, Answer]]:
-    """Наблюдения по кадрам → один ответ на ключ в день.
+    """Наблюдения по кадрам (с разных камер) → один ответ на ключ в день.
 
-    В сутки кадров много, и ответы по ним расходятся. Берём большинство
-    среди тех, кто голосовал; если все сказали «не видно» — день по этому
-    ключу молчит, и это честнее, чем выбрать da/нет монеткой.
+    Несколько камер смотрят на площадку с разных сторон, и ракурс — это не
+    ошибка наблюдения, а его условие: свая, ясно видная одной камере, может
+    быть у другой вовсе за кадром. Поэтому правило асимметричное — один явный
+    «да» перевешивает любое число «нет» и «не видно». Симметричное
+    большинство было бы неверным: оно позволило бы двум камерам, которые
+    просто не смотрят в нужную сторону, отменить наблюдение третьей, которая
+    смотрит прямо на признак.
     """
     buckets: dict[dt.date, dict[str, list[Answer]]] = defaultdict(
         lambda: defaultdict(list))
@@ -81,91 +100,111 @@ def daily_answers(
     for day, keys in buckets.items():
         resolved = {}
         for key, answers in keys.items():
-            yes = sum(a is Answer.YES for a in answers)
-            no = sum(a is Answer.NO for a in answers)
-            if yes == 0 and no == 0:
-                resolved[key] = Answer.UNSURE
+            if any(a is Answer.YES for a in answers):
+                resolved[key] = Answer.YES
+            elif any(a is Answer.NO for a in answers):
+                resolved[key] = Answer.NO
             else:
-                resolved[key] = Answer.YES if yes >= no else Answer.NO
+                resolved[key] = Answer.UNSURE
         out[day] = resolved
     return out
 
 
-def ever_seen(days: dict[dt.date, dict[str, Answer]], key: str) -> dt.date | None:
-    """Первый день, когда признак наблюдали. None — не наблюдали ни разу."""
-    seen = [d for d, ans in days.items() if ans.get(key) is Answer.YES]
-    return min(seen) if seen else None
+def daily_feature_counts(
+    days: dict[dt.date, dict[str, Answer]],
+    stages: list[tuple[int, str, list[dict]]],
+) -> list[tuple[dt.date, dict[int, tuple[int, int]]]]:
+    """День → (все признаки этапа, временные признаки этапа) — по каждому этапу.
 
-
-def stage_score(answers: dict[str, Answer], questions: list[dict]) -> DayPoint | None:
-    """Оценка одного этапа по ответам одного дня."""
-    voting = [q for q in questions if q["polarity"] in ("must_have", "must_not_have")]
-    if not voting:
-        return None
-
-    votes = supporting = 0
-    for q in voting:
-        a = answers.get(q["key"], Answer.UNSURE)
-        if a is Answer.UNSURE:
-            continue
-        votes += 1
-        want_yes = q["polarity"] == "must_have"
-        if (a is Answer.YES) == want_yes:
-            supporting += 1
-
-    if votes == 0:
-        return DayPoint(day=dt.date.min, p=0.0, confidence=0.0, votes=0)
-    return DayPoint(day=dt.date.min, p=supporting / votes,
-                    confidence=votes / len(voting), votes=votes)
-
-
-def smooth(points: list[DayPoint], window: int = SMOOTH_DAYS) -> list[DayPoint]:
-    """Скользящее среднее по календарным дням, а не по индексу.
-
-    Дни с пропусками (ночь, брак кадра, выходной без съёмки) не должны
-    склеивать далеко отстоящие наблюдения в одно окно.
+    Две цифры, а не одна, ради того самого разделения из шапки модуля:
+    первая идёт в сравнение «кто сегодня лидирует», вторая — только
+    временные (не `latching`) признаки — в проверку «этап ещё не отпустил
+    свои признаки». Возвращается список, а не словарь: порядок дней важен
+    дальше, а словарь его не хранит.
     """
     out = []
-    for i, pt in enumerate(points):
-        lo = pt.day - dt.timedelta(days=window // 2)
-        hi = pt.day + dt.timedelta(days=window // 2)
-        near = [q for q in points if lo <= q.day <= hi and q.votes]
-        if not near:
-            out.append(pt)
-            continue
-        out.append(DayPoint(
-            day=pt.day,
-            p=sum(q.p for q in near) / len(near),
-            confidence=sum(q.confidence for q in near) / len(near),
-            votes=max(q.votes for q in near),
-        ))
+    for day in sorted(days):
+        answers = days[day]
+        counts = {}
+        for stage_id, _, questions in stages:
+            must = [q for q in questions if q["polarity"] == "must_have"]
+            total = sum(1 for q in must if answers.get(q["key"]) is Answer.YES)
+            transient = sum(1 for q in must if not q.get("latching")
+                            and answers.get(q["key"]) is Answer.YES)
+            counts[stage_id] = (total, transient)
+        out.append((day, counts))
     return out
 
 
-def intervals(
-    points: list[DayPoint],
-    threshold: float = ACTIVE_THRESHOLD,
-    min_confidence: float = MIN_CONFIDENCE,
-    min_run: int = MIN_RUN_DAYS,
-) -> list[tuple[dt.date, dt.date]]:
-    """Сглаженная кривая → отрезки, на которых этап считается активным."""
-    runs: list[tuple[dt.date, dt.date]] = []
-    start: dt.date | None = None
-    prev: dt.date | None = None
+def sequential_state(
+    day_counts: list[tuple[dt.date, dict[int, tuple[int, int]]]],
+    order: list[int],
+    max_jump: int = MAX_JUMP,
+    min_streak: int = MIN_STREAK_DAYS,
+) -> dict[dt.date, int]:
+    """Дневные счётчики признаков → какому этапу отнесён каждый день.
 
-    for pt in points:
-        active = pt.votes and pt.confidence >= min_confidence and pt.p >= threshold
-        if active:
-            if start is None:
-                start = pt.day
-            prev = pt.day
-        elif start is not None:
-            runs.append((start, prev))
-            start = prev = None
-    if start is not None:
-        runs.append((start, prev))
+    `order` — id этапов в порядке календарного плана; это и есть та самая
+    последовательность, дальше которой прыгать нельзя. Возвращает день → id
+    активного на тот день этапа. Граница прогресса (`frontier`, индекс в
+    `order`) за один вызов только растёт — реализация «этап не открывается
+    снова» не постфактум-фильтром, а тем, что состояние физически не может
+    откатиться назад.
 
-    return [(a, b) for a, b in runs if (b - a).days + 1 >= min_run]
+    Счётчики — пары (все признаки, временные признаки), см. `daily_feature_counts`.
+    """
+    out: dict[dt.date, int] = {}
+    frontier = 0
+    streak = 0
+
+    for day, counts in day_counts:
+        current_id = order[frontier]
+        current_total, current_transient = counts.get(current_id, (0, 0))
+
+        # Кандидат на смену — только следующий этап в окне; всё, что дальше,
+        # физически не сравнивается и повлиять на решение не может.
+        window = order[frontier + 1:frontier + 1 + max_jump]
+        next_id = window[0] if window else None
+        next_total = counts.get(next_id, (0, 0))[0] if next_id is not None else -1
+
+        advancing = next_id is not None and next_total > current_total
+
+        if not advancing or current_transient > 0:
+            # Либо следующий этап не лидирует, либо у текущего ещё остались
+            # временные признаки — переход рано, что бы ни было впереди.
+            out[day] = current_id
+            streak = 0
+            continue
+
+        streak += 1
+        if streak >= min_streak:
+            frontier += 1
+            streak = 0
+        out[day] = order[frontier]
+
+    return out
+
+
+def _runs_from_assignment(
+    assignment: dict[dt.date, int],
+    max_gap: int = MAX_GAP_DAYS,
+) -> dict[int, list[tuple[dt.date, dt.date]]]:
+    """День → этап, рассортированный на отрезки по этапу и по дырам в датах."""
+    out: dict[int, list[tuple[dt.date, dt.date]]] = defaultdict(list)
+    ordered = sorted(assignment)
+    if not ordered:
+        return out
+
+    start = prev = ordered[0]
+    cur = assignment[start]
+    for day in ordered[1:]:
+        stage = assignment[day]
+        if stage != cur or (day - prev).days > max_gap:
+            out[cur].append((start, prev))
+            start, cur = day, stage
+        prev = day
+    out[cur].append((start, prev))
+    return out
 
 
 def build_curves(
@@ -174,31 +213,20 @@ def build_curves(
 ) -> list[StageCurve]:
     """Полный разбор: наблюдения + состав чек-листов → кривые по этапам.
 
-    stages — список (id этапа, название, вопросы чек-листа).
+    stages — список (id этапа, название, вопросы чек-листа) **в порядке
+    календарного плана**: этот порядок и есть последовательность, за
+    пределы которой граница прогресса не выходит.
     """
     days = daily_answers(observations)
-    ordered = sorted(days)
+    order = [sid for sid, _, _ in stages]
+    assignment = sequential_state(daily_feature_counts(days, stages), order)
+    runs = _runs_from_assignment(assignment)
 
-    curves = []
-    for stage_id, title, questions in stages:
-        raw = []
-        for day in ordered:
-            pt = stage_score(days[day], questions)
-            if pt is None:
-                continue
-            raw.append(DayPoint(day=day, p=pt.p, confidence=pt.confidence,
-                                votes=pt.votes))
+    frontier = order.index(assignment[max(assignment)]) if assignment else -1
 
-        smoothed = smooth(raw)
-        latching = [q["key"] for q in questions
-                    if q.get("latching") and q["polarity"] == "must_have"]
-        reached = bool(latching) and all(ever_seen(days, k) for k in latching)
-
-        curves.append(StageCurve(stage_id=stage_id, title=title,
-                                 points=smoothed,
-                                 intervals=intervals(smoothed),
-                                 reached=reached))
-    return curves
+    return [StageCurve(stage_id=sid, title=title,
+                       intervals=runs.get(sid, []), reached=idx < frontier)
+            for idx, (sid, title, _questions) in enumerate(stages)]
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +252,10 @@ def _stage_defs(site) -> list[tuple[int, str, list[dict]]]:
     """Состав чек-листов берётся из снимка на `SiteStage`, а не из справочника.
 
     Состав заморожен в момент сохранения плана: правка CSV не должна задним
-    числом менять то, по чему считалась уже накопленная история.
+    числом менять то, по чему считалась уже накопленная история. Порядок —
+    `SiteStage.order_idx` (см. `relationship(..., order_by=...)` в моделях):
+    это порядок календарного плана, и именно он задаёт последовательность
+    для `sequential_state`.
     """
     return [(st.id, st.title, st.questions or []) for st in site.stages]
 
@@ -232,10 +263,11 @@ def _stage_defs(site) -> list[tuple[int, str, list[dict]]]:
 def site_curves(session, site, camera_id: int | None = None) -> list[StageCurve]:
     """История чек-листов объекта → кривые по его этапам.
 
-    `camera_id` сужает выборку до одной камеры. Это не мелочь: две камеры
-    смотрят на площадку с разных сторон и видят разное, и вывод «этап идёт»
-    по каждой из них стоит уметь посмотреть отдельно — расхождение между
-    ними само по себе диагностика, а не шум.
+    `camera_id` сужает выборку до одной камеры — для отладки расхождений
+    между ракурсами. В обычном разборе (`camera_id=None`) все камеры объекта
+    сведены вместе ещё на входе в `daily_answers`, по правилу «да
+    перевешивает нет»: так и должна работать система с несколькими камерами
+    на одной площадке.
     """
     stage_ids = [st.id for st in site.stages]
     if not stage_ids:
@@ -248,17 +280,3 @@ def site_curves(session, site, camera_id: int | None = None) -> list[StageCurve]
     if not observations:
         return []
     return build_curves(observations, _stage_defs(site))
-
-
-def curves_by_camera(session, site) -> dict[int, list[StageCurve]]:
-    """Кривые отдельно по каждой камере, которая что-то наблюдала."""
-    stage_ids = [st.id for st in site.stages]
-    if not stage_ids:
-        return {}
-
-    per_cam: dict[int, list] = defaultdict(list)
-    for cam, when, key, answer in _observations(session, site, stage_ids):
-        per_cam[cam].append((when, key, answer))
-
-    defs = _stage_defs(site)
-    return {cam: build_curves(obs, defs) for cam, obs in per_cam.items() if obs}

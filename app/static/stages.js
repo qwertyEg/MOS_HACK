@@ -68,6 +68,9 @@
     const row = holder.firstElementChild;
     tbody.appendChild(row);
     wire(row);
+    // Поля даты достраиваются скриптом — у строки, вставленной на месте,
+    // они появились уже после загрузки страницы.
+    window.upgradeDates?.(row);
     picker.value = '';
     refresh();
   });

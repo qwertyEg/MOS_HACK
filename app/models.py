@@ -108,7 +108,12 @@ class WorkType(Base):
 
 
 class MacroStage(Base):
-    """Макроэтап — то, что различимо с камеры. 8 штук, §3.1 плана."""
+    """Макроэтап — то, что различимо с камеры. 7 штук, §3.1 плана.
+
+    Кровля и фасад сведены в один этап намеренно: у высокого здания кровля
+    в кадр почти не попадает, и отдельный этап, который наблюдением не
+    закрыть, стал бы местом, где граница прогресса встаёт навсегда.
+    """
     __tablename__ = "macro_stages"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128), unique=True)
@@ -169,6 +174,11 @@ class Site(Base):
     permit_no: Mapped[str] = mapped_column(String(64), default="")
     permit_date: Mapped[dt.date | None] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(32), default="active")
+    # «Сегодня» для этого объекта. Пусто — настоящая дата. Задаётся руками
+    # только для экспериментов: при ускоренном показе архива сутки съёмки
+    # проходят за секунды, и настенные часы к происходящему на кадрах не
+    # относятся. В работе это поле не нужно и остаётся пустым.
+    sim_today: Mapped[dt.date | None] = mapped_column(Date)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True),
                                                     server_default=func.now())
 
@@ -268,6 +278,12 @@ class Camera(Base):
     source_type: Mapped[str] = mapped_column(String(32), default="folder")
     source_uri: Mapped[str] = mapped_column(Text, default="")
     ingest_key: Mapped[str] = mapped_column(String(64), default="")
+    # Гасить ли фон на кадре при приёме. Выключенная маска — это не «маска
+    # без области», а осознанный режим: кадр уходит модели целиком, окно
+    # динамической маски не ведётся, рисовать её не требуется. Нужен там,
+    # где фон отделить нечем (камера в упор на стройку) или где маска
+    # мешает — например, чтобы сравнить разбор с маской и без.
+    use_mask: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     last_seen_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     view_type: Mapped[ViewType] = mapped_column(Enum(ViewType), default=ViewType.SIDE)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
