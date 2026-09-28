@@ -1,7 +1,11 @@
 """Запуск имитатора камеры.
 
-    .venv/bin/python -m simcam --folder ~/data/for_test --port 9101 \
-        --name "Камера 1 — юг" --interval 30
+    .venv/bin/python -m simcam -f ~/data/for_test -p 9101 -i 30
+
+Обязателен только путь к папке (`-f`/`--folder`). Всё остальное —
+имя, метаданные, дата начала — нужно не для каждого запуска: имя
+попадает только в подпись камеры, метаданные — в промпт модели Б,
+если хочется проверить, как она реагирует на «погода: снег» и т.п.
 
 Несколько камер — несколько процессов на разных портах. Смотреть они могут
 на одну и ту же площадку с разных сторон: в основном сервисе это две камеры
@@ -38,20 +42,21 @@ def parse_meta(pairs: list[str]) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Имитатор камеры")
-    ap.add_argument("--folder", required=True, type=Path,
+    ap.add_argument("-f", "--folder", required=True, type=Path,
                     help="папка с кадрами; метка времени берётся из имени файла")
-    ap.add_argument("--name", default="Камера", help="как камера себя называет")
-    ap.add_argument("--host", default="0.0.0.0")
-    ap.add_argument("--port", type=int, default=9101)
-    ap.add_argument("--interval", type=float, default=30.0,
+    ap.add_argument("-p", "--port", type=int, default=9101)
+    ap.add_argument("-i", "--interval", type=float, default=30.0,
                     help="пауза между кадрами, секунд (в жизни 1200)")
+    ap.add_argument("-n", "--name", default="Камера", help="как камера себя называет")
+    ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--loop", action="store_true",
                     help="после последнего кадра начинать серию сначала")
     ap.add_argument("--start-date", default="",
                     help="сдвинуть серию так, чтобы первый кадр попал на эту "
                          "дату (ГГГГ-ММ-ДД); интервалы сохраняются")
     ap.add_argument("--meta", action="append", default=[], metavar="КЛЮЧ=ЗНАЧЕНИЕ",
-                    help="метаданные, уходящие с каждым кадром; можно повторять")
+                    help="метаданные, уходящие с каждым кадром; можно повторять "
+                         "(нужно редко — не для обычного запуска)")
     args = ap.parse_args()
 
     folder = args.folder.expanduser().resolve()
