@@ -1,0 +1,141 @@
+{%- set nav = [("/", "Обзор", ("overview", "site", "camera", "frame")), ("/try", "Проверить снимок", ("try",)), ("/settings", "Настройки", ("settings",))] -%}
+{%- set login = (user.login if user.login is defined else user)|string -%}
+<header x-data="svHeader" @keydown.escape.window="close()" @click.outside="close()"
+        class="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70">
+  <div class="mx-auto flex h-14 max-w-[1440px] items-center gap-2 px-3 sm:px-6 lg:px-8">
+    {# логотип #}
+    <a href="/" class="flex items-center gap-2 pr-1 shrink-0" aria-label="СтройВзор — на обзор объектов">
+      <span class="grid h-7 w-7 place-items-center rounded-lg bg-fg text-bg shadow-card">{{ ic.icon("logo", "w-[18px] h-[18px]", "2") }}</span>
+      <span class="hidden text-[15px] font-semibold tracking-[-0.02em] sm:inline">СтройВзор</span>
+    </a>
+    <span class="mx-1 hidden h-5 w-px bg-line-strong sm:block" aria-hidden="true"></span>
+
+    {# переключатель объекта #}
+    <div class="relative min-w-0">
+      <button type="button" class="btn btn-ghost h-8 max-w-[46vw] sm:max-w-[320px] px-2 text-fg" @click.stop="toggle('sites')"
+              :aria-expanded="open === 'sites'" aria-haspopup="listbox" title="Переключить объект (клавиша /)"
+              @keydown.slash.window="if (!SV.isTyping($event)) { $event.preventDefault(); toggle('sites') }">
+        {{ ic.icon("building", "w-4 h-4 text-fg-3") }}
+        <span class="truncate" x-text="currentSite ? currentSite.name : 'Все объекты'">Все объекты</span>
+        {{ ic.icon("chevrons-up-down", "w-3.5 h-3.5 text-fg-3") }}
+      </button>
+      <div x-cloak x-show="open === 'sites'" x-transition.opacity.duration.100ms class="menu left-0 top-10 w-[min(360px,calc(100vw-24px))]" role="listbox">
+        <div class="relative p-1">
+          <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-3">{{ ic.icon("search", "w-3.5 h-3.5") }}</span>
+          <input x-ref="siteSearch" x-model="query" class="input h-8 pl-8" placeholder="Найти объект…" aria-label="Поиск объекта"
+                 @keydown.enter.prevent="filteredSites[0] && (location.href = '/sites/' + filteredSites[0].id)">
+        </div>
+        <div class="max-h-[50vh] overflow-y-auto py-1">
+          <template x-for="s in filteredSites" :key="s.id">
+            <a :href="'/sites/' + s.id" class="menu-item" :aria-current="String(s.id) === String(app.siteId)">
+              <span class="dot" :class="SV.toneBg[(SV.META.verdict[s.verdict] || {}).tone || 'neutral']"></span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-fg" x-text="s.name"></span>
+                <span class="block truncate text-2xs text-fg-3" x-text="s.address || ''"></span>
+              </span>
+              <span class="text-2xs" :class="SV.toneText[(SV.META.verdict[s.verdict] || {}).tone || 'neutral']"
+                    x-text="s.verdict === 'behind' && s.lag_days ? '−' + SV.fmt.days(s.lag_days) : (SV.META.verdict[s.verdict] || {}).label"></span>
+            </a>
+          </template>
+          <p x-show="app.sites && !filteredSites.length" class="px-3 py-4 text-center text-xs text-fg-3">Ничего не нашлось</p>
+          <p x-show="!app.sites" class="px-3 py-4 text-center text-xs text-fg-3">Загрузка…</p>
+        </div>
+        <div class="divider my-1"></div>
+        <a href="/" class="menu-item">{{ ic.icon("grid", "w-4 h-4") }} Все объекты</a>
+      </div>
+    </div>
+
+    {# навигация #}
+    <nav class="ml-2 hidden items-center gap-0.5 md:flex" aria-label="Разделы">
+      {% for href, label, pages in nav %}
+      <a href="{{ href }}" class="rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors {{ 'text-fg bg-panel-3' if page in pages else 'text-fg-3 hover:text-fg' }}"
+         {% if page in pages %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+
+    <div class="ml-auto flex items-center gap-1.5 sm:gap-2">
+      {# очередь анализа (GET /api/queue): сколько кадров ждут моделей А/Б #}
+      <template x-if="queue">
+        <span class="tip inline-flex h-8 items-center gap-1.5 rounded-lg px-1.5 text-xs text-fg-2 sm:px-2"
+              :data-tip="queue.pending ? 'Кадров ждут анализа: ' + queue.pending + (queue.busy ? ', камер в работе: ' + queue.busy : '') + '. Приём новых кадров не останавливается.' : (queue.recompute ? 'Пересчитываем сводку объекта' : 'Все кадры разобраны')">
+          <template x-if="queue.pending || queue.recompute">
+            <span class="inline-flex items-center gap-1.5"><span class="animate-spin text-info-fg">{{ ic.icon("loader", "w-3.5 h-3.5", "2.25") }}</span><span class="hidden lg:inline" x-text="queue.pending ? 'Анализ' : 'Пересчёт'"></span><span class="num" x-show="queue.pending" x-text="queue.pending"></span></span>
+          </template>
+          <template x-if="!queue.pending && !queue.recompute">
+            <span class="inline-flex items-center gap-1.5"><span class="dot bg-good"></span><span class="hidden lg:inline">Очередь пуста</span></span>
+          </template>
+        </span>
+      </template>
+
+      {# ЛОКАЛЬНЫЕ МОДЕЛИ ⇄ ВНЕШНИЙ API #}
+      <div class="relative">
+        <div class="seg" role="group" aria-label="Где работают модели">
+          <template x-for="m in ['local', 'external']" :key="m">
+            <button type="button" :aria-pressed="mode === m" @click.stop="choose(m)"
+                    :title="SV.META.modes[m].label + ' — ' + SV.META.modes[m].desc + (app.modeReady(m).ready === false ? '. Не готов: ' + app.modeReady(m).reason : '')">
+              <span x-html="$icon(SV.META.modes[m].icon, 'w-3.5 h-3.5')"></span>
+              <span class="hidden sm:inline" x-text="m === 'local' ? 'Локально' : 'Внешний API'"></span>
+              <span class="dot !w-1.5 !h-1.5"
+                    :class="app.modeReady(m).ready === true ? 'bg-good' : app.modeReady(m).ready === false ? 'bg-warn' : 'bg-fg-3'"></span>
+            </button>
+          </template>
+        </div>
+        <span x-cloak x-show="mode === 'hybrid'" class="absolute -bottom-2 left-1/2 -translate-x-1/2 badge badge-neutral !h-4 !text-[10px]">гибрид</span>
+        {# предупреждение: провайдер не готов #}
+        <div x-cloak x-show="open === 'mode' || pendingMode" x-transition.opacity.duration.100ms @click.stop
+             class="menu right-0 top-10 w-[min(340px,calc(100vw-24px))] p-3">
+          <template x-if="pendingMode">
+            <div>
+              <div class="flex items-start gap-2.5">
+                <span class="mt-0.5 text-warn-fg">{{ ic.icon("alert-triangle", "w-4 h-4") }}</span>
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold" x-text="SV.META.modes[pendingMode].label + ' пока не готов'"></p>
+                  <p class="mt-1 text-xs text-fg-2" x-text="app.modeReady(pendingMode).reason"></p>
+                  <p class="mt-2 text-xs text-fg-3">Кадры продолжат приниматься и сохраняться, а анализ встанет в очередь, пока провайдер не заработает.</p>
+                </div>
+              </div>
+              <div class="mt-3 flex items-center justify-end gap-2">
+                <a href="/settings" class="btn btn-ghost btn-sm">Настройки</a>
+                <button type="button" class="btn btn-secondary btn-sm" @click="close()">Отмена</button>
+                <button type="button" class="btn btn-primary btn-sm" @click="choose(pendingMode)">Переключить всё равно</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <button type="button" class="btn btn-ghost btn-icon hidden sm:inline-flex" @click="$store.theme.toggle()"
+              :aria-label="$store.theme.dark ? 'Светлая тема' : 'Тёмная тема'" title="Сменить тему (T)">
+        <span x-show="$store.theme.dark">{{ ic.icon("sun") }}</span>
+        <span x-show="!$store.theme.dark" x-cloak>{{ ic.icon("moon") }}</span>
+      </button>
+
+      {# пользователь / мобильное меню #}
+      <div class="relative">
+        <button type="button" class="btn btn-ghost btn-icon md:hidden" @click.stop="toggle('menu')" aria-label="Меню" :aria-expanded="open === 'menu'">{{ ic.icon("menu") }}</button>
+        <button type="button" class="hidden h-8 w-8 place-items-center rounded-full border border-line-strong bg-panel-3 text-xs font-semibold uppercase text-fg-2 hover:text-fg md:grid"
+                @click.stop="toggle('user')" aria-label="Учётная запись" :aria-expanded="open === 'user'">{{ login[:1] }}</button>
+        <div x-cloak x-show="open === 'user' || open === 'menu'" x-transition.opacity.duration.100ms class="menu right-0 top-10 w-60">
+          <div class="px-2.5 py-2">
+            <p class="text-xs text-fg-3">Вы вошли как</p>
+            <p class="truncate text-sm font-medium">{{ login }}</p>
+          </div>
+          <div class="divider my-1"></div>
+          <div class="md:hidden">
+            {% for href, label, pages in nav %}
+            <a href="{{ href }}" class="menu-item" {% if page in pages %}aria-current="true"{% endif %}>{{ label }}</a>
+            {% endfor %}
+            <div class="divider my-1"></div>
+          </div>
+          <button type="button" class="menu-item" @click="$store.theme.toggle()">
+            <span x-show="$store.theme.dark">{{ ic.icon("sun") }}</span><span x-show="!$store.theme.dark" x-cloak>{{ ic.icon("moon") }}</span>
+            <span x-text="$store.theme.dark ? 'Светлая тема' : 'Тёмная тема'"></span><span class="kbd ml-auto">T</span>
+          </button>
+          <button type="button" class="menu-item" @click="close(); $dispatch('sv-shortcuts')">{{ ic.icon("keyboard") }} Клавиши<span class="kbd ml-auto">?</span></button>
+          <div class="divider my-1"></div>
+          <a href="/logout" class="menu-item">{{ ic.icon("log-out") }} Выйти</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>

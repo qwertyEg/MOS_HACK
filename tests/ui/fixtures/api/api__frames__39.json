@@ -1,0 +1,96 @@
+{
+ "id": 39,
+ "camera_id": 1,
+ "captured_at": "2015-04-21T09:05:12+00:00",
+ "url": "/media/frames/1/2015/04/21/090512_a24607e324_p.jpg",
+ "full_url": "/media/frames/1/2015/04/21/090512_a24607e324.jpg",
+ "annotated_url": "/api/frames/39/annotated.jpg",
+ "width": 1280,
+ "height": 720,
+ "is_night": false,
+ "weather": "clear",
+ "quality_ok": true,
+ "reject_reason": "",
+ "stage_used": false,
+ "processed_a": true,
+ "processed_b": true,
+ "status": "done",
+ "note": "",
+ "detections_count": 2,
+ "ts_source": "имя файла",
+ "site_id": 1,
+ "camera_name": "Камера 1 · забой",
+ "quality": {
+  "quality_ok": true,
+  "is_night": false,
+  "weather": "clear",
+  "reject_reason": "",
+  "blur": 963.56,
+  "brightness": 142.77
+ },
+ "detections": [
+  {
+   "class": "dump_truck",
+   "bbox": [
+    267.0,
+    300.6,
+    296.2,
+    106.6
+   ],
+   "conf": 0.889,
+   "zone_id": null,
+   "moved_since_prev": false,
+   "displacement_px": 1.7,
+   "bbox_shape_delta": 0.018,
+   "track_id": "1-t1",
+   "unit_id": "u0001",
+   "activity": "idle",
+   "name": "Самосвал",
+   "source": "yolo",
+   "appearance_delta": 0.0,
+   "id": 538,
+   "provider": "yolo",
+   "unit_row_id": 1,
+   "site_xy": null
+  },
+  {
+   "class": "excavator",
+   "bbox": [
+    566.8,
+    305.6,
+    246.0,
+    105.3
+   ],
+   "conf": 0.825,
+   "zone_id": null,
+   "moved_since_prev": true,
+   "displacement_px": 5.6,
+   "bbox_shape_delta": 0.036,
+   "track_id": "1-t2",
+   "unit_id": "u0002",
+   "activity": "working",
+   "name": "Экскаватор",
+   "source": "yolo",
+   "appearance_delta": 0.192,
+   "id": 539,
+   "provider": "yolo",
+   "unit_row_id": 2,
+   "site_xy": null
+  }
+ ],
+ "counts": {
+  "dump_truck": 1,
+  "excavator": 1
+ },
+ "checklist": null,
+ "observations": [],
+ "meta": {
+  "source_file": "kirov_quarry_cam_1_2015_04_21_12_05_12.jpg",
+  "ts_source": "имя файла",
+  "mask_done": true
+ },
+ "sha256": "a24607e324be081c3a8e324f04ec543971a320840a29593e531ce1504f834cd1",
+ "job_id": "815b9def8ae54e1186bf8ef0f3214d8c",
+ "prev_id": 38,
+ "next_id": 40
+}

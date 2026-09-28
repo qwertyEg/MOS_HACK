@@ -1,0 +1,59 @@
+{
+ "unit": {
+  "id": 25,
+  "uid": "u0002",
+  "site_id": 5,
+  "cls": "wheel_loader",
+  "name": "Фронтальный погрузчик",
+  "label": "Фронтальный погрузчик №1",
+  "status": "departed",
+  "first_seen": "2020-06-08T04:31:00+00:00",
+  "last_seen": "2020-06-08T04:56:26+00:00",
+  "last_moved": null,
+  "worked_hours": 0.0,
+  "cameras": [
+   "7"
+  ],
+  "plate": null,
+  "site_xy": null
+ },
+ "intervals": [],
+ "detections": [
+  {
+   "frame_id": 59,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T04:56:26+00:00",
+   "bbox": [
+    1162.501953125,
+    540.4267578125,
+    233.13720703125,
+    140.19488525390625
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 18.232821857362804,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/045626_2741f5c662_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/045626_2741f5c662.jpg",
+   "annotated_url": "/api/frames/59/annotated.jpg"
+  },
+  {
+   "frame_id": 53,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T04:31:00+00:00",
+   "bbox": [
+    1245.6256103515625,
+    562.6533203125,
+    86.06201171875,
+    60.19244384765625
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/043100_603ee3f4e3_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/043100_603ee3f4e3.jpg",
+   "annotated_url": "/api/frames/53/annotated.jpg"
+  }
+ ]
+}

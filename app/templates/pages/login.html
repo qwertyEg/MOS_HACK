@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% import "partials/icons.html" as ic %}
+{% set bare = true %}
+{% block title %}Вход{% endblock %}
+{% block main_class %}relative grid min-h-screen place-items-center overflow-hidden px-4 py-10{% endblock %}
+{% block content %}
+{#- Поля не заполнены заранее (в прототипе Дениса стояли admin/admin прямо в форме). -#}
+<div class="grid-bg pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]"></div>
+<div class="pointer-events-none absolute left-1/2 top-[18%] h-72 w-72 -translate-x-1/2 rounded-full bg-info/20 blur-[100px]"></div>
+<div class="relative w-full max-w-[380px]">
+  <div class="mb-7 flex flex-col items-center text-center">
+    <span class="grid h-12 w-12 place-items-center rounded-2xl bg-fg text-bg shadow-card">{{ ic.icon("logo", "w-7 h-7", "2") }}</span>
+    <h1 class="mt-4 text-[22px] font-semibold tracking-[-0.02em]">СтройВзор</h1>
+    <p class="mt-1 text-sm text-fg-2">Мониторинг стройплощадки по снимкам камер</p>
+  </div>
+  <form method="post" action="/login" class="card space-y-4 p-6 shadow-pop" x-data="{ busy: false, show: false }" @submit="busy = true">
+    {% if error is defined and error %}
+    <div class="flex items-start gap-2 rounded-lg border border-bad/30 bg-bad/10 px-3 py-2.5 text-sm text-bad-fg" role="alert">{{ ic.icon("alert-octagon", "w-4 h-4 mt-0.5 shrink-0") }}<span>{{ error }}</span></div>
+    {% endif %}
+    <input type="hidden" name="next" value="{{ next if next is defined and next else request.query_params.get('next', '/') }}">
+    <div>
+      <label class="label" for="login">Логин</label>
+      <div class="relative"><span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-3">{{ ic.icon("user", "w-4 h-4") }}</span>
+        <input id="login" name="login" class="input h-10 pl-9" autocomplete="username" required autofocus></div>
+    </div>
+    <div>
+      <label class="label" for="password">Пароль</label>
+      <div class="relative"><span class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-3">{{ ic.icon("lock", "w-4 h-4") }}</span>
+        <input id="password" name="password" :type="show ? 'text' : 'password'" type="password" class="input h-10 pl-9 pr-10" autocomplete="current-password" required>
+        <button type="button" class="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-fg-3 hover:text-fg" @click="show = !show" :aria-label="show ? 'Скрыть пароль' : 'Показать пароль'">{{ ic.icon("eye", "w-4 h-4") }}</button></div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-lg w-full" :disabled="busy"><span x-show="busy" class="animate-spin">{{ ic.icon("loader") }}</span>Войти</button>
+  </form>
+  <p class="mt-6 text-center text-xs text-fg-3">ЛЦТ-2026 · кейс ДЕПСТРОЙ Москвы · v{{ app_version|default("dev") }}</p>
+</div>
+{% endblock %}

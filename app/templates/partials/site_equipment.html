@@ -1,0 +1,189 @@
+{#- Вкладка «Техника»: временные полоски моточасов, единицы и статусы, тепловая карта активности. -#}
+{%- import "partials/icons.html" as ic -%}
+<div class="grid gap-4">
+  {# ВРЕМЕННЫЕ ПОЛОСКИ #}
+  <section class="card" aria-labelledby="hours-h">
+    <div class="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
+      <div>
+        <h2 id="hours-h" class="card-title">Моточасы по типам техники<span class="font-normal text-fg-3" x-show="hoursStage" x-text="' · ' + (hoursStageSel === 'now' ? 'идёт ' : '') + '«' + (hoursStage ? hoursStage.name : '') + '»'"></span></h2>
+        <p class="card-sub max-w-3xl">Полоска — план часов на этапе. Заливка — отработано: машина засчитывается, когда смещается или меняет позу между снимками. Риска — сколько должно быть отработано к <span x-text="isArchive ? 'дате последнего кадра' : 'сегодняшнему дню'"></span>.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="sr-only" for="hours-stage">Этап</label>
+        <select id="hours-stage" class="input h-8 w-auto max-w-[240px] py-0 text-xs" x-model="hoursStageSel">
+          <option value="now">Идущие по плану этапы</option>
+          <template x-for="st in hoursStages" :key="st.id"><option :value="String(st.id)" x-text="st.id + '. ' + st.name"></option></template>
+        </select>
+        <button class="btn btn-secondary btn-sm" @click="openFix(null)" title="Добавить или списать моточасы вручную">{{ ic.icon("plus-minus", "w-3.5 h-3.5") }} Поправить часы</button>
+        <button class="btn btn-ghost btn-sm" @click="select('plan')">{{ ic.icon("pencil") }} План часов</button>
+      </div>
+    </div>
+    <template x-if="hoursTotals.planned > 0">
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-line bg-panel-2 px-4 py-2.5 text-xs text-fg-3 sm:px-5">
+        <span>Всего по плану <b class="num text-fg" x-text="SV.fmt.hours(hoursTotals.planned)"></b></span>
+        <span>отработано <b class="num text-fg" x-text="SV.fmt.hours(hoursTotals.worked, 1)"></b></span>
+        <span>выработка <b class="num text-fg" x-text="SV.fmt.pct(hoursTotals.ratio, 1)"></b></span>
+        <span x-show="(corrections || []).length">ручных поправок <b class="num text-fg" x-text="(corrections || []).length"></b></span>
+      </div>
+    </template>
+    <ul class="divide-y divide-line">
+      <template x-for="r in hoursRows" :key="r.cls">
+        <li class="grid gap-x-5 gap-y-2 px-4 py-3.5 sm:px-5 md:grid-cols-[220px_1fr_210px] md:items-center" x-data="{ get h() { return hoursRow(r) } }">
+          <div class="flex min-w-0 items-center gap-2.5">
+            <span class="h-8 w-1 shrink-0 rounded-full" :style="'background:' + SV.palette.color(r.cls)"></span>
+            <div class="min-w-0">
+              <p class="truncate text-sm font-medium" x-text="r.name || SV.classNames[r.cls]"></p>
+              <p class="truncate text-2xs text-fg-3">
+                <span x-text="(r.units || 0) + ' ед. на площадке'"></span><template x-if="r.units"><span x-text="' · ' + [r.active ? r.active + ' раб.' : null, r.idle ? r.idle + ' стоит' : null, r.parked ? r.parked + ' на стоянке' : null].filter(Boolean).join(', ')"></span></template>
+              </p>
+            </div>
+          </div>
+          <div>
+            <div class="relative h-3 overflow-visible rounded-full bg-panel-3" role="img" :aria-label="`Отработано ${SV.fmt.hours(h.worked)} из ${SV.fmt.hours(h.planned)}`">
+              <div class="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500" :class="h.tone === 'neutral' ? 'bg-fg-3/35' : SV.toneBg[h.tone]" :style="`width:${h.fill}%`"></div>
+              <template x-if="h.over"><div class="hatch-bad absolute inset-y-0 rounded-r-full" :style="`left:${h.fill - h.over}%;width:${h.over}%`"></div></template>
+              <template x-if="h.mark != null && h.planned > 0"><span class="absolute -top-1 h-5 w-0.5 rounded bg-fg" :style="`left:calc(${h.mark}% - 1px)`" :title="'Ожидалось к сегодня: ' + SV.fmt.hours(h.expected)"></span></template>
+            </div>
+            <div class="mt-1.5 flex justify-between text-2xs text-fg-3">
+              <span><span class="num text-fg-2" x-text="SV.fmt.hours(h.worked)"></span> отработано<span x-show="h.planned > 0"> из <span class="num" x-text="SV.fmt.hours(h.planned)"></span></span></span>
+              <span x-show="h.planned > 0">осталось <span class="num text-fg-2" x-text="SV.fmt.hours(h.remaining)"></span></span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 md:flex-col md:items-end md:gap-1">
+            <span class="flex items-center gap-1.5"><button type="button" class="btn btn-ghost btn-icon !h-6 !w-6 text-fg-3 hover:text-fg" @click="openFix(r)" :title="'Поправить моточасы: ' + (r.name || SV.classNames[r.cls])" :aria-label="'Поправить моточасы: ' + (r.name || SV.classNames[r.cls])">{{ ic.icon("plus-minus", "w-3.5 h-3.5") }}</button>
+            <span class="badge" :class="SV.toneBadge[h.tone]"><span x-html="$icon(h.tone === 'good' ? 'check' : h.tone === 'bad' ? 'alert-octagon' : h.tone === 'warn' ? 'alert-triangle' : 'minus', 'w-3 h-3')"></span><span x-text="h.label"></span></span></span>
+            <span class="truncate text-2xs text-fg-3 md:text-right" x-text="h.note"></span>
+          </div>
+        </li>
+      </template>
+    </ul>
+    <p x-show="!hoursRows.length" class="px-5 py-10 text-center text-sm text-fg-3">Плановых часов нет: задайте парк техники и даты этапов на вкладке «План».</p>
+    {# ручные поправки: GET/DELETE /api/sites/{id}/hours #}
+    <template x-if="(corrections || []).length">
+      <div class="border-t border-line px-4 py-3 sm:px-5">
+        <p class="text-2xs font-medium uppercase tracking-[0.05em] text-fg-3">Ручные поправки</p>
+        <ul class="mt-2 flex flex-wrap gap-2">
+          <template x-for="c in corrections" :key="c.id">
+            <li class="inline-flex h-7 items-center gap-2 rounded-md border border-line bg-panel-2 pl-2 pr-1 text-xs">
+              <span class="dot !h-2 !w-2" :style="'background:' + SV.palette.color(c.cls)"></span>
+              <span x-text="c.name || SV.classNames[c.cls]"></span>
+              <b class="num" :class="c.hours < 0 ? 'text-bad-fg' : 'text-good-fg'" x-text="(c.hours > 0 ? '+' : '−') + SV.fmt.hours(Math.abs(c.hours), 1)"></b>
+              <span class="max-w-[180px] truncate text-fg-3" x-show="c.note" x-text="c.note" :title="c.note"></span>
+              <button type="button" class="grid h-5 w-5 place-items-center rounded text-fg-3 hover:bg-panel-3 hover:text-fg" @click="deleteFix(c)" aria-label="Удалить поправку">{{ ic.icon("x", "w-3 h-3") }}</button>
+            </li>
+          </template>
+        </ul>
+      </div>
+    </template>
+  </section>
+
+  {# модалка ручной поправки часов #}
+  <div x-show="fix" x-cloak x-transition.opacity class="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4" @click.self="fix = null" @keydown.escape.window="fix = null">
+    <template x-if="fix">
+      <form class="card w-full max-w-md p-5 shadow-pop" @submit.prevent="saveFix()" x-trap.noscroll="!!fix" role="dialog" aria-modal="true" aria-labelledby="fix-title">
+        <h2 id="fix-title" class="text-base font-semibold">Поправить моточасы</h2>
+        <p class="mt-1 text-sm text-fg-2">Если камера не видела работу (закрыта краном, ночная смена) — добавьте часы; если модель насчитала лишнее — спишите. Поправка попадёт в «полоску» и не сотрётся при переанализе.</p>
+        <div class="mt-4 grid gap-3">
+          <div>
+            <label class="label" for="fix-cls">Тип техники</label>
+            <select id="fix-cls" class="input" x-model="fix.cls" required>
+              <option value="" disabled>Выберите…</option>
+              <template x-for="c in fixClasses" :key="c.key"><option :value="c.key" x-text="c.name" :selected="c.key === fix.cls"></option></template>
+            </select>
+          </div>
+          <div class="grid grid-cols-[auto_1fr] items-end gap-3">
+            <div class="seg" role="group" aria-label="Добавить или списать">
+              <button type="button" :aria-pressed="fix.sign > 0" @click="fix.sign = 1">+ добавить</button>
+              <button type="button" :aria-pressed="fix.sign < 0" @click="fix.sign = -1">− списать</button>
+            </div>
+            <div><label class="label" for="fix-h">Часов</label><input id="fix-h" type="number" min="0.1" max="10000" step="0.1" class="input" x-model="fix.hours" required></div>
+          </div>
+          <div>
+            <label class="label" for="fix-stage">Этап</label>
+            <select id="fix-stage" class="input" x-model="fix.stage_id">
+              <option value="">Без этапа</option>
+              <template x-for="st in stages" :key="st.id"><option :value="st.id" x-text="st.id + '. ' + st.name" :selected="Number(fix.stage_id) === st.id"></option></template>
+            </select>
+          </div>
+          <div><label class="label" for="fix-note">Комментарий</label><input id="fix-note" class="input" x-model="fix.note" maxlength="500" placeholder="Напр.: ночная смена, камера не видит котлован"></div>
+        </div>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" class="btn btn-ghost" @click="fix = null">Отмена</button>
+          <button class="btn btn-primary" :disabled="fix.busy || !fix.cls" x-text="fix.busy ? 'Сохраняем…' : 'Сохранить'"></button>
+        </div>
+      </form>
+    </template>
+  </div>
+
+  <div class="grid gap-4 xl:grid-cols-12">
+    {# единицы #}
+    <section class="card xl:col-span-7" aria-labelledby="units-h">
+      <div class="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+        <div>
+          <h2 id="units-h" class="card-title">Единицы техники</h2>
+          <p class="card-sub">Одна машина на разных камерах считается один раз (привязка к плану площадки).</p>
+        </div>
+        <div class="seg overflow-x-auto" role="tablist" aria-label="Фильтр по статусу">
+          <template x-for="k in ['all', 'active', 'idle', 'parked', 'departed']" :key="k">
+            <button type="button" role="tab" :aria-selected="unitFilter === k" @click="unitFilter = k" x-show="k === 'all' || unitCounts[k]">
+              <span x-text="k === 'all' ? 'Все' : SV.META.unit[k].label"></span><span class="num text-fg-3" x-text="unitCounts[k] || 0"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+      <template x-if="unitsError"><p class="px-5 py-8 text-center text-sm text-bad-fg" x-text="'Не загрузилось: ' + unitsError"></p></template>
+      <template x-if="!units && !unitsError">
+        <div class="space-y-3 p-5"><template x-for="i in 4"><div class="flex gap-3"><div class="skeleton h-[52px] w-[72px]"></div><div class="flex-1 space-y-2"><div class="skeleton h-3.5 w-1/3"></div><div class="skeleton h-3 w-1/2"></div></div></div></template></div>
+      </template>
+      <template x-if="units">
+        <ul class="mt-3 divide-y divide-line border-t border-line">
+          <template x-for="u in shownUnits" :key="u.id">
+            <li class="flex items-center gap-3 px-4 py-3 sm:px-5">
+              <button type="button" class="relative h-[52px] w-[72px] shrink-0 overflow-hidden rounded-md border border-line bg-panel-3 bg-no-repeat" :style="cropStyle(u)"
+                   :class="u.status === 'departed' && 'opacity-60 grayscale'" @click="openUnitFrame(u)" :disabled="!hasCrop(u)" :aria-label="'Последний снимок: ' + unitLabel(u)">
+                <template x-if="!hasCrop(u)"><span class="grid h-full place-items-center text-fg-3" x-html="$icon('truck', 'w-5 h-5')"></span></template>
+                <span class="absolute left-1 top-1 h-2 w-2 rounded-full ring-2 ring-black/40" :style="'background:' + SV.palette.color(u.cls)"></span>
+              </button>
+              <div class="min-w-0 flex-1">
+                <p class="flex items-center gap-2"><span class="truncate text-sm font-medium" x-text="unitLabel(u)"></span><span x-show="u.plate" class="num hidden rounded border border-line-strong px-1 text-[10px] leading-4 text-fg-2 sm:inline" x-text="u.plate"></span></p>
+                <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-fg-3">
+                  <span x-text="unitStatusLine(u)"></span>
+                  <template x-for="c in unitCams(u)" :key="c"><span class="inline-flex items-center gap-1"><span x-html="$icon('camera', 'w-3 h-3')"></span><span x-text="c"></span></span></template>
+                </p>
+              </div>
+              <div class="hidden text-right sm:block">
+                <p class="num text-sm" x-text="workedToday(u) == null ? '—' : SV.fmt.hours(workedToday(u), 1)"></p>
+                <p class="text-2xs text-fg-3" x-text="isArchive ? 'за последний день' : 'сегодня'"></p>
+              </div>
+              <div class="hidden w-20 text-right md:block">
+                <p class="num text-sm text-fg-2" x-text="SV.fmt.hours(u.worked_hours)"></p>
+                <p class="text-2xs text-fg-3">всего</p>
+              </div>
+              <span class="badge w-[92px] justify-center" :class="SV.toneBadge[unitMeta(u).tone]"><span x-html="$icon(unitMeta(u).icon, 'w-3 h-3')"></span><span x-text="unitMeta(u).label"></span></span>
+            </li>
+          </template>
+          <li x-show="!shownUnits.length" class="px-5 py-8 text-center text-sm text-fg-3">Техники с таким статусом нет.</li>
+        </ul>
+      </template>
+    </section>
+
+    {# тепловая карта #}
+    <section class="card xl:col-span-5" aria-labelledby="heat-h">
+      <div class="px-4 pt-4 sm:px-5">
+        <h2 id="heat-h" class="card-title">Когда техника работает</h2>
+        <p class="card-sub">Машино-часы по часам суток за 14 дней<span x-show="isArchive"> до последнего кадра</span>. Пустые ночи и выходные видны сразу.</p>
+      </div>
+      <div class="relative">
+        <div x-ref="heat" class="h-[360px] w-full px-2 pb-1"></div>
+        <template x-if="heat && !heat.total">
+          <p class="absolute inset-x-6 top-1/2 -translate-y-1/2 rounded-lg border border-line bg-panel/90 p-3 text-center text-xs text-fg-2 backdrop-blur">За эти 14 дней работа техники не зафиксирована: на снимках нет движения или кадры идут реже раза в сутки.</p>
+        </template>
+      </div>
+      <div class="flex items-center justify-end gap-2 px-5 pb-4 text-2xs text-fg-3">
+        <span>меньше</span>
+        <span class="flex overflow-hidden rounded"><template x-for="i in [0,1,2,3,4,5]"><span class="h-2.5 w-5" :style="`background:rgb(var(--seq-${i}))`"></span></template></span>
+        <span>больше</span>
+      </div>
+    </section>
+  </div>
+</div>

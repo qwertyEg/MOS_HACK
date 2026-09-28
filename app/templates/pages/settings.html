@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% import "partials/icons.html" as ic %}
+{% block title %}Настройки{% endblock %}
+{% block content %}
+<div x-data="settingsPage" x-cloak class="mx-auto max-w-5xl">
+  <h1 class="text-[26px] font-semibold leading-8 tracking-[-0.025em]">Настройки</h1>
+  <p class="mt-1 text-sm text-fg-2">Где работают модели, с какими порогами и какую технику они знают.</p>
+
+  <template x-if="app.settingsError">
+    <div class="card empty mt-6"><p class="text-sm text-bad-fg" x-text="'Настройки не загрузились: ' + app.settingsError"></p><button class="btn btn-secondary btn-sm" @click="app.loadSettings()">Повторить</button></div>
+  </template>
+  <template x-if="!settings && !app.settingsError">
+    <div class="mt-6 space-y-4"><div class="skeleton h-40"></div><div class="skeleton h-64"></div></div>
+  </template>
+
+  <template x-if="settings">
+    <div class="mt-6 space-y-6">
+      {# режим #}
+      <section aria-labelledby="mode-h">
+        <h2 id="mode-h" class="card-title">Где работают модели</h2>
+        <p class="card-sub">Результаты хранятся с именем провайдера: смена режима не стирает старые, «Переанализировать» на объекте пересчитает их.</p>
+        <div class="mt-3 grid gap-3 md:grid-cols-3" role="radiogroup">
+          <template x-for="m in ['local', 'external', 'hybrid']" :key="m">
+            <button type="button" role="radio" :aria-checked="settings.mode === m" @click="settings.mode !== m && app.setMode(m)"
+                    class="card relative p-4 text-left transition-colors hover:border-line-strong" :class="settings.mode === m && '!border-fg ring-1 ring-fg'">
+              <div class="flex items-center gap-2.5">
+                <span class="grid h-8 w-8 place-items-center rounded-lg bg-panel-3 text-fg-2" x-html="$icon(SV.META.modes[m].icon)"></span>
+                <p class="font-semibold" x-text="SV.META.modes[m].label"></p>
+                <span class="ml-auto grid h-4 w-4 place-items-center rounded-full border" :class="settings.mode === m ? 'border-fg bg-fg text-bg' : 'border-line-strong'"><span x-show="settings.mode === m" x-html="$icon('check', 'w-2.5 h-2.5')"></span></span>
+              </div>
+              <p class="mt-2 text-xs text-fg-2" x-text="SV.META.modes[m].desc"></p>
+              <p class="mt-3 flex items-start gap-1.5 text-2xs" :class="app.modeReady(m).ready === false ? 'text-warn-fg' : app.modeReady(m).ready ? 'text-good-fg' : 'text-fg-3'">
+                <span class="dot mt-1 !h-1.5 !w-1.5" :class="app.modeReady(m).ready === false ? 'bg-warn' : app.modeReady(m).ready ? 'bg-good' : 'bg-fg-3'"></span>
+                <span x-text="app.modeReady(m).ready === false ? app.modeReady(m).reason : app.modeReady(m).ready ? 'Готов к работе' : 'Проверяем готовность…'"></span>
+              </p>
+            </button>
+          </template>
+        </div>
+        <details class="group mt-3 rounded-xl border border-line bg-panel">
+          <summary class="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium">{{ ic.icon("sliders", "w-4 h-4 text-fg-3") }} Выбрать модели по отдельности <span class="ml-auto text-fg-3 transition-transform group-open:rotate-90">{{ ic.icon("chevron-right", "w-4 h-4") }}</span></summary>
+          <div class="grid gap-4 border-t border-line p-4 sm:grid-cols-2">
+            <div><label class="label" for="ma">Модель А — техника</label>
+              <select id="ma" class="input" :value="settings.model_a" @change="setModel('model_a', $event.target.value)"><option value="yolo">YOLO (локально)</option><option value="glm">GLM-4.6V (внешний API)</option></select></div>
+            <div><label class="label" for="mb">Модель Б — этап</label>
+              <select id="mb" class="input" :value="settings.model_b" @change="setModel('model_b', $event.target.value)"><option value="siglip">SigLIP (локально)</option><option value="local_vlm">Локальная VLM (Ollama / vLLM)</option><option value="glm">GLM-4.6V (внешний API)</option></select></div>
+          </div>
+        </details>
+      </section>
+
+      {# провайдеры #}
+      <section class="card overflow-hidden" aria-labelledby="prov-h">
+        <div class="flex items-center justify-between px-4 pt-4 sm:px-5">
+          <div><h2 id="prov-h" class="card-title">Готовность провайдеров</h2><p class="card-sub">Проверяется сама раз в полминуты: появился ключ ZAI_API_KEY, поднялась локальная VLM — статус обновится.</p></div>
+          <button class="btn btn-ghost btn-sm" @click="app.loadHealth()">{{ ic.icon("refresh") }} Проверить</button>
+        </div>
+        <ul class="mt-3 divide-y divide-line border-t border-line">
+          <template x-for="p in providers" :key="p.key">
+            <li class="flex items-center gap-3 px-4 py-3 sm:px-5">
+              <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-panel-3 text-fg-2" x-html="$icon(p.kind === 'local' ? 'cpu' : 'cloud')"></span>
+              <div class="min-w-0 flex-1"><p class="text-sm font-medium" x-text="p.label"></p><p class="text-2xs text-fg-3" x-text="p.what"></p></div>
+              <p class="hidden max-w-[45%] truncate text-right text-xs text-fg-3 sm:block" x-text="p.ready ? '' : p.reason" :title="p.reason"></p>
+              <span class="badge" :class="p.ready ? 'badge-good' : p.ready === false ? 'badge-warn' : 'badge-neutral'" x-text="p.ready ? 'готов' : p.ready === false ? 'не готов' : '—'"></span>
+            </li>
+          </template>
+        </ul>
+      </section>
+
+      {# пороги #}
+      <section class="card" aria-labelledby="th-h">
+        <div class="px-4 pt-4 sm:px-5"><h2 id="th-h" class="card-title">Пороги</h2><p class="card-sub">Меняют поведение моделей и правил. У каждого — объяснение, что будет, если сдвинуть.</p></div>
+        <div class="mt-3 divide-y divide-line border-t border-line" x-show="th">
+          <template x-for="g in SECTIONS" :key="g.key">
+            <div class="grid gap-4 px-4 py-4 sm:px-5 md:grid-cols-[180px_1fr]" x-show="fieldsOf(g.key).length">
+              <p class="text-sm font-medium text-fg-2" x-text="g.title"></p>
+              <div class="grid gap-5 sm:grid-cols-2">
+                <template x-for="f in fieldsOf(g.key)" :key="f.g + '.' + f.key">
+                  <div :class="f.kind === 'select' && 'sm:col-span-2'">
+                    <div class="flex items-baseline justify-between gap-2"><label class="label !mb-1" :for="'th-' + f.key" x-text="f.label"></label><span class="num text-sm text-fg" x-text="show(f)"></span></div>
+                    <template x-if="f.kind === 'range'"><input :id="'th-' + f.key" type="range" class="w-full accent-[rgb(var(--info))]" :min="f.min" :max="f.max" :step="f.step" x-model.number="th[f.g][f.key]"></template>
+                    <template x-if="f.kind === 'num'"><input :id="'th-' + f.key" type="number" class="input num w-32" :min="f.min" :max="f.max" :step="f.step" x-model.number="th[f.g][f.key]"></template>
+                    <template x-if="f.kind === 'select'"><select :id="'th-' + f.key" class="input" x-model="th[f.g][f.key]"><template x-for="o in f.options" :key="o[0]"><option :value="o[0]" x-text="o[1]" :selected="th[f.g][f.key] === o[0]"></option></template></select></template>
+                    <p class="hint leading-4" x-text="f.hint"></p>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+          <template x-if="advanced.length">
+            <details class="group px-4 py-3 sm:px-5">
+              <summary class="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-fg-2">{{ ic.icon("sliders", "w-4 h-4 text-fg-3") }}Все параметры модели А <span class="num text-fg-3" x-text="advanced.length"></span><span class="ml-auto text-fg-3 transition-transform group-open:rotate-90">{{ ic.icon("chevron-right", "w-4 h-4") }}</span></summary>
+              <p class="mt-2 text-xs text-fg-3">Трекинг, слияние камер, «работает/стоит», моточасы (core.equipment.EquipmentConfig). Меняйте, только понимая, что делаете.</p>
+              <div class="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-4"><template x-for="k in advanced" :key="k"><div><label class="label num !text-2xs" :for="'th-' + k" x-text="k"></label><input :id="'th-' + k" type="number" step="any" class="input input-sm num" x-model.number="th.equipment[k]"></div></template></div>
+            </details>
+          </template>
+        </div>
+        <div class="flex items-center gap-2 border-t border-line px-4 py-3 sm:px-5">
+          <p class="flex-1 text-xs" :class="thError ? 'text-bad-fg' : 'text-fg-3'" x-text="thError || (dirty ? 'Есть несохранённые изменения' : 'Изменений нет')"></p>
+          <button type="button" class="btn btn-ghost btn-sm" @click="revert()" :disabled="!dirty">Отменить</button>
+          <button type="button" class="btn btn-primary btn-sm" @click="saveTh()" :disabled="!dirty || saving || !!thError">Сохранить пороги</button>
+        </div>
+      </section>
+
+      {# классы #}
+      <section class="card" aria-labelledby="cls-h">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+          <div><h2 id="cls-h" class="card-title">Классы техники</h2>
+            <p class="card-sub" x-text="'Модель А (' + ((SV.META.providers[settings.model_a] || {}).label || settings.model_a) + ') знает ' + classCounts.supported + ' из ' + classCounts.all + '; обязательные по ТЗ — ' + classCounts.tzSupported + ' из ' + classCounts.tz + '. Цвет класса един для рамок и графиков.'"></p>
+            <p class="mt-1 flex items-start gap-1.5 text-xs text-warn-fg" x-show="missingTz.length"><span class="mt-px" x-html="$icon('alert-triangle', 'w-3.5 h-3.5')"></span><span x-text="'Не распознаются локально: ' + missingTz.map(c => c.name.toLowerCase()).join(', ') + ' — их видит внешний API (GLM-4.6V).'"></span></p></div>
+          <div class="seg">
+            <button type="button" :aria-pressed="classFilter === 'all'" @click="classFilter = 'all'">Все<span class="num text-fg-3" x-text="classCounts.all"></span></button>
+            <button type="button" :aria-pressed="classFilter === 'tz'" @click="classFilter = 'tz'">По ТЗ<span class="num text-fg-3" x-text="classCounts.tz"></span></button>
+            <button type="button" :aria-pressed="classFilter === 'supported'" @click="classFilter = 'supported'">Распознаются<span class="num text-fg-3" x-text="classCounts.supported"></span></button>
+          </div>
+        </div>
+        <ul class="mt-3 grid gap-px border-t border-line bg-line sm:grid-cols-2 lg:grid-cols-3">
+          <template x-for="c in classes" :key="c.key">
+            <li class="flex items-center gap-3 bg-panel px-4 py-2.5">
+              <span class="h-7 w-7 shrink-0 rounded-md border-2" :style="`border-color:${SV.palette.color(c.key)};background:${SV.palette.color(c.key)}22`"></span>
+              <div class="min-w-0 flex-1"><p class="truncate text-sm" x-text="c.name"></p><p class="num truncate text-2xs text-fg-3" x-text="c.key"></p></div>
+              <span x-show="c.tz" class="badge badge-info" title="Обязателен по ТЗ (раздел 6)">ТЗ</span>
+              <span class="shrink-0" :class="c.supported ? 'text-good-fg' : 'text-fg-3'" :title="c.supported ? 'Детектор распознаёт' : 'Детектор пока не знает — только внешний API'" x-html="$icon(c.supported ? 'check-circle' : 'minus', 'w-4 h-4')"></span>
+            </li>
+          </template>
+        </ul>
+      </section>
+    </div>
+  </template>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/settings.js?v={{ app_version|default('dev') }}" defer></script>{% endblock %}

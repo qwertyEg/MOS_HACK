@@ -1,0 +1,23 @@
+[
+ {
+  "id": 1,
+  "camera_id": 1,
+  "captured_at": "2015-04-20T05:01:03+00:00",
+  "url": "/media/frames/1/2015/04/20/050103_d07f2f8bbd_p.jpg",
+  "full_url": "/media/frames/1/2015/04/20/050103_d07f2f8bbd.jpg",
+  "annotated_url": "/api/frames/1/annotated.jpg",
+  "width": 1280,
+  "height": 720,
+  "is_night": false,
+  "weather": "snow",
+  "quality_ok": true,
+  "reject_reason": "",
+  "stage_used": true,
+  "processed_a": true,
+  "processed_b": true,
+  "status": "done",
+  "note": "",
+  "detections_count": 2,
+  "ts_source": "имя файла"
+ }
+]

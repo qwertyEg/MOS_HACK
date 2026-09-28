@@ -1,0 +1,594 @@
+{
+ "unit": {
+  "id": 41,
+  "uid": "u0006",
+  "site_id": 5,
+  "cls": "dump_truck",
+  "name": "Самосвал",
+  "label": "Самосвал №1",
+  "status": "active",
+  "first_seen": "2020-06-08T05:39:26+00:00",
+  "last_seen": "2020-06-09T15:23:09+00:00",
+  "last_moved": "2020-06-09T15:23:09+00:00",
+  "worked_hours": 6.3,
+  "cameras": [
+   "7"
+  ],
+  "plate": null,
+  "site_xy": null
+ },
+ "intervals": [
+  {
+   "id": 80,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-08T06:04:05+00:00",
+   "end": "2020-06-08T06:28:18+00:00",
+   "hours": 0.404,
+   "frame_ids": [
+    83,
+    89
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 81,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-08T07:16:44+00:00",
+   "end": "2020-06-08T08:01:44+00:00",
+   "hours": 0.75,
+   "frame_ids": [
+    89,
+    133
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 95,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-08T08:01:44+00:00",
+   "end": "2020-06-08T08:26:23+00:00",
+   "hours": 0.411,
+   "frame_ids": [
+    133,
+    139
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 109,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-08T09:07:20+00:00",
+   "end": "2020-06-08T09:52:20+00:00",
+   "hours": 0.75,
+   "frame_ids": [
+    139,
+    160
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 225,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-09T06:37:23+00:00",
+   "end": "2020-06-09T07:07:13+00:00",
+   "hours": 0.497,
+   "frame_ids": [
+    293,
+    300
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 226,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-09T07:07:13+00:00",
+   "end": "2020-06-09T07:27:58+00:00",
+   "hours": 0.346,
+   "frame_ids": [
+    300,
+    306
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 228,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-09T07:27:58+00:00",
+   "end": "2020-06-09T07:57:21+00:00",
+   "hours": 0.49,
+   "frame_ids": [
+    306,
+    312
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 232,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-09T08:00:16+00:00",
+   "end": "2020-06-09T08:45:16+00:00",
+   "hours": 0.75,
+   "frame_ids": [
+    312,
+    323
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 253,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-09T12:59:15+00:00",
+   "end": "2020-06-09T13:19:03+00:00",
+   "hours": 0.33,
+   "frame_ids": [
+    381,
+    386
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 254,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-09T13:19:03+00:00",
+   "end": "2020-06-09T13:44:50+00:00",
+   "hours": 0.43,
+   "frame_ids": [
+    386,
+    390
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 255,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-09T14:14:20+00:00",
+   "end": "2020-06-09T14:59:20+00:00",
+   "hours": 0.75,
+   "frame_ids": [
+    390,
+    401
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 257,
+   "unit_id": 41,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "stage_id": 8,
+   "start": "2020-06-09T14:59:20+00:00",
+   "end": "2020-06-09T15:23:09+00:00",
+   "hours": 0.397,
+   "frame_ids": [
+    401,
+    407
+   ],
+   "manual": false,
+   "note": ""
+  }
+ ],
+ "detections": [
+  {
+   "frame_id": 407,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T15:23:09+00:00",
+   "bbox": [
+    970.3921508789062,
+    548.5736083984375,
+    97.18011474609375,
+    74.76165771484375
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 19.370254236192768,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/152309_39001424a1_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/152309_39001424a1.jpg",
+   "annotated_url": "/api/frames/407/annotated.jpg"
+  },
+  {
+   "frame_id": 401,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T14:59:20+00:00",
+   "bbox": [
+    910.2243041992188,
+    552.0012817382812,
+    249.96246337890625,
+    89.07330322265625
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 43.18264190530821,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/145920_96296ea50f_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/145920_96296ea50f.jpg",
+   "annotated_url": "/api/frames/401/annotated.jpg"
+  },
+  {
+   "frame_id": 390,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T13:44:50+00:00",
+   "bbox": [
+    956.0593872070312,
+    552.7001953125,
+    78.17718505859375,
+    55.418212890625
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 2.788317603532856,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/134450_68e7dac547_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/134450_68e7dac547.jpg",
+   "annotated_url": "/api/frames/390/annotated.jpg"
+  },
+  {
+   "frame_id": 386,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T13:19:03+00:00",
+   "bbox": [
+    956.0814819335938,
+    551.3134155273438,
+    72.12213134765625,
+    57.7890625
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 297.56397010208127,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/131903_2dbfc43245_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/131903_2dbfc43245.jpg",
+   "annotated_url": "/api/frames/386/annotated.jpg"
+  },
+  {
+   "frame_id": 381,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T12:59:15+00:00",
+   "bbox": [
+    1203.9522705078125,
+    553.3782958984375,
+    171.466064453125,
+    60.76568603515625
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/125915_8d834a3968_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/125915_8d834a3968.jpg",
+   "annotated_url": "/api/frames/381/annotated.jpg"
+  },
+  {
+   "frame_id": 323,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T08:45:16+00:00",
+   "bbox": [
+    1255.031005859375,
+    558.88427734375,
+    104.5955810546875,
+    51.27178955078125
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 8.69145567732983,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/084516_97a6f3212a_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/084516_97a6f3212a.jpg",
+   "annotated_url": "/api/frames/323/annotated.jpg"
+  },
+  {
+   "frame_id": 312,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T07:57:21+00:00",
+   "bbox": [
+    1253.38671875,
+    559.2828369140625,
+    79.5625,
+    50.00775146484375
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 39.81403998929054,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/075721_bfa5404248_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/075721_bfa5404248.jpg",
+   "annotated_url": "/api/frames/312/annotated.jpg"
+  },
+  {
+   "frame_id": 306,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T07:27:58+00:00",
+   "bbox": [
+    1203.62841796875,
+    553.0921630859375,
+    97.1273193359375,
+    52.2279052734375
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 8.025083669511977,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/072758_ca7bea5953_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/072758_ca7bea5953.jpg",
+   "annotated_url": "/api/frames/306/annotated.jpg"
+  },
+  {
+   "frame_id": 300,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T07:07:13+00:00",
+   "bbox": [
+    1204.0294189453125,
+    555.3522338867188,
+    80.535888671875,
+    50.58905029296875
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 9.945503761225279,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/070713_edcf5004b2_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/070713_edcf5004b2.jpg",
+   "annotated_url": "/api/frames/300/annotated.jpg"
+  },
+  {
+   "frame_id": 293,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T06:37:23+00:00",
+   "bbox": [
+    1207.697265625,
+    556.4632568359375,
+    92.623291015625,
+    52.656005859375
+   ],
+   "activity": "idle",
+   "moved": false,
+   "displacement_px": 10.610735267586207,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/063723_d5c0d6ba68_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/063723_d5c0d6ba68.jpg",
+   "annotated_url": "/api/frames/293/annotated.jpg"
+  },
+  {
+   "frame_id": 288,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T06:17:38+00:00",
+   "bbox": [
+    1204.6263427734375,
+    555.4080200195312,
+    77.913330078125,
+    50.82275390625
+   ],
+   "activity": "idle",
+   "moved": false,
+   "displacement_px": 1.8276544866123712,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/061738_9fd6fe8c1f_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/061738_9fd6fe8c1f.jpg",
+   "annotated_url": "/api/frames/288/annotated.jpg"
+  },
+  {
+   "frame_id": 285,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T05:52:37+00:00",
+   "bbox": [
+    1204.8968505859375,
+    554.5004272460938,
+    74.4105224609375,
+    50.4957275390625
+   ],
+   "activity": "idle",
+   "moved": false,
+   "displacement_px": 0.23929059524154841,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/055237_a97acb0dff_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/055237_a97acb0dff.jpg",
+   "annotated_url": "/api/frames/285/annotated.jpg"
+  },
+  {
+   "frame_id": 276,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T05:27:04+00:00",
+   "bbox": [
+    1204.0438232421875,
+    553.7989501953125,
+    75.845947265625,
+    52.29339599609375
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 83.60743240338896,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/052704_111edc27a2_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/052704_111edc27a2.jpg",
+   "annotated_url": "/api/frames/276/annotated.jpg"
+  },
+  {
+   "frame_id": 273,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T05:02:31+00:00",
+   "bbox": [
+    1061.6832275390625,
+    551.8417358398438,
+    195.438720703125,
+    68.86993408203125
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/050231_cc8869988c_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/050231_cc8869988c.jpg",
+   "annotated_url": "/api/frames/273/annotated.jpg"
+  },
+  {
+   "frame_id": 260,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T14:52:46+00:00",
+   "bbox": [
+    1050.9871826171875,
+    547.5867309570312,
+    137.8302001953125,
+    75.00750732421875
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/145246_c1385bff96_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/145246_c1385bff96.jpg",
+   "annotated_url": "/api/frames/260/annotated.jpg"
+  },
+  {
+   "frame_id": 160,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T09:52:20+00:00",
+   "bbox": [
+    663.979736328125,
+    550.462890625,
+    88.47015380859375,
+    70.79071044921875
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 49.73028358266318,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/095220_25f001e31d_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/095220_25f001e31d.jpg",
+   "annotated_url": "/api/frames/160/annotated.jpg"
+  },
+  {
+   "frame_id": 139,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T08:26:23+00:00",
+   "bbox": [
+    705.5579223632812,
+    552.1619873046875,
+    105.94287109375,
+    68.43231201171875
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 612.2181594165293,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/082623_ae6890326e_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/082623_ae6890326e.jpg",
+   "annotated_url": "/api/frames/139/annotated.jpg"
+  },
+  {
+   "frame_id": 133,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T08:01:44+00:00",
+   "bbox": [
+    1284.5308837890625,
+    546.5368041992188,
+    172.4163818359375,
+    73.2523193359375
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 149.2356220241213,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/080144_9bb751daf4_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/080144_9bb751daf4.jpg",
+   "annotated_url": "/api/frames/133/annotated.jpg"
+  },
+  {
+   "frame_id": 89,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T06:28:18+00:00",
+   "bbox": [
+    1138.17626953125,
+    549.6569213867188,
+    166.689453125,
+    71.5885009765625
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 1.8581136554448048,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/062818_3f22d2f1a3_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/062818_3f22d2f1a3.jpg",
+   "annotated_url": "/api/frames/89/annotated.jpg"
+  },
+  {
+   "frame_id": 83,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T06:04:05+00:00",
+   "bbox": [
+    1137.4053955078125,
+    547.5299682617188,
+    170.293212890625,
+    72.750732421875
+   ],
+   "activity": "idle",
+   "moved": false,
+   "displacement_px": 0.3871010441345996,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/060405_0291c9dc56_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/060405_0291c9dc56.jpg",
+   "annotated_url": "/api/frames/83/annotated.jpg"
+  },
+  {
+   "frame_id": 77,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T05:39:26+00:00",
+   "bbox": [
+    1137.9830322265625,
+    549.9032592773438,
+    170.558837890625,
+    70.48455810546875
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/053926_2dbe6b72ea_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/053926_2dbe6b72ea.jpg",
+   "annotated_url": "/api/frames/77/annotated.jpg"
+  }
+ ]
+}

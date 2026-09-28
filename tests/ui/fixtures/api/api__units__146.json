@@ -1,0 +1,41 @@
+{
+ "unit": {
+  "id": 146,
+  "uid": "u0011",
+  "site_id": 5,
+  "cls": "wheel_loader",
+  "name": "Фронтальный погрузчик",
+  "label": "Фронтальный погрузчик №5",
+  "status": "idle",
+  "first_seen": "2020-06-09T13:44:50+00:00",
+  "last_seen": "2020-06-09T13:44:50+00:00",
+  "last_moved": null,
+  "worked_hours": 0.0,
+  "cameras": [
+   "7"
+  ],
+  "plate": null,
+  "site_xy": null
+ },
+ "intervals": [],
+ "detections": [
+  {
+   "frame_id": 390,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T13:44:50+00:00",
+   "bbox": [
+    811.3180541992188,
+    538.5375366210938,
+    100.89324951171875,
+    75.3692626953125
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/134450_68e7dac547_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/134450_68e7dac547.jpg",
+   "annotated_url": "/api/frames/390/annotated.jpg"
+  }
+ ]
+}

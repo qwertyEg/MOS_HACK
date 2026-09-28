@@ -1,0 +1,58 @@
+{#- Вкладка «Камеры»: сетка последних кадров с рамками. -#}
+{%- import "partials/icons.html" as ic -%}
+<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+  <template x-for="c in (ov.cameras || [])" :key="c.id">
+    <section class="card overflow-hidden">
+      <a :href="'/cameras/' + c.id" class="block" :aria-label="'Открыть ' + c.name">
+        <template x-if="camFrames[c.id] && !camFrames[c.id].error">
+          <div class="viewer">
+            <img :src="camFrames[c.id].url" alt="" :width="camFrames[c.id].width" :height="camFrames[c.id].height">
+            <svg :view-box.camel="`0 0 ${camFrames[c.id].width} ${camFrames[c.id].height}`" preserveAspectRatio="none" x-html="camSvg(c)"></svg>
+            <div class="viewer-layer pointer-events-none"><template x-for="l in camLabels(c)" :key="l.i"><span class="box-label" :style="l.style" x-text="l.text"></span></template></div>
+          </div>
+        </template>
+        <template x-if="!camFrames[c.id] && c.last_frame"><div class="skeleton aspect-[5/4] rounded-none"></div></template>
+        <template x-if="!c.last_frame || (camFrames[c.id] && camFrames[c.id].error)">
+          <div class="grid aspect-[5/4] place-items-center bg-panel-3 text-fg-3"><div class="flex flex-col items-center gap-2 text-sm">{{ ic.icon("camera", "w-6 h-6") }}<span x-text="camFrames[c.id] && camFrames[c.id].error ? 'Кадр не загрузился' : 'Кадров пока нет'"></span></div></div>
+        </template>
+      </a>
+      <div class="flex items-center gap-3 px-4 py-3">
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-semibold" x-text="c.name"></p>
+          <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs text-fg-3">
+            <span x-text="c.last_frame ? 'кадр ' + (isArchive ? SV.fmt.dateTime(c.last_frame.captured_at) : SV.fmt.rel(c.last_frame.captured_at)) : 'нет кадров'"></span>
+            <span x-show="camInfo(c).frames_total" x-text="'· ' + camInfo(c).frames_total + ' ' + SV.fmt.plural(camInfo(c).frames_total || 0, 'кадр', 'кадра', 'кадров')"></span>
+            <span x-show="c.units_now != null" x-text="'· в кадре ' + c.units_now + ' ед.'"></span>
+            <span x-show="c.pending" class="text-info-fg" x-text="'· в анализе ' + c.pending"></span>
+          </p>
+        </div>
+        <span class="badge" :class="c.calibrated === false ? 'badge-warn' : 'badge-good'" :title="c.calibrated === false ? 'Без калибровки машины с разных камер не склеиваются — возможен двойной счёт' : 'Кадр привязан к плану площадки'"
+              x-text="c.calibrated === false ? 'нужна калибровка' : 'откалибрована'"></span>
+        <a :href="'/cameras/' + c.id" class="btn btn-secondary btn-sm">Открыть</a>
+      </div>
+    </section>
+  </template>
+
+  {# добавить камеру #}
+  <button type="button" class="dropzone min-h-[220px] hover:border-fg-3" @click="newCam.open = true">
+    <span class="empty-icon">{{ ic.icon("plus") }}</span>
+    <span class="text-sm font-medium">Добавить камеру</span>
+    <span class="max-w-xs text-xs text-fg-3">Поток по ключу камеры или загрузка снимков, архивов и видео вручную.</span>
+  </button>
+
+  <div x-show="newCam.open" x-transition.opacity class="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4" @click.self="newCam.open = false" @keydown.escape.window="newCam.open = false">
+    <form class="card w-full max-w-md p-5 shadow-pop" @submit.prevent="createCamera()" x-trap.noscroll="newCam.open" role="dialog" aria-modal="true" aria-labelledby="nc-title">
+      <h2 id="nc-title" class="text-base font-semibold">Новая камера</h2>
+      <div class="mt-4 space-y-3">
+        <div><label class="label" for="nc-name">Название</label><input id="nc-name" class="input" x-model="newCam.name" required placeholder="Камера 3 · Юг"></div>
+        <div>
+          <span class="label">Как приходят кадры</span>
+          <div class="seg w-full"><button type="button" class="flex-1 justify-center" :aria-pressed="newCam.kind === 'upload'" @click="newCam.kind = 'upload'">Загрузка вручную</button><button type="button" class="flex-1 justify-center" :aria-pressed="newCam.kind === 'stream'" @click="newCam.kind = 'stream'">Поток с камеры</button></div>
+          <p class="hint" x-text="newCam.kind === 'stream' ? 'Камера шлёт кадры на /api/ingest с ключом X-Camera-Key — ключ появится после создания.' : 'Фото, zip-архивы или видео с разбивкой на кадры.'"></p>
+        </div>
+        <div><label class="label" for="nc-int">Интервал съёмки, мин</label><input id="nc-int" type="number" min="1" max="720" class="input w-32" x-model="newCam.interval_min"></div>
+      </div>
+      <div class="mt-5 flex justify-end gap-2"><button type="button" class="btn btn-ghost" @click="newCam.open = false">Отмена</button><button class="btn btn-primary" :disabled="!newCam.name.trim() || newCam.busy">Создать</button></div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,23 @@
+[
+ {
+  "id": 53,
+  "camera_id": 7,
+  "captured_at": "2020-06-08T04:31:00+00:00",
+  "url": "/media/frames/7/2020/06/08/043100_603ee3f4e3_p.jpg",
+  "full_url": "/media/frames/7/2020/06/08/043100_603ee3f4e3.jpg",
+  "annotated_url": "/api/frames/53/annotated.jpg",
+  "width": 1600,
+  "height": 900,
+  "is_night": false,
+  "weather": "clear",
+  "quality_ok": true,
+  "reject_reason": "",
+  "stage_used": true,
+  "processed_a": true,
+  "processed_b": true,
+  "status": "done",
+  "note": "",
+  "detections_count": 2,
+  "ts_source": "имя файла"
+ }
+]

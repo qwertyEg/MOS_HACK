@@ -1,0 +1,106 @@
+[
+ {
+  "stage_id": 1,
+  "name": "Подготовка территории",
+  "work_codes": [
+   "10.2.",
+   "10.3.",
+   "10.4.",
+   "10.5.",
+   "10.6.",
+   "10.8."
+  ],
+  "planned_start": "2015-03-01",
+  "planned_end": "2015-03-30",
+  "equipment": {
+   "excavator": 1,
+   "dump_truck": 2,
+   "bulldozer": 1,
+   "crane_manipulator": 1
+  },
+  "planned_hours": {
+   "excavator": 175.0,
+   "dump_truck": 350.0,
+   "bulldozer": 175.0,
+   "crane_manipulator": 175.0
+  },
+  "hours_manual": false,
+  "id": 1,
+  "source": "demo"
+ },
+ {
+  "stage_id": 2,
+  "name": "Ограждение котлована, шпунт, сваи",
+  "work_codes": [
+   "12.3.5.",
+   "12.3.6."
+  ],
+  "planned_start": "2015-03-21",
+  "planned_end": "2015-05-04",
+  "equipment": {
+   "drilling_rig": 1,
+   "crawler_crane": 1,
+   "concrete_mixer": 2,
+   "excavator": 1
+  },
+  "planned_hours": {
+   "drilling_rig": 266.0,
+   "crawler_crane": 266.0,
+   "concrete_mixer": 532.0,
+   "excavator": 266.0
+  },
+  "hours_manual": false,
+  "id": 2,
+  "source": "demo"
+ },
+ {
+  "stage_id": 3,
+  "name": "Земляные работы, котлован",
+  "work_codes": [
+   "12.3.1.",
+   "12.3.7."
+  ],
+  "planned_start": "2015-04-15",
+  "planned_end": "2015-05-29",
+  "equipment": {
+   "excavator": 2,
+   "dump_truck": 4,
+   "bulldozer": 1
+  },
+  "planned_hours": {
+   "excavator": 546.0,
+   "dump_truck": 1092.0,
+   "bulldozer": 273.0
+  },
+  "hours_manual": false,
+  "id": 3,
+  "source": "demo"
+ },
+ {
+  "stage_id": 4,
+  "name": "Монолит подземной части",
+  "work_codes": [
+   "12.3.4.",
+   "12.3.9.",
+   "12.3.10.",
+   "12.3.11."
+  ],
+  "planned_start": "2015-05-20",
+  "planned_end": "2015-08-02",
+  "equipment": {
+   "tower_crane": 1,
+   "concrete_pump": 1,
+   "concrete_mixer": 3,
+   "truck": 1
+  },
+  "planned_hours": {
+   "tower_crane": 448.0,
+   "concrete_pump": 448.0,
+   "concrete_mixer": 1344.0,
+   "truck": 448.0
+  },
+  "hours_manual": false,
+  "id": 4,
+  "source": "demo"
+ }
+]

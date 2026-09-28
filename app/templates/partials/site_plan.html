@@ -1,0 +1,248 @@
+{#- Вкладка «План»: редактор этапов/дат/кодов, парк техники, моточасы, ручные отметки, импорт. -#}
+{%- import "partials/icons.html" as ic -%}
+<div x-data="sitePlan(siteId)" class="relative" @dragover.prevent="dragOver = true" @dragleave.self="dragOver = false" @drop.prevent="onDrop($event)">
+  {# панель действий #}
+  <section class="card mb-4 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:p-5">
+    <div class="min-w-0 flex-1">
+      <h2 class="card-title flex items-center gap-2">Календарный план
+        <template x-if="plan && plan.length && planSource === 'demo'"><span class="badge badge-warn" title="План сгенерирован под даты кадров, это не график заказчика">демо-план</span></template>
+        <template x-if="plan && plan.length && planSource === 'import'"><span class="badge badge-info">из файла</span></template>
+      </h2>
+      <p class="card-sub">Этапы, даты и техника по графику. Из этого считаются плановые моточасы, отставание и прогноз. Шаблон: <a class="link" href="#" @click.prevent="downloadTemplate()">plan_template.csv</a>.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <label class="btn btn-secondary cursor-pointer" :class="importing && 'pointer-events-none opacity-50'">
+        <span x-show="!importing">{{ ic.icon("file-spreadsheet") }}</span><span x-show="importing" class="animate-spin">{{ ic.icon("loader") }}</span>
+        Импорт графика
+        <input type="file" accept=".xlsx,.xls,.csv" class="sr-only" @change="importFile($event.target.files[0]); $event.target.value = ''">
+      </label>
+      <button type="button" class="btn btn-secondary" @click="demo()" :disabled="importing" title="Подставить типовой план под даты загруженных кадров">{{ ic.icon("sparkles") }} Демо-план</button>
+    </div>
+  </section>
+
+  <div x-show="dragOver" class="dropzone is-over pointer-events-none absolute inset-0 z-20 !bg-bg/85 backdrop-blur-sm">
+    <span class="text-info-fg">{{ ic.icon("file-spreadsheet", "w-8 h-8") }}</span>
+    <p class="text-base font-semibold">Отпустите файл графика</p>
+    <p class="text-sm text-fg-3">.xlsx или .csv с кодами работ перечня (10.1., 12.3.1. …) и датами</p>
+  </div>
+
+  <template x-if="importInfo || warnings.length">
+    <div class="mb-4 rounded-xl border border-warn/30 bg-warn/[0.07] p-4">
+      <p class="flex items-center gap-2 text-sm font-medium text-fg">{{ ic.icon("info", "w-4 h-4 text-warn-fg") }}<span x-text="importInfo || 'Предупреждения разбора'"></span></p>
+      <ul class="mt-2 space-y-1 pl-6 text-sm text-fg-2" x-show="warnings.length">
+        <template x-for="w in warnings"><li class="list-disc" x-text="w"></li></template>
+      </ul>
+    </div>
+  </template>
+
+  <template x-if="loadError"><div class="card empty"><p class="text-sm text-bad-fg" x-text="'План не загрузился: ' + loadError"></p><button class="btn btn-secondary btn-sm" @click="loadPlan()">Повторить</button></div></template>
+  <template x-if="!plan && !loadError"><div class="card p-5"><div class="space-y-3"><template x-for="i in 5"><div class="skeleton h-9 w-full"></div></template></div></div></template>
+
+  <template x-if="plan">
+    <div class="grid gap-4">
+      {# этапы и сроки #}
+      <section class="card overflow-hidden" aria-labelledby="stages-h">
+        <div class="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div>
+            <h3 id="stages-h" class="card-title">Этапы и сроки</h3>
+            <p class="card-sub">Коды — из перечня работ организаторов (works_catalog.xlsx). Готовность можно отметить вручную: модель её не перезапишет.</p>
+          </div>
+          <template x-if="missingStages.length">
+            <select class="input input-sm w-auto" @change="addStage($event.target.value); $event.target.value = ''" aria-label="Добавить этап">
+              <option value="">+ Этап</option>
+              <template x-for="s in missingStages" :key="s.id"><option :value="s.id" x-text="s.id + '. ' + s.name"></option></template>
+            </select>
+          </template>
+        </div>
+        {# телефон: этапы карточками — таблица на 980 px там не читается #}
+        <ul class="mt-3 divide-y divide-line border-t border-line md:hidden">
+          <template x-for="r in plan" :key="'m' + r.stage_id">
+            <li class="space-y-3 px-4 py-3.5">
+              <div class="flex items-start gap-2">
+                <span class="num mt-0.5 text-xs text-fg-3" x-text="r.stage_id"></span>
+                <p class="min-w-0 flex-1 font-medium" x-text="stageName(r)"></p>
+                <button type="button" class="btn btn-ghost btn-icon btn-sm -mr-2 -mt-1" @click="removeStage(r)" :aria-label="'Убрать этап ' + stageName(r)">{{ ic.icon("trash") }}</button>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <template x-for="c in r.work_codes" :key="c"><span class="badge badge-neutral max-w-full" :title="workName(c)"><span class="num" x-text="String(c).split('/')[0]"></span><span class="truncate font-normal" x-text="workName(c)"></span></span></template>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label class="label">Начало</label><input type="date" class="input input-sm num" :class="dateError(r) && '!border-bad'" x-model="r.planned_start"></div>
+                <div><label class="label">Окончание</label><input type="date" class="input input-sm num" :class="dateError(r) && '!border-bad'" x-model="r.planned_end"></div>
+              </div>
+              <p class="flex items-center justify-between text-2xs text-fg-3"><span x-text="calDays(r) ? calDays(r) + ' дн., ' + workdays(r) + ' раб.' : 'даты не заданы'"></span><span x-show="dateError(r)" class="text-bad-fg">окончание раньше начала</span></p>
+              <template x-if="stageState(r.stage_id)">
+                <button type="button" class="flex w-full items-center gap-2 rounded-lg border border-line px-2.5 py-2 text-left" @click="mark && mark.stage_id === r.stage_id ? mark = null : openMark(r.stage_id)">
+                  <span class="badge" :class="SV.toneBadge[(SV.META.stage[stageState(r.stage_id).status] || {}).tone || 'neutral']" x-text="(SV.META.stage[stageState(r.stage_id).status] || {}).label"></span>
+                  <span class="num text-xs" x-text="SV.fmt.pct(stageState(r.stage_id).progress)"></span>
+                  <span class="ml-auto inline-flex items-center gap-1 text-2xs text-fg-3"><span x-text="stageState(r.stage_id).manual ? 'вручную' : 'по снимкам'"></span>{{ ic.icon("pencil", "w-3 h-3") }}</span>
+                </button>
+              </template>
+            </li>
+          </template>
+        </ul>
+        <div class="mt-3 hidden overflow-x-auto md:block">
+          <table class="table min-w-[980px]">
+            <thead><tr>
+              <th class="w-8 !pl-5">#</th><th>Этап и работы</th><th class="w-[150px]">Начало</th><th class="w-[150px]">Окончание</th>
+              <th class="w-[88px] text-right">Дней</th><th class="w-[220px]">Готовность (факт)</th><th class="w-[52px]"></th>
+            </tr></thead>
+            <tbody>
+              <template x-for="r in plan" :key="r.stage_id">
+                <tr :class="mark && mark.stage_id === r.stage_id ? 'bg-panel-2' : 'hover:bg-panel-2'">
+                  <td class="!pl-5 align-top"><span class="num text-xs text-fg-3" x-text="r.stage_id"></span></td>
+                  <td class="align-top">
+                    <p class="font-medium" x-text="stageName(r)"></p>
+                    <div class="mt-1.5 flex flex-wrap items-center gap-1">
+                      <template x-for="c in r.work_codes" :key="c">
+                        <span class="group badge badge-neutral !pr-0.5" :title="workName(c)">
+                          <span class="num" x-text="String(c).split('/')[0]"></span><span class="max-w-[180px] truncate font-normal" x-show="workName(c)" x-text="workName(c)"></span>
+                          <button type="button" class="rounded p-0.5 text-fg-3 hover:bg-panel hover:text-fg" @click="removeCode(r, c)" :aria-label="'Убрать код ' + c">{{ ic.icon("x", "w-2.5 h-2.5") }}</button>
+                        </span>
+                      </template>
+                      <input class="h-5 w-[92px] rounded-md border border-dashed border-line-strong bg-transparent px-1.5 font-mono text-2xs text-fg placeholder:text-fg-3 focus:border-info focus:outline-none"
+                             placeholder="+ код 12.3.1" x-model="newCode[r.stage_id]" @keydown.enter.prevent="addCode(r)" @blur="addCode(r)" aria-label="Добавить код работы">
+                    </div>
+                  </td>
+                  <td class="align-top"><input type="date" class="input input-sm num" :class="dateError(r) && '!border-bad'" x-model="r.planned_start" :aria-label="'Начало: ' + stageName(r)"></td>
+                  <td class="align-top"><input type="date" class="input input-sm num" :class="dateError(r) && '!border-bad'" x-model="r.planned_end" :aria-label="'Окончание: ' + stageName(r)">
+                    <p x-show="dateError(r)" class="mt-1 text-2xs text-bad-fg">раньше начала</p></td>
+                  <td class="num align-top text-right text-fg-2"><span x-text="calDays(r) ?? '—'"></span><p class="text-2xs text-fg-3" x-text="workdays(r) ? workdays(r) + ' раб.' : ''"></p></td>
+                  <td class="align-top">
+                    <template x-if="stageState(r.stage_id)">
+                      <button type="button" class="flex w-full items-center gap-2 rounded-lg border border-transparent px-1.5 py-1 text-left hover:border-line-strong" @click="mark && mark.stage_id === r.stage_id ? mark = null : openMark(r.stage_id)" title="Отметить готовность вручную">
+                        <span class="badge" :class="SV.toneBadge[(SV.META.stage[stageState(r.stage_id).status] || {}).tone || 'neutral'] " x-text="(SV.META.stage[stageState(r.stage_id).status] || {}).label"></span>
+                        <span class="num text-xs" x-text="SV.fmt.pct(stageState(r.stage_id).progress)"></span>
+                        <span class="ml-auto inline-flex items-center gap-1 text-2xs" :class="stageState(r.stage_id).manual ? 'text-fg' : 'text-fg-3'">
+                          <span x-show="stageState(r.stage_id).manual">{{ ic.icon("hand", "w-3 h-3") }}</span>
+                          <span x-text="stageState(r.stage_id).manual ? 'вручную' : 'авто'"></span>
+                          {{ ic.icon("pencil", "w-3 h-3") }}
+                        </span>
+                      </button>
+                    </template>
+                  </td>
+                  <td class="align-top"><button type="button" class="btn btn-ghost btn-icon btn-sm" @click="removeStage(r)" :aria-label="'Убрать этап ' + stageName(r)" title="Убрать этап из плана">{{ ic.icon("trash") }}</button></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        {# редактор ручной отметки #}
+        <template x-if="mark">
+          <div class="border-t border-line bg-panel-2 px-4 py-4 sm:px-5 animate-fade-in">
+            <div class="flex flex-wrap items-start gap-x-6 gap-y-4">
+              <div>
+                <p class="label">Статус этапа «<span x-text="stageName({ stage_id: mark.stage_id })"></span>»</p>
+                <div class="seg">
+                  <button type="button" :aria-pressed="mark.status === 'not_started'" @click="markStatus('not_started')">Не начат</button>
+                  <button type="button" :aria-pressed="mark.status === 'active'" @click="markStatus('active')">Идёт</button>
+                  <button type="button" :aria-pressed="mark.status === 'done'" @click="markStatus('done')">Завершён</button>
+                </div>
+              </div>
+              <div class="w-56">
+                <label class="label" for="mk-prog">Готовность: <span class="num text-fg" x-text="mark.progress + ' %'"></span></label>
+                <input id="mk-prog" type="range" min="0" max="100" step="5" x-model.number="mark.progress" class="w-full accent-[rgb(var(--info))]" :disabled="mark.status !== 'active'">
+              </div>
+              <div><label class="label" for="mk-s">Факт: начало</label><input id="mk-s" type="date" class="input input-sm w-[150px]" x-model="mark.actual_start" :disabled="mark.status === 'not_started'"></div>
+              <div><label class="label" for="mk-e">Факт: окончание</label><input id="mk-e" type="date" class="input input-sm w-[150px]" x-model="mark.actual_end" :disabled="mark.status !== 'done'"></div>
+              <div class="min-w-[200px] flex-1"><label class="label" for="mk-n">Комментарий</label><input id="mk-n" class="input input-sm" x-model="mark.note" placeholder="Акт приёмки № … / видно на обходе"></div>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center gap-2">
+              <button type="button" class="btn btn-primary btn-sm" @click="saveMark()" :disabled="markSaving">{{ ic.icon("hand") }} Сохранить отметку</button>
+              <button type="button" class="btn btn-ghost btn-sm" x-show="mark.manual" @click="saveMark(true)" :disabled="markSaving">{{ ic.icon("undo") }} Вернуть определение по снимкам</button>
+              <button type="button" class="btn btn-ghost btn-sm" @click="mark = null">Отмена</button>
+              <p class="ml-auto text-2xs text-fg-3">Ручная отметка — источник истины для этого этапа: модель Б дальше его не меняет.</p>
+            </div>
+          </div>
+        </template>
+      </section>
+
+      <div class="grid gap-4 xl:grid-cols-12">
+        {# парк #}
+        <section class="card xl:col-span-5" aria-labelledby="fleet-h">
+          <div class="px-4 pt-4 sm:px-5">
+            <h3 id="fleet-h" class="card-title">Парк техники на площадке</h3>
+            <p class="card-sub">Сколько машин каждого типа заявлено. Если у этапа нет своего числа — часы считаются от парка.</p>
+          </div>
+          <ul class="mt-3 grid gap-px border-t border-line bg-line sm:grid-cols-2">
+            <template x-for="k in fleetRows" :key="k">
+              <li class="flex items-center gap-2.5 bg-panel px-4 py-2.5">
+                <span class="dot" :style="'background:' + SV.palette.color(k)"></span>
+                <span class="min-w-0 flex-1 truncate text-sm" :class="(fleet[k] || 0) ? 'text-fg' : 'text-fg-3'" x-text="className(k)"></span>
+                <div class="flex items-center rounded-lg border border-line bg-panel-2">
+                  <button type="button" class="grid h-7 w-7 place-items-center text-fg-3 hover:text-fg disabled:opacity-40" @click="setFleet(k, (fleet[k] || 0) - 1)" :disabled="!(fleet[k] || 0)" :aria-label="'Меньше: ' + className(k)">{{ ic.icon("minus", "w-3.5 h-3.5") }}</button>
+                  <input class="num h-7 w-8 bg-transparent text-center text-sm focus:outline-none" :value="fleet[k] || 0" @change="setFleet(k, $event.target.value)" inputmode="numeric" :aria-label="'Количество: ' + className(k)">
+                  <button type="button" class="grid h-7 w-7 place-items-center text-fg-3 hover:text-fg" @click="setFleet(k, (fleet[k] || 0) + 1)" :aria-label="'Больше: ' + className(k)">{{ ic.icon("plus", "w-3.5 h-3.5") }}</button>
+                </div>
+              </li>
+            </template>
+          </ul>
+          <div class="border-t border-line px-4 py-3 sm:px-5">
+            <select class="input input-sm w-full sm:w-64" @change="addFleetClass($event.target.value); $event.target.value = ''" aria-label="Добавить тип техники">
+              <option value="">+ Другой тип техники</option>
+              <template x-for="c in classes.filter(c => !fleetRows.includes(c.key))" :key="c.key"><option :value="c.key" x-text="c.name"></option></template>
+            </select>
+          </div>
+        </section>
+
+        {# моточасы #}
+        <section class="card xl:col-span-7" aria-labelledby="mh-h">
+          <div class="px-4 pt-4 sm:px-5">
+            <h3 id="mh-h" class="card-title">Плановые моточасы по этапам</h3>
+            <p class="card-sub">Авто: единиц × рабочих дней × <span x-text="SV.fmt.num(shiftH)"></span> ч смены × <span x-text="SV.fmt.num(util, 2)"></span> (коэффициент использования). Поправьте число — строка перейдёт в «вручную».</p>
+          </div>
+          <ul class="mt-3 divide-y divide-line border-t border-line">
+            <template x-for="r in plan" :key="r.stage_id">
+              <li>
+                <div class="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+                  <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" @click="expanded[r.stage_id] = !expanded[r.stage_id]" :aria-expanded="!!expanded[r.stage_id]">
+                    <span class="text-fg-3 transition-transform" :class="expanded[r.stage_id] && 'rotate-90'">{{ ic.icon("chevron-right", "w-3.5 h-3.5") }}</span>
+                    <span class="min-w-0">
+                      <span class="block truncate text-sm font-medium" x-text="r.stage_id + '. ' + stageName(r)"></span>
+                      <span class="flex flex-wrap gap-x-2 text-2xs text-fg-3">
+                        <template x-for="c in hoursClasses(r)" :key="c"><span class="inline-flex items-center gap-1"><span class="dot !h-1.5 !w-1.5" :style="'background:' + SV.palette.color(c)"></span><span x-text="className(c) + ' ×' + (r.equipment[c] ?? fleet[c] ?? 0)"></span></span></template>
+                        <span x-show="!hoursClasses(r).length">техника не задана</span>
+                      </span>
+                    </span>
+                  </button>
+                  <span class="num w-20 shrink-0 text-right text-sm" x-text="SV.fmt.hours(totalHours(r))"></span>
+                  <button type="button" class="badge shrink-0 cursor-pointer" :class="r.hours_manual ? 'badge-info' : 'badge-neutral'" @click="toggleManual(r)"
+                          :title="r.hours_manual ? 'Часы заданы вручную — нажмите, чтобы вернуть расчёт' : 'Часы считаются автоматически — нажмите, чтобы править вручную'"
+                          x-text="r.hours_manual ? 'вручную' : 'авто'"></button>
+                </div>
+                <div x-show="expanded[r.stage_id]" class="bg-panel-2 px-4 pb-3 pt-1 sm:px-5">
+                  <table class="w-full text-sm">
+                    <thead><tr class="text-2xs uppercase tracking-[0.05em] text-fg-3"><th class="py-1.5 text-left font-medium">Тип</th><th class="w-24 py-1.5 text-left font-medium">Единиц</th><th class="w-28 py-1.5 text-left font-medium">Моточасы</th><th class="w-8"></th></tr></thead>
+                    <tbody>
+                      <template x-for="c in hoursClasses(r)" :key="c">
+                        <tr>
+                          <td class="py-1"><span class="inline-flex items-center gap-1.5"><span class="dot" :style="'background:' + SV.palette.color(c)"></span><span x-text="className(c)"></span></span></td>
+                          <td class="py-1"><input type="number" min="0" max="99" class="input input-sm num w-20" :value="r.equipment[c] ?? ''" :placeholder="fleet[c] ?? 0" @change="setCount(r, c, $event.target.value)" :aria-label="'Единиц: ' + className(c)"></td>
+                          <td class="py-1"><input type="number" min="0" step="1" class="input input-sm num w-24" :class="!r.hours_manual && 'text-fg-2'" :value="hoursOf(r, c)" @change="setHours(r, c, $event.target.value)" :aria-label="'Моточасы: ' + className(c)"></td>
+                          <td class="py-1 text-right"><button type="button" class="btn btn-ghost btn-icon btn-sm" @click="removeClass(r, c)" :aria-label="'Убрать ' + className(c)">{{ ic.icon("x", "w-3.5 h-3.5") }}</button></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <select class="input input-sm mt-2 w-full sm:w-64" @change="addClass(r, $event.target.value); $event.target.value = ''" aria-label="Добавить технику на этап">
+                    <option value="">+ Техника на этапе</option>
+                    <template x-for="c in classes.filter(c => r.equipment[c.key] == null)" :key="c.key"><option :value="c.key" x-text="c.name"></option></template>
+                  </select>
+                </div>
+              </li>
+            </template>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </template>
+
+  {# несохранённые изменения #}
+  <div x-show="dirty" x-transition class="sticky bottom-4 z-20 mt-4 flex items-center gap-3 rounded-xl border border-line-strong bg-panel/95 px-4 py-3 shadow-pop backdrop-blur">
+    <span class="dot bg-warn"></span>
+    <p class="flex-1 text-sm">Есть несохранённые изменения плана</p>
+    <button type="button" class="btn btn-ghost btn-sm" @click="revert()">Отменить</button>
+    <button type="button" class="btn btn-primary btn-sm" @click="save()" :disabled="saving"><span x-show="saving" class="animate-spin">{{ ic.icon("loader") }}</span>Сохранить план</button>
+  </div>
+</div>

@@ -1,0 +1,483 @@
+[
+ {
+  "id": 1,
+  "key": "equipment_idle:2:excavator:20150420T0545",
+  "type": "equipment_idle",
+  "severity": "critical",
+  "title": "Простой: экскаватор стоит 22 ч 39 мин",
+  "message": "Видели: Экскаватор №1 на площадке, но не работает 22 ч 39 мин рабочего времени (последняя работа — 20.04 08:45); «полоска» моточасов не уменьшается: по этапу отработано 1 из 266 ч, осталось 265 ч. По плану ожидается: идёт этап «Ограждение котлована, шпунт, сваи» (21.03.2015–04.05.2015) — экскаватор должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 2,
+  "stage_name": "Ограждение котлована, шпунт, сваи",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [],
+  "frames": [],
+  "unit_ids": [
+   "u0002"
+  ],
+  "started_at": "2015-04-20T05:45:46+00:00",
+  "last_seen_at": "2015-04-21T12:24:36+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "excavator",
+   "idle_h": 22.65,
+   "planned_hours": 266.0,
+   "worked_hours": 0.7452777777777777,
+   "resolved_at": "2015-04-21T12:24:36+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 2,
+  "key": "equipment_idle:3:excavator:20150420T0545",
+  "type": "equipment_idle",
+  "severity": "critical",
+  "title": "Простой: экскаватор стоит 22 ч 39 мин",
+  "message": "Видели: Экскаватор №1 на площадке, но не работает 22 ч 39 мин рабочего времени (последняя работа — 20.04 08:45); «полоска» моточасов не уменьшается: по этапу отработано 0 из 546 ч, осталось 546 ч. По плану ожидается: идёт этап «Земляные работы, котлован» (15.04.2015–29.05.2015) — экскаватор должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 3,
+  "stage_name": "Земляные работы, котлован",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [],
+  "frames": [],
+  "unit_ids": [
+   "u0002"
+  ],
+  "started_at": "2015-04-20T05:45:46+00:00",
+  "last_seen_at": "2015-04-21T12:24:36+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "excavator",
+   "idle_h": 22.65,
+   "planned_hours": 546.0,
+   "worked_hours": 0.0,
+   "resolved_at": "2015-04-21T12:24:36+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 3,
+  "key": "equipment_idle:3:dump_truck:20150420T0835",
+  "type": "equipment_idle",
+  "severity": "critical",
+  "title": "Простой: самосвал стоит 19 ч 50 мин",
+  "message": "Видели: Самосвал №1 на площадке, но не работает 19 ч 50 мин рабочего времени (последняя работа — 20.04 11:35); «полоска» моточасов не уменьшается: по этапу отработано 3 из 1092 ч, осталось 1089 ч. По плану ожидается: идёт этап «Земляные работы, котлован» (15.04.2015–29.05.2015) — самосвал должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 3,
+  "stage_name": "Земляные работы, котлован",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [],
+  "frames": [],
+  "unit_ids": [
+   "u0001"
+  ],
+  "started_at": "2015-04-20T08:35:01+00:00",
+  "last_seen_at": "2015-04-21T12:24:36+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "dump_truck",
+   "idle_h": 19.83,
+   "planned_hours": 1092.0,
+   "worked_hours": 2.8774999999999995,
+   "resolved_at": "2015-04-21T12:24:36+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 4,
+  "key": "equipment_idle:3:dump_truck:20150420T1122",
+  "type": "equipment_idle",
+  "severity": "critical",
+  "title": "Простой: самосвал стоит 16 ч 41 мин",
+  "message": "Видели: Самосвал №1 на площадке, но не работает 16 ч 41 мин рабочего времени (последняя работа — 20.04 14:22); «полоска» моточасов не уменьшается: по этапу отработано 4 из 1092 ч, осталось 1088 ч. По плану ожидается: идёт этап «Земляные работы, котлован» (15.04.2015–29.05.2015) — самосвал должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 3,
+  "stage_name": "Земляные работы, котлован",
+  "camera_id": 1,
+  "camera_name": "Камера 1 · забой",
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   39,
+   43,
+   47
+  ],
+  "frames": [
+   {
+    "id": 39,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T09:05:12+00:00",
+    "url": "/media/frames/1/2015/04/21/090512_a24607e324_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/090512_a24607e324.jpg",
+    "annotated_url": "/api/frames/39/annotated.jpg"
+   },
+   {
+    "id": 43,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T10:32:58+00:00",
+    "url": "/media/frames/1/2015/04/21/103258_7f0b90b6c2_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/103258_7f0b90b6c2.jpg",
+    "annotated_url": "/api/frames/43/annotated.jpg"
+   },
+   {
+    "id": 47,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T12:03:35+00:00",
+    "url": "/media/frames/1/2015/04/21/120335_f62c37ef18_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/120335_f62c37ef18.jpg",
+    "annotated_url": "/api/frames/47/annotated.jpg"
+   }
+  ],
+  "unit_ids": [
+   "u0001"
+  ],
+  "started_at": "2015-04-20T11:22:56+00:00",
+  "last_seen_at": "2015-04-21T12:03:35+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "dump_truck",
+   "idle_h": 16.68,
+   "planned_hours": 1092.0,
+   "worked_hours": 4.075277777777777,
+   "resolved_at": "2015-04-21T12:24:36+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 19,
+  "key": "camera_issue:1:silent",
+  "type": "camera_issue",
+  "severity": "warning",
+  "title": "Камера 1 молчит 2 ч 11 мин",
+  "message": "Видели: последний снимок с камеры 1 — 21.04 13:13, после этого кадров нет 2 ч 11 мин. Ожидается: снимок каждые 20–30 минут. Пока камера молчит, отклонения по технике в её зоне не выявляются. Что проверить: питание, сеть, ключ приёма камеры.",
+  "stage_id": null,
+  "stage_name": null,
+  "camera_id": 1,
+  "camera_name": "Камера 1 · забой",
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   42
+  ],
+  "frames": [
+   {
+    "id": 42,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T10:13:43+00:00",
+    "url": "/media/frames/1/2015/04/21/101343_ef4c01955b_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/101343_ef4c01955b.jpg",
+    "annotated_url": "/api/frames/42/annotated.jpg"
+   }
+  ],
+  "unit_ids": [],
+  "started_at": "2015-04-20T12:29:07+00:00",
+  "last_seen_at": "2015-04-21T12:24:36+00:00",
+  "status": "resolved",
+  "data": {
+   "silent_h": 2.18,
+   "resolved_at": "2015-04-21T12:24:36+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 36,
+  "key": "equipment_missing:2:all:20150320T2100",
+  "type": "equipment_missing",
+  "severity": "warning",
+  "title": "Нет техники этапа «Ограждение котлована, шпунт, сваи»",
+  "message": "Видели: 15 ч 55 мин рабочего времени (28 снимков, камера 1) на площадке нет ни одной единицы техники этапа; с начала наблюдений техники этапа не было. По плану ожидается: идёт этап «Ограждение котлована, шпунт, сваи» (21.03.2015–04.05.2015) — нужны буровая установка (не менее 1). Что проверить: не вывезли ли технику, не остановлены ли работы, видят ли камеры рабочую зону.",
+  "stage_id": 2,
+  "stage_name": "Ограждение котлована, шпунт, сваи",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   46,
+   47,
+   48
+  ],
+  "frames": [
+   {
+    "id": 46,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T11:38:56+00:00",
+    "url": "/media/frames/1/2015/04/21/113856_115a9b23b8_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/113856_115a9b23b8.jpg",
+    "annotated_url": "/api/frames/46/annotated.jpg"
+   },
+   {
+    "id": 47,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T12:03:35+00:00",
+    "url": "/media/frames/1/2015/04/21/120335_f62c37ef18_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/120335_f62c37ef18.jpg",
+    "annotated_url": "/api/frames/47/annotated.jpg"
+   },
+   {
+    "id": 48,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T12:24:36+00:00",
+    "url": "/media/frames/1/2015/04/21/122436_75f5ef38e6_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/122436_75f5ef38e6.jpg",
+    "annotated_url": "/api/frames/48/annotated.jpg"
+   }
+  ],
+  "unit_ids": [],
+  "started_at": "2015-04-20T12:29:07+00:00",
+  "last_seen_at": "2015-04-21T12:24:36+00:00",
+  "status": "open",
+  "data": {
+   "types": [
+    "drilling_rig"
+   ],
+   "absent_h": 15.92,
+   "window_h": 8.0
+  },
+  "note": ""
+ },
+ {
+  "id": 37,
+  "key": "equipment_idle:2:excavator:20150420T1528",
+  "type": "equipment_idle",
+  "severity": "warning",
+  "title": "Простой: экскаватор стоит 6 ч 25 мин",
+  "message": "Видели: Экскаватор №1 на площадке, но не работает 6 ч 25 мин рабочего времени (последняя работа — 20.04 18:28); «полоска» моточасов не уменьшается: по этапу отработано 9 из 266 ч, осталось 257 ч. По плану ожидается: идёт этап «Ограждение котлована, шпунт, сваи» (21.03.2015–04.05.2015) — экскаватор должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 2,
+  "stage_name": "Ограждение котлована, шпунт, сваи",
+  "camera_id": 1,
+  "camera_name": "Камера 1 · забой",
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   22,
+   26,
+   30
+  ],
+  "frames": [
+   {
+    "id": 22,
+    "camera_id": 1,
+    "captured_at": "2015-04-20T13:29:23+00:00",
+    "url": "/media/frames/1/2015/04/20/132923_7f76c7b081_p.jpg",
+    "full_url": "/media/frames/1/2015/04/20/132923_7f76c7b081.jpg",
+    "annotated_url": "/api/frames/22/annotated.jpg"
+   },
+   {
+    "id": 26,
+    "camera_id": 1,
+    "captured_at": "2015-04-20T15:08:59+00:00",
+    "url": "/media/frames/1/2015/04/20/150859_b1f4c0a63c_p.jpg",
+    "full_url": "/media/frames/1/2015/04/20/150859_b1f4c0a63c.jpg",
+    "annotated_url": "/api/frames/26/annotated.jpg"
+   },
+   {
+    "id": 30,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T05:53:26+00:00",
+    "url": "/media/frames/1/2015/04/21/055326_10e275b669_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/055326_10e275b669.jpg",
+    "annotated_url": "/api/frames/30/annotated.jpg"
+   }
+  ],
+  "unit_ids": [
+   "u0002"
+  ],
+  "started_at": "2015-04-20T15:28:21+00:00",
+  "last_seen_at": "2015-04-21T05:53:26+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "excavator",
+   "idle_h": 6.42,
+   "planned_hours": 266.0,
+   "worked_hours": 8.505,
+   "resolved_at": "2015-04-21T12:24:36+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 38,
+  "key": "equipment_idle:3:excavator:20150420T1528",
+  "type": "equipment_idle",
+  "severity": "warning",
+  "title": "Простой: экскаватор стоит 6 ч 25 мин",
+  "message": "Видели: Экскаватор №1 на площадке, но не работает 6 ч 25 мин рабочего времени (последняя работа — 20.04 18:28); «полоска» моточасов не уменьшается: по этапу отработано 0 из 546 ч, осталось 546 ч. По плану ожидается: идёт этап «Земляные работы, котлован» (15.04.2015–29.05.2015) — экскаватор должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 3,
+  "stage_name": "Земляные работы, котлован",
+  "camera_id": 1,
+  "camera_name": "Камера 1 · забой",
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   22,
+   26,
+   30
+  ],
+  "frames": [
+   {
+    "id": 22,
+    "camera_id": 1,
+    "captured_at": "2015-04-20T13:29:23+00:00",
+    "url": "/media/frames/1/2015/04/20/132923_7f76c7b081_p.jpg",
+    "full_url": "/media/frames/1/2015/04/20/132923_7f76c7b081.jpg",
+    "annotated_url": "/api/frames/22/annotated.jpg"
+   },
+   {
+    "id": 26,
+    "camera_id": 1,
+    "captured_at": "2015-04-20T15:08:59+00:00",
+    "url": "/media/frames/1/2015/04/20/150859_b1f4c0a63c_p.jpg",
+    "full_url": "/media/frames/1/2015/04/20/150859_b1f4c0a63c.jpg",
+    "annotated_url": "/api/frames/26/annotated.jpg"
+   },
+   {
+    "id": 30,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T05:53:26+00:00",
+    "url": "/media/frames/1/2015/04/21/055326_10e275b669_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/055326_10e275b669.jpg",
+    "annotated_url": "/api/frames/30/annotated.jpg"
+   }
+  ],
+  "unit_ids": [
+   "u0002"
+  ],
+  "started_at": "2015-04-20T15:28:21+00:00",
+  "last_seen_at": "2015-04-21T05:53:26+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "excavator",
+   "idle_h": 6.42,
+   "planned_hours": 546.0,
+   "worked_hours": 0.0,
+   "resolved_at": "2015-04-21T12:24:36+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 20,
+  "key": "equipment_missing:3:excavator:few",
+  "type": "equipment_missing",
+  "severity": "info",
+  "title": "Мало техники: экскаватор — 1 из 2",
+  "message": "Видели: за последние 2 ч рабочего времени экскаватор (или экскаватор-погрузчик): 1 ед. По плану ожидается: идёт этап «Земляные работы, котлован» (15.04.2015–29.05.2015) — не менее 2 ед. Что проверить: хватает ли техники на темп этапа.",
+  "stage_id": 3,
+  "stage_name": "Земляные работы, котлован",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   43,
+   45,
+   48
+  ],
+  "frames": [
+   {
+    "id": 43,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T10:32:58+00:00",
+    "url": "/media/frames/1/2015/04/21/103258_7f0b90b6c2_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/103258_7f0b90b6c2.jpg",
+    "annotated_url": "/api/frames/43/annotated.jpg"
+   },
+   {
+    "id": 45,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T11:18:17+00:00",
+    "url": "/media/frames/1/2015/04/21/111817_235837f6f0_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/111817_235837f6f0.jpg",
+    "annotated_url": "/api/frames/45/annotated.jpg"
+   },
+   {
+    "id": 48,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T12:24:36+00:00",
+    "url": "/media/frames/1/2015/04/21/122436_75f5ef38e6_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/122436_75f5ef38e6.jpg",
+    "annotated_url": "/api/frames/48/annotated.jpg"
+   }
+  ],
+  "unit_ids": [
+   "u0002"
+  ],
+  "started_at": "2015-04-20T10:29:07+00:00",
+  "last_seen_at": "2015-04-21T12:24:36+00:00",
+  "status": "open",
+  "data": {
+   "cls": "excavator",
+   "seen": 1,
+   "need": 2
+  },
+  "note": ""
+ },
+ {
+  "id": 21,
+  "key": "equipment_missing:3:dump_truck:few",
+  "type": "equipment_missing",
+  "severity": "info",
+  "title": "Мало техники: самосвал — 1 из 4",
+  "message": "Видели: за последние 2 ч рабочего времени самосвал: 1 ед. По плану ожидается: идёт этап «Земляные работы, котлован» (15.04.2015–29.05.2015) — не менее 4 ед. Что проверить: хватает ли техники на темп этапа.",
+  "stage_id": 3,
+  "stage_name": "Земляные работы, котлован",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   43,
+   45,
+   48
+  ],
+  "frames": [
+   {
+    "id": 43,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T10:32:58+00:00",
+    "url": "/media/frames/1/2015/04/21/103258_7f0b90b6c2_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/103258_7f0b90b6c2.jpg",
+    "annotated_url": "/api/frames/43/annotated.jpg"
+   },
+   {
+    "id": 45,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T11:18:17+00:00",
+    "url": "/media/frames/1/2015/04/21/111817_235837f6f0_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/111817_235837f6f0.jpg",
+    "annotated_url": "/api/frames/45/annotated.jpg"
+   },
+   {
+    "id": 48,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T12:24:36+00:00",
+    "url": "/media/frames/1/2015/04/21/122436_75f5ef38e6_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/122436_75f5ef38e6.jpg",
+    "annotated_url": "/api/frames/48/annotated.jpg"
+   }
+  ],
+  "unit_ids": [
+   "u0001"
+  ],
+  "started_at": "2015-04-20T10:29:07+00:00",
+  "last_seen_at": "2015-04-21T12:24:36+00:00",
+  "status": "open",
+  "data": {
+   "cls": "dump_truck",
+   "seen": 1,
+   "need": 4
+  },
+  "note": ""
+ }
+]

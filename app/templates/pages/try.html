@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% import "partials/icons.html" as ic %}
+{% block title %}Проверить снимок{% endblock %}
+{% block content %}
+<div x-data="tryPage" x-cloak @dragover.prevent="over = true" @dragleave.self="over = false" @drop.prevent="over = false; take($event.dataTransfer.files[0])">
+  <div class="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div>
+      <h1 class="text-[26px] font-semibold leading-8 tracking-[-0.025em]">Проверить снимок</h1>
+      <p class="mt-1 max-w-2xl text-sm text-fg-2">Перетащите фото стройки — покажем технику с рамками, этап по чек-листу признаков и время ответа. Снимок нигде не сохраняется.</p>
+    </div>
+    <div class="flex flex-col items-start gap-1.5 lg:items-end">
+      <div class="seg" role="radiogroup" aria-label="Кто анализирует">
+        <template x-for="p in ['local', 'hybrid', 'external']" :key="p">
+          <button type="button" role="radio" :aria-checked="provider === p" :aria-pressed="provider === p" @click="provider = p; file && run()" :disabled="busy" :title="SV.META.modes[p].desc">
+            <span x-html="$icon(SV.META.modes[p].icon, 'w-3.5 h-3.5')"></span>
+            <span x-text="p === 'local' ? 'Локально' : p === 'hybrid' ? 'Гибрид' : 'Внешний API'"></span><span class="hidden text-fg-3 xl:inline" x-text="p === 'local' ? '· YOLO + SigLIP' : p === 'hybrid' ? '· YOLO + GLM' : '· GLM-4.6V'"></span>
+            <span class="dot !h-1.5 !w-1.5" :class="ready(p).ready === true ? 'bg-good' : ready(p).ready === false ? 'bg-warn' : 'bg-fg-3'"></span>
+          </button>
+        </template>
+      </div>
+      <p x-show="ready(provider).ready === false" class="flex items-center gap-1.5 text-xs text-warn-fg"><span x-html="$icon('alert-triangle', 'w-3.5 h-3.5')"></span><span x-text="ready(provider).reason"></span></p>
+    </div>
+  </div>
+
+  {# до загрузки #}
+  <template x-if="!file">
+    <label class="dropzone min-h-[420px] cursor-pointer px-6 transition-all" :class="over && 'is-over scale-[1.005]'">
+      <span class="grid h-16 w-16 place-items-center rounded-2xl border border-line bg-panel text-fg-2 shadow-card">{{ ic.icon("scan-eye", "w-7 h-7") }}</span>
+      <span class="mt-2 text-lg font-semibold tracking-tight">Перетащите фото стройки сюда</span>
+      <span class="text-sm text-fg-3">или <span class="link">выберите файл</span> · можно вставить из буфера <span class="kbd">Ctrl</span>+<span class="kbd">V</span></span>
+      <input type="file" accept="image/*" class="sr-only" @change="take($event.target.files[0]); $event.target.value = ''">
+      <span class="mt-4 flex flex-wrap justify-center gap-2 text-2xs text-fg-3">
+        <span class="badge badge-outline">21 тип техники, 8 обязательных по ТЗ</span><span class="badge badge-outline">чек-лист признаков этапа: да / нет / не уверен</span><span class="badge badge-outline">ночь / дождь / брак отсеиваются</span>
+      </span>
+      <button type="button" class="btn btn-secondary btn-sm mt-3" @click.prevent="sample()">{{ ic.icon("image") }} Взять кадр демо-объекта</button>
+    </label>
+  </template>
+
+  <template x-if="file">
+    <div class="grid gap-4 lg:grid-cols-12">
+      <section class="card self-start overflow-hidden lg:sticky lg:top-[72px] lg:col-span-8">
+        <div class="flex items-center gap-2 border-b border-line px-4 py-2.5">
+          <span class="text-fg-3">{{ ic.icon("image") }}</span>
+          <p class="min-w-0 flex-1 truncate text-sm" x-text="file.name"></p>
+          <button type="button" class="btn btn-ghost btn-sm" @click="reset()">{{ ic.icon("x") }} Другой снимок</button>
+        </div>
+        <div class="viewer" x-init="measure($el)">
+          <img :src="url" alt="Проверяемый снимок">
+          <template x-if="frame">
+            <svg :view-box.camel="`0 0 ${frame.width} ${frame.height}`" preserveAspectRatio="none" x-html="svg"></svg>
+          </template>
+          <div class="viewer-layer pointer-events-none"><template x-for="l in labels" :key="l.i"><span class="box-label animate-fade-in" :class="highlight !== null && highlight !== l.i && 'opacity-40'" :style="l.style" x-text="l.text"></span></template></div>
+          <template x-if="busy">
+            <div class="viewer-layer overflow-hidden bg-black/35">
+              <div class="absolute inset-x-0 h-24 animate-[scan_1.4s_ease-in-out_infinite] bg-gradient-to-b from-transparent via-info/35 to-transparent"></div>
+              <div class="absolute inset-0 grid place-items-center">
+                <span class="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-sm font-medium text-white backdrop-blur">
+                  <span class="animate-spin">{{ ic.icon("loader") }}</span> Анализ… <span class="num" x-text="SV.fmt.num(elapsed / 1000, 1) + ' с'"></span>
+                </span>
+              </div>
+            </div>
+          </template>
+          <template x-if="error">
+            <div class="viewer-layer grid place-items-center bg-black/70 p-6">
+              <div class="max-w-md text-center text-white">
+                <p class="text-sm font-semibold">Не получилось</p><p class="mt-1 text-sm text-white/80" x-text="error"></p>
+                <div class="mt-3 flex justify-center gap-2"><button class="btn btn-secondary btn-sm" @click="run()">Повторить</button><button class="btn btn-secondary btn-sm" @click="run(otherProvider)" x-text="'Попробовать: ' + providerLabel(otherProvider)"></button></div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <aside class="space-y-4 lg:col-span-4">
+        {# время ответа #}
+        <section class="card card-pad" :data-result="result ? 1 : null">
+          <template x-if="!result">
+            <div class="space-y-3"><div class="skeleton h-3 w-24"></div><div class="skeleton h-10 w-32"></div><div class="skeleton h-3 w-full"></div></div>
+          </template>
+          <template x-if="result">
+            <div>
+              <div class="flex items-center justify-between"><p class="eyebrow">Время ответа</p>
+                <span class="badge badge-neutral"><span x-html="$icon((SV.META.modes[result.mode] || SV.META.modes.local).icon, 'w-3 h-3')"></span><span x-text="providerLabel(result.mode || provider)"></span></span></div>
+              <p class="mt-1 flex items-baseline gap-1.5"><span class="num text-[44px] font-semibold leading-[48px] tracking-[-0.04em]" x-text="SV.fmt.num(latency / 1000, 2)"></span><span class="text-lg text-fg-3">с</span></p>
+              <div class="mt-3 flex h-1.5 overflow-hidden rounded-full bg-panel-3" x-show="timings.length">
+                <template x-for="(t, i) in timings" :key="t[0]"><div :class="['bg-fg-3', 'bg-info', 'bg-good'][i]" :style="`width:${t[1] / timings.reduce((a, x) => a + x[1], 0) * 100}%`"></div></template>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-2xs text-fg-3">
+                <template x-for="(t, i) in timings" :key="t[0]"><span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full" :class="['bg-fg-3', 'bg-info', 'bg-good'][i]"></span><span x-text="t[0]"></span><b class="num font-medium text-fg-2" x-text="t[1] >= 1000 ? SV.fmt.num(t[1] / 1000, 1) + ' с' : t[1] + ' мс'"></b></span></template>
+              </div>
+              <p class="mt-2 text-2xs text-fg-3" x-text="modelsLine"></p>
+              <p x-show="coldStart" class="mt-2 flex items-start gap-1.5 text-2xs text-info-fg"><span class="mt-px" x-html="$icon('info', 'w-3 h-3')"></span><span>Первый запрос: модели загружались в память. Повторите — это честное время ответа.</span></p>
+              <template x-if="notes.length">
+                <ul class="mt-2 space-y-1">
+                  <template x-for="n in notes" :key="n"><li class="flex items-start gap-1.5 text-2xs text-warn-fg"><span class="mt-px" x-html="$icon('alert-triangle', 'w-3 h-3')"></span><span x-text="n"></span></li></template>
+                </ul>
+              </template>
+              <button type="button" class="btn btn-secondary btn-sm mt-3 w-full" @click="run(otherProvider)" :disabled="busy">{{ ic.icon("refresh") }} <span x-text="'Сравнить: ' + providerLabel(otherProvider)"></span></button>
+            </div>
+          </template>
+        </section>
+
+        {# этап #}
+        <template x-if="stage">
+          <section class="card card-pad">
+            <p class="eyebrow">Этап по чек-листу</p>
+            <p class="mt-2 text-[17px] font-semibold leading-6" x-text="stage.id + '. ' + stage.name"></p>
+            <p class="text-sm text-fg-2" x-show="stage.substage" x-text="stage.substage ? 'Подэтап ' + stage.substage.id + ' · ' + stage.substage.name : ''"></p>
+            <div class="mt-2 flex flex-wrap gap-1"><template x-for="w in (stage.works || [])" :key="w.code"><span class="badge badge-neutral"><span class="num" x-text="w.code"></span><span class="font-normal" x-text="w.name"></span></span></template></div>
+            <div class="mt-3 grid grid-cols-2 gap-3">
+              <div>
+                <div class="flex items-center justify-between text-xs"><span class="text-fg-3">Уверенность</span><span class="num" x-text="SV.fmt.pct(stage.confidence)"></span></div>
+                <div class="bar-track mt-1 !h-1.5"><div class="bar-fill bg-info" :style="`width:${Math.round((stage.confidence || 0) * 100)}%`"></div></div>
+              </div>
+              <div x-show="stage.progress != null">
+                <div class="flex items-center justify-between text-xs"><span class="text-fg-3">Готовность этапа</span><span class="num" x-text="SV.fmt.pct(stage.progress)"></span></div>
+                <div class="bar-track mt-1 !h-1.5"><div class="bar-fill bg-good" :style="`width:${Math.round((stage.progress || 0) * 100)}%`"></div></div>
+              </div>
+            </div>
+          </section>
+        </template>
+
+        {# правила «этап → техника» #}
+        <template x-if="result && (detSummary.length || stage)">
+          <section class="card card-pad">
+            <p class="eyebrow">Техника на снимке</p>
+            <div class="mt-2 flex flex-wrap gap-1.5">
+              <template x-for="s in detSummary" :key="s.cls"><span class="badge badge-neutral !h-6 !px-2 !text-xs"><span class="dot !h-2 !w-2" :style="'background:' + SV.palette.color(s.cls)"></span><span x-text="SV.classNames[s.cls] || s.cls"></span><b class="num" x-text="'×' + s.n"></b></span></template>
+            </div>
+            <template x-if="rules && (rules.forbidden || []).length">
+              <p class="mt-3 flex items-start gap-2 rounded-lg bg-bad/10 p-2.5 text-xs text-fg-2"><span class="mt-px text-bad-fg" x-html="$icon('alert-octagon', 'w-3.5 h-3.5')"></span>
+                <span>Не по этапу: <b class="font-medium text-bad-fg" x-text="rules.forbidden.map(k => (SV.classNames[k] || k).toLowerCase()).join(', ')"></b> на этапе «<span x-text="stage.name"></span>» не ожидается.</span></p>
+            </template>
+            <template x-if="rules && (rules.missing || []).length">
+              <p class="mt-3 flex items-start gap-2 rounded-lg bg-warn/10 p-2.5 text-xs text-fg-2"><span class="mt-px text-warn-fg" x-html="$icon('alert-triangle', 'w-3.5 h-3.5')"></span>
+                <span>Для этапа ожидается <b class="font-medium text-fg" x-text="(rules.expected || []).map(k => (SV.classNames[k] || k).toLowerCase()).join(', ')"></b>, на снимке нет: <b class="font-medium text-warn-fg" x-text="rules.missing.map(k => (SV.classNames[k] || k).toLowerCase()).join(', ')"></b>.</span></p>
+            </template>
+          </section>
+        </template>
+
+        <template x-if="result">
+          <section class="card p-4">{% include "partials/frame_panel.html" %}</section>
+        </template>
+
+        <template x-if="runs.length > 1">
+          <section class="card card-pad">
+            <p class="eyebrow mb-2">Прогоны в этой сессии</p>
+            <ul class="space-y-1.5 text-xs">
+              <template x-for="(r, i) in runs" :key="i"><li class="flex items-center gap-2"><span x-html="$icon((SV.META.modes[r.provider] || SV.META.modes.local).icon, 'w-3.5 h-3.5 text-fg-3')"></span><span class="min-w-0 flex-1 truncate text-fg-2" x-text="r.name"></span><span class="text-fg-3" x-text="r.n + ' рам.'"></span><b class="num w-14 text-right font-medium" x-text="SV.fmt.num(r.ms / 1000, 2) + ' с'"></b></li></template>
+            </ul>
+          </section>
+        </template>
+      </aside>
+    </div>
+  </template>
+</div>
+<style>@keyframes scan { 0% { top: -25%; } 100% { top: 100%; } }</style>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/viewer.js?v={{ app_version|default('dev') }}" defer></script>
+<script src="/static/js/try.js?v={{ app_version|default('dev') }}" defer></script>
+{% endblock %}

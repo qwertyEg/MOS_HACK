@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% import "partials/icons.html" as ic %}
+{% block title %}Кадр{% endblock %}
+{% block content %}
+<div x-data="framePage({{ frame_id|tojson }})" x-cloak>
+  <template x-if="error">
+    <div class="card empty mt-4">
+      <div class="empty-icon text-bad-fg">{{ ic.icon("image") }}</div>
+      <div><p class="font-medium">Кадр не найден</p><p class="mt-1 text-sm text-fg-3" x-text="error"></p></div>
+      <a href="/" class="btn btn-secondary">К объектам</a>
+    </div>
+  </template>
+  <template x-if="!frame && !error">
+    <div class="grid gap-4 lg:grid-cols-12"><div class="skeleton aspect-[5/4] lg:col-span-8"></div><div class="skeleton h-[520px] lg:col-span-4"></div></div>
+  </template>
+  <template x-if="frame">
+    <div>
+      <nav class="flex items-center gap-1.5 text-xs text-fg-3" aria-label="Навигация">
+        <a href="/" class="hover:text-fg">Объекты</a>{{ ic.icon("chevron-right", "w-3 h-3") }}
+        <a :href="'/sites/' + frame.site_id" class="hidden truncate hover:text-fg sm:inline" x-text="($store.app.sites || []).find(s => s.id === frame.site_id)?.name || 'Объект'"></a><span class="hidden sm:inline">{{ ic.icon("chevron-right", "w-3 h-3") }}</span>
+        <a :href="'/cameras/' + frame.camera_id + '?frame=' + frame.id" class="hover:text-fg" x-text="frame.camera_name || ('Камера ' + frame.camera_id)"></a>{{ ic.icon("chevron-right", "w-3 h-3") }}
+        <span class="tnum text-fg-2" x-text="SV.fmt.dateTime(frame.captured_at)"></span>
+      </nav>
+      <div class="mt-2 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 class="tnum text-[24px] font-semibold leading-8 tracking-[-0.025em]" x-text="'Кадр · ' + SV.fmt.dateTime(frame.captured_at)"></h1>
+          <p class="mt-1 text-xs text-fg-3" x-text="[frame.camera_name, frame.width + '×' + frame.height, frame.ts_source ? 'время: ' + frame.ts_source : null, providersLine].filter(Boolean).join(' · ')"></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="seg" role="group" aria-label="Слои">
+            <button type="button" :aria-pressed="layers.boxes" @click="layers.boxes = !layers.boxes">{{ ic.icon("scan") }}Рамки</button>
+            <button type="button" :aria-pressed="layers.mask" @click="maskUrl ? (layers.mask = !layers.mask) : SV.toast('Маска для этой камеры ещё не построена', { kind: 'info' })" :class="!maskUrl && 'opacity-50'">{{ ic.icon("layers") }}Маска</button>
+            <button type="button" :aria-pressed="layers.zones" @click="layers.zones = !layers.zones">{{ ic.icon("pentagon") }}Зоны</button>
+          </div>
+          <a class="btn btn-secondary btn-icon" :class="!frame.prev_id && 'pointer-events-none opacity-40'" :href="frame.prev_id ? '/frames/' + frame.prev_id : '#'" aria-label="Предыдущий кадр" title="Предыдущий (←)">{{ ic.icon("chevron-left") }}</a>
+          <a class="btn btn-secondary btn-icon" :class="!frame.next_id && 'pointer-events-none opacity-40'" :href="frame.next_id ? '/frames/' + frame.next_id : '#'" aria-label="Следующий кадр" title="Следующий (→)">{{ ic.icon("chevron-right") }}</a>
+          <a class="btn btn-secondary" :href="frame.annotated_url || ('/api/frames/' + frame.id + '/annotated.jpg')" target="_blank" rel="noopener">{{ ic.icon("download") }}<span class="hidden sm:inline">С рамками</span></a>
+        </div>
+      </div>
+      <div class="mt-5 grid gap-4 lg:grid-cols-12">
+        <section class="card self-start overflow-hidden lg:sticky lg:top-[72px] lg:col-span-8">
+          <div class="viewer" x-init="measure($el)">
+            <img :src="frame.url" :width="frame.width" :height="frame.height" alt="Кадр">
+            <img x-show="layers.mask && maskUrl" class="viewer-layer mask-layer" :src="layers.mask && maskUrl ? maskUrl : ''" alt="">
+            <svg :view-box.camel="`0 0 ${frame.width} ${frame.height}`" preserveAspectRatio="none" x-html="svg"></svg>
+            <div class="viewer-layer pointer-events-none"><template x-for="l in labels" :key="l.i"><span class="box-label transition-opacity" :class="highlight !== null && highlight !== l.i && 'opacity-40'" :style="l.style" x-text="l.text"></span></template></div>
+          </div>
+        </section>
+        <aside class="card p-4 lg:col-span-4">{% include "partials/frame_panel.html" %}</aside>
+      </div>
+    </div>
+  </template>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/viewer.js?v={{ app_version|default('dev') }}" defer></script>
+<script src="/static/js/frame.js?v={{ app_version|default('dev') }}" defer></script>
+{% endblock %}

@@ -1,0 +1,42 @@
+[
+ {
+  "cls": "bulldozer",
+  "count": 1
+ },
+ {
+  "cls": "concrete_mixer",
+  "count": 3
+ },
+ {
+  "cls": "concrete_pump",
+  "count": 1
+ },
+ {
+  "cls": "crane_manipulator",
+  "count": 1
+ },
+ {
+  "cls": "crawler_crane",
+  "count": 1
+ },
+ {
+  "cls": "drilling_rig",
+  "count": 1
+ },
+ {
+  "cls": "dump_truck",
+  "count": 4
+ },
+ {
+  "cls": "excavator",
+  "count": 2
+ },
+ {
+  "cls": "tower_crane",
+  "count": 1
+ },
+ {
+  "cls": "truck",
+  "count": 1
+ }
+]

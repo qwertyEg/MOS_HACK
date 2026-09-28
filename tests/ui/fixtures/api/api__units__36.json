@@ -1,0 +1,149 @@
+{
+ "unit": {
+  "id": 36,
+  "uid": "u0005",
+  "site_id": 5,
+  "cls": "mobile_crane",
+  "name": "Автокран",
+  "label": "Автокран №1",
+  "status": "departed",
+  "first_seen": "2020-06-08T04:56:26+00:00",
+  "last_seen": "2020-06-09T11:13:43+00:00",
+  "last_moved": null,
+  "worked_hours": 0.0,
+  "cameras": [
+   "7"
+  ],
+  "plate": null,
+  "site_xy": null
+ },
+ "intervals": [],
+ "detections": [
+  {
+   "frame_id": 356,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T11:13:43+00:00",
+   "bbox": [
+    526.3290405273438,
+    0.0,
+    149.74005126953125,
+    635.7613525390625
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 3.6583321727625173,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/111343_3eb3afe5f0_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/111343_3eb3afe5f0.jpg",
+   "annotated_url": "/api/frames/356/annotated.jpg"
+  },
+  {
+   "frame_id": 346,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T10:24:18+00:00",
+   "bbox": [
+    554.665771484375,
+    1.2293243408203125,
+    98.79132080078125,
+    637.859130859375
+   ],
+   "activity": "idle",
+   "moved": false,
+   "displacement_px": 26.260966084005826,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/102418_019e2b68d1_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/102418_019e2b68d1.jpg",
+   "annotated_url": "/api/frames/346/annotated.jpg"
+  },
+  {
+   "frame_id": 317,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T08:26:12+00:00",
+   "bbox": [
+    542.5234985351562,
+    0.4638671875,
+    71.74664306640625,
+    626.0364379882812
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/082612_32052197b9_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/082612_32052197b9.jpg",
+   "annotated_url": "/api/frames/317/annotated.jpg"
+  },
+  {
+   "frame_id": 231,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T13:33:45+00:00",
+   "bbox": [
+    430.16265869140625,
+    0.5908966064453125,
+    189.39727783203125,
+    660.3250732421875
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/133345_7f0fd2ca10_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/133345_7f0fd2ca10.jpg",
+   "annotated_url": "/api/frames/231/annotated.jpg"
+  },
+  {
+   "frame_id": 160,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T09:52:20+00:00",
+   "bbox": [
+    503.1486511230469,
+    0.1473236083984375,
+    111.36746215820312,
+    645.0883178710938
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/095220_25f001e31d_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/095220_25f001e31d.jpg",
+   "annotated_url": "/api/frames/160/annotated.jpg"
+  },
+  {
+   "frame_id": 71,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T05:20:32+00:00",
+   "bbox": [
+    541.0281372070312,
+    0.0,
+    83.232666015625,
+    625.6033325195312
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 292.11378674060666,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/052032_95464d6998_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/052032_95464d6998.jpg",
+   "annotated_url": "/api/frames/71/annotated.jpg"
+  },
+  {
+   "frame_id": 59,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T04:56:26+00:00",
+   "bbox": [
+    595.9391479492188,
+    559.4824829101562,
+    110.09674072265625,
+    74.6513671875
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/045626_2741f5c662_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/045626_2741f5c662.jpg",
+   "annotated_url": "/api/frames/59/annotated.jpg"
+  }
+ ]
+}

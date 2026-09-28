@@ -1,0 +1,21 @@
+[
+ {
+  "id": 1,
+  "site_id": 1,
+  "name": "Камера 1 · забой",
+  "kind": "folder",
+  "interval_min": 15,
+  "ingest_key": "mock-ingest-key",
+  "ingest_url": "http://127.0.0.1:18100/api/ingest",
+  "homography": null,
+  "calib_points": null,
+  "calibrated": false,
+  "image_w": 1280,
+  "image_h": 720,
+  "last_frame_at": "2015-04-21T12:24:36+00:00",
+  "source_uri": "/root/mos_hack/dev/ui/datasets/demo/sites/kirov_quarry/cam_1",
+  "frames_total": 48,
+  "pending": 0,
+  "mask": null
+ }
+]

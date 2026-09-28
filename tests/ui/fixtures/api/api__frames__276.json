@@ -1,0 +1,96 @@
+{
+ "id": 276,
+ "camera_id": 7,
+ "captured_at": "2020-06-09T05:27:04+00:00",
+ "url": "/media/frames/7/2020/06/09/052704_111edc27a2_p.jpg",
+ "full_url": "/media/frames/7/2020/06/09/052704_111edc27a2.jpg",
+ "annotated_url": "/api/frames/276/annotated.jpg",
+ "width": 1600,
+ "height": 900,
+ "is_night": false,
+ "weather": "clear",
+ "quality_ok": true,
+ "reject_reason": "",
+ "stage_used": false,
+ "processed_a": true,
+ "processed_b": true,
+ "status": "done",
+ "note": "",
+ "detections_count": 2,
+ "ts_source": "имя файла",
+ "site_id": 5,
+ "camera_name": "Камера 1 · парковка",
+ "quality": {
+  "quality_ok": true,
+  "is_night": false,
+  "weather": "clear",
+  "reject_reason": "",
+  "blur": 426.89,
+  "brightness": 137.28
+ },
+ "detections": [
+  {
+   "class": "roller",
+   "bbox": [
+    0.4,
+    539.9,
+    89.1,
+    86.6
+   ],
+   "conf": 0.392,
+   "zone_id": null,
+   "moved_since_prev": true,
+   "displacement_px": 1005.1,
+   "bbox_shape_delta": 0.718,
+   "track_id": "7-t10",
+   "unit_id": "u0001",
+   "activity": "working",
+   "name": "Каток",
+   "source": "yolo",
+   "appearance_delta": 0.418,
+   "id": 757,
+   "provider": "yolo",
+   "unit_row_id": 24,
+   "site_xy": null
+  },
+  {
+   "class": "dump_truck",
+   "bbox": [
+    1204.0,
+    553.8,
+    75.8,
+    52.3
+   ],
+   "conf": 0.305,
+   "zone_id": null,
+   "moved_since_prev": true,
+   "displacement_px": 83.6,
+   "bbox_shape_delta": 0.853,
+   "track_id": "7-t18",
+   "unit_id": "u0006",
+   "activity": "working",
+   "name": "Самосвал",
+   "source": "yolo",
+   "appearance_delta": 0.389,
+   "id": 758,
+   "provider": "yolo",
+   "unit_row_id": 41,
+   "site_xy": null
+  }
+ ],
+ "counts": {
+  "roller": 1,
+  "dump_truck": 1
+ },
+ "checklist": null,
+ "observations": [],
+ "meta": {
+  "source_file": "parking_paving_cam_1_2020_06_09_08_27_04.jpg",
+  "ts_source": "имя файла",
+  "mask_done": true
+ },
+ "sha256": "111edc27a29520b02425fb969e7ebc5cd3e3f4c995bf048e3b4e82773d75c101",
+ "job_id": "b0de26658d7a44b3aff2a64ac83fc18f",
+ "prev_id": 273,
+ "next_id": 285
+}

@@ -1,0 +1,41 @@
+{
+ "unit": {
+  "id": 148,
+  "uid": "u0012",
+  "site_id": 5,
+  "cls": "roller",
+  "name": "Каток",
+  "label": "Каток №3",
+  "status": "idle",
+  "first_seen": "2020-06-09T14:10:56+00:00",
+  "last_seen": "2020-06-09T14:10:56+00:00",
+  "last_moved": null,
+  "worked_hours": 0.0,
+  "cameras": [
+   "7"
+  ],
+  "plate": null,
+  "site_xy": null
+ },
+ "intervals": [],
+ "detections": [
+  {
+   "frame_id": 396,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T14:10:56+00:00",
+   "bbox": [
+    408.1545104980469,
+    518.650634765625,
+    104.99801635742188,
+    105.633544921875
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/141056_e12fed6c7b_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/141056_e12fed6c7b.jpg",
+   "annotated_url": "/api/frames/396/annotated.jpg"
+  }
+ ]
+}

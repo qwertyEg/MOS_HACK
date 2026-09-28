@@ -1,0 +1,21 @@
+{
+ "id": 1,
+ "name": "Песчаный карьер «Коминтерн», Киров",
+ "verdict": "no_data",
+ "lag_days": null,
+ "current_stage": null,
+ "current_stage_name": null,
+ "progress": 0.0,
+ "active_units": 2,
+ "open_deviations": 3,
+ "last_frame_at": "2015-04-21T12:24:36+00:00",
+ "thumb": "/media/frames/1/2015/04/21/122436_75f5ef38e6_p.jpg",
+ "address": "Киров, мкр. Коминтерн",
+ "object_type": "Земляные работы",
+ "floors_total": null,
+ "timezone": "Europe/Moscow",
+ "shift_hours": 10.0,
+ "created_at": "2026-09-28T09:07:55.753765+00:00",
+ "cameras": 1,
+ "report_at": "2026-09-28T09:10:02.634920+00:00"
+}
