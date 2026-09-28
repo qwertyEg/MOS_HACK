@@ -250,5 +250,48 @@ def main() -> None:
     print("готово")
 
 
+
+# Заготовки профилей модели Б. Адреса и названия моделей — отправная точка,
+# а не истина: провайдеры переименовывают модели чаще, чем выходят релизы
+# сервиса, поэтому все поля правятся в интерфейсе. `schema_mode` проставлен
+# по тому, что провайдер обещает; проверяется кнопкой «Проверить».
+VLM_PRESETS = [
+    dict(slug="local", title="Локальная модель (Ollama)",
+         base_url="", model="", schema_mode="json_schema"),
+    dict(slug="glm", title="GLM · Zhipu AI",
+         base_url="https://open.bigmodel.cn/api/paas/v4",
+         model="glm-4.5v", schema_mode="json_object"),
+    dict(slug="openrouter", title="OpenRouter",
+         base_url="https://openrouter.ai/api/v1",
+         model="qwen/qwen2.5-vl-72b-instruct", schema_mode="json_object"),
+    dict(slug="openai", title="OpenAI",
+         base_url="https://api.openai.com/v1",
+         model="gpt-4o-mini", schema_mode="json_schema"),
+]
+
+
+def ensure_vlm_profiles(s) -> None:
+    """Досыпает недостающие профили, не трогая уже настроенные.
+
+    Идемпотентно и по одному полю: перезаписывать адрес или ключ у профиля,
+    который оператор уже правил руками, нельзя — иначе введённый ключ
+    пропадал бы при каждом перезапуске.
+    """
+    from app.config import settings
+    from app.models import VlmProfile
+
+    have = {p.slug for p in s.scalars(select(VlmProfile)).all()}
+    for preset in VLM_PRESETS:
+        if preset["slug"] in have:
+            continue
+        row = VlmProfile(**preset)
+        if row.slug == "local":
+            row.base_url = settings.vlm_base_url
+            row.model = settings.vlm_model
+            row.is_active = not have          # первый профиль — он же активный
+        s.add(row)
+    s.commit()
+
+
 if __name__ == "__main__":
     main()

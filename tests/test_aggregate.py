@@ -275,3 +275,76 @@ def test_gap_in_observations_breaks_the_interval() -> None:
     runs = A._runs_from_assignment(assignment)
     assert len(runs[1]) == 2, "наблюдения через полгода склеились в один этап"
     assert runs[1][0][1] < runs[1][1][0]
+
+
+# ---------------------------------------------------------------------------
+# признак, горящий всегда, не имеет права вето
+# ---------------------------------------------------------------------------
+
+def always_on_scene(days_total: int, key: str) -> list[tuple[dt.datetime, str, Answer]]:
+    """Сцена из двух этапов, где `key` (признак первого) горит каждый день."""
+    out = []
+    for offset in range(days_total):
+        when = dt.datetime.combine(day(offset), dt.time(12, 0))
+        scene = {key: "yes"}
+        if offset >= 20:                      # второй этап давно начался
+            scene |= {"pile_rig": "yes", "pile_stock": "yes",
+                      "pile_heads": "yes", "sheet_pile": "yes"}
+        for k, v in scene.items():
+            out.append((when, k, Answer(v)))
+    return out
+
+
+def two_stage_curves(observations) -> dict[int, A.StageCurve]:
+    stages = [(sid, f"этап {sid}", CHECKLISTS[sid]) for sid in (1, 2)]
+    return {c.stage_id: c for c in A.build_curves(observations, stages)}
+
+
+def test_constant_keys_finds_only_the_ever_present_one() -> None:
+    days = A.daily_answers(always_on_scene(100, "debris"))
+    assert A.constant_keys(days) == {"debris"}
+
+
+def test_constant_keys_needs_history_before_it_judges() -> None:
+    """На короткой съёмке «горит всегда» неотличимо от «горит прямо сейчас».
+
+    Признак идущего этапа в первые дни тоже горит каждый день — отобрать у
+    него вето значило бы проскочить этап, который на самом деле идёт.
+    """
+    days = A.daily_answers(always_on_scene(12, "debris"))
+    assert A.constant_keys(days) == set()
+
+
+def test_ever_present_feature_does_not_freeze_the_frontier() -> None:
+    """Регрессия на реальный инцидент: прогон встал на первом этапе.
+
+    «Видны ли кучи строительного мусора» — правда на стройке всегда, а
+    числился вопрос временным признаком подготовки территории. Одного такого
+    вопроса хватило, чтобы граница не сдвинулась за тринадцать месяцев
+    съёмки тремя камерами.
+    """
+    curves = two_stage_curves(always_on_scene(100, "debris"))
+    assert curves[2].intervals, "граница застряла на первом этапе"
+    assert curves[1].reached, "первый этап так и не закрылся"
+
+
+def test_a_real_transient_feature_keeps_its_veto() -> None:
+    """Защита снимает вето только с постоянных признаков, не со всех подряд.
+
+    `tree_felling` горит первые сорок дней и гаснет — это нормальный
+    временный признак, и держать границу он обязан.
+    """
+    out = []
+    for offset in range(100):
+        when = dt.datetime.combine(day(offset), dt.time(12, 0))
+        scene = {"pile_rig": "yes", "pile_stock": "yes",
+                 "pile_heads": "yes", "sheet_pile": "yes"}
+        if offset < 40:
+            scene["tree_felling"] = "yes"
+        for k, v in scene.items():
+            out.append((when, k, Answer(v)))
+
+    curves = two_stage_curves(out)
+    first_day_of_stage_2 = min(a for a, _ in curves[2].intervals)
+    assert first_day_of_stage_2 >= day(40), (
+        "вырубка ещё шла, а граница уже ушла на сваи")

@@ -18,15 +18,16 @@ from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select
+from sqlalchemy import case, distinct, func, select
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import auth, netutil, plan_import
 from app.config import settings
 from app.db import get_session, init_db
-from app.models import (Camera, CameraState, Deviation, Frame, MacroStage,
-                        ObjectType, Site, SiteStage, StageTemplate)
+from app.models import (Answer, Camera, CameraState, Checklist, ChecklistAnswer,
+                        Deviation, Frame, MacroStage, ObjectType, Site,
+                        SiteStage, StageTemplate, VlmProfile)
 from app.pipeline import aggregate, gantt, ingest, live, runner
 from app.pipeline.model_b import ModelB
 
@@ -49,6 +50,10 @@ templates.env.filters["dmy"] = _dmy
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+    from app.db import SessionLocal
+    from app.seed import ensure_vlm_profiles
+    with SessionLocal() as s:
+        ensure_vlm_profiles(s)
 
 
 try:
@@ -80,11 +85,13 @@ def healthz(s: Session = Depends(get_session)) -> JSONResponse:
         checks["storage"] = True
     except Exception:
         pass
-    checks["model_b"] = ModelB().health()
+    model = ModelB()
+    checks["model_b"] = model.health()
 
     code = 200 if all(checks.values()) else 503
     return JSONResponse({"ok": all(checks.values()), "checks": checks,
-                         "model": settings.vlm_model}, status_code=code)
+                         "model": model.model, "endpoint": model.base_url},
+                        status_code=code)
 
 
 @app.get("/media/{key:path}")
@@ -646,6 +653,19 @@ def camera_add(site_id: int, user: str = Depends(auth.require_user),
     return auth.redirect(f"/cameras/{cam.id}")
 
 
+@app.post("/cameras/{camera_id}/rename")
+def camera_rename(camera_id: int, user: str = Depends(auth.require_user),
+                  s: Session = Depends(get_session), name: str = Form(...)):
+    """Переименование камеры. Имя — только подпись: ни ключ приёма, ни адрес,
+    ни накопленная маска от него не зависят, поэтому опечатку можно исправить
+    в любой момент, не трогая ничего остального."""
+    cam = s.get(Camera, camera_id)
+    if cam and name.strip():
+        cam.name = name.strip()[:128]
+        s.commit()
+    return auth.redirect(f"/cameras/{camera_id}")
+
+
 @app.post("/cameras/{camera_id}/delete")
 def camera_delete(camera_id: int, user: str = Depends(auth.require_user),
                   s: Session = Depends(get_session)):
@@ -887,15 +907,58 @@ def camera_frames(camera_id: int, request: Request,
 
     key_of = {"masked": "masked_key", "overlay": "overlay_key",
               "orig": "object_key"}.get(view, "masked_key")
+
+    # Сколько вопросов задали кадру и на скольких модель ответила «да» —
+    # считаем по уникальным ключам: один ответ лежит в базе столько раз,
+    # сколько этапов спрашивают этот ключ (см. `_frame_answers`).
+    tally = dict((fid, (asked, yes)) for fid, asked, yes in s.execute(
+        select(Checklist.frame_id,
+               func.count(distinct(ChecklistAnswer.key)),
+               func.count(distinct(case(
+                   (ChecklistAnswer.answer == Answer.YES, ChecklistAnswer.key)))))
+        .join(ChecklistAnswer, ChecklistAnswer.checklist_id == Checklist.id)
+        .where(Checklist.frame_id.in_([f.id for f in rows]))
+        .group_by(Checklist.frame_id)).all())
+
     items = [{
         "frame": f,
         "url": storage.url(getattr(f, key_of) or f.object_key),
+        "asked": tally.get(f.id, (0, 0))[0],
+        "yes": tally.get(f.id, (0, 0))[1],
     } for f in rows]
 
     return templates.TemplateResponse(request, "frames.html", {
         "user": user, "cam": cam, "items": items, "view": view,
         "page": page, "pages": pages, "total": total, "per": per,
     })
+
+
+def _frame_answers(s: Session, frame_id: int) -> tuple[list[dict], str]:
+    """Ответы модели по кадру, по одной строке на вопрос.
+
+    В базе ответ лежит столько раз, сколько этапов спрашивают этот ключ:
+    `save_checklists` раскладывает общий пул по этапам, и «здание выше уровня
+    земли» попадает в четыре чек-листа. Спрошено же было один раз и ответ
+    один — поэтому на экране строка одна, а этапы собраны в список.
+    """
+    rows = s.execute(
+        select(ChecklistAnswer, Checklist.model_name, SiteStage)
+        .join(Checklist, Checklist.id == ChecklistAnswer.checklist_id)
+        .join(SiteStage, SiteStage.id == Checklist.site_stage_id)
+        .where(Checklist.frame_id == frame_id)
+        .order_by(SiteStage.order_idx, ChecklistAnswer.id)).all()
+
+    by_key: dict[str, dict] = {}
+    model = ""
+    for a, model_name, stage in rows:
+        model = model or model_name
+        item = by_key.setdefault(a.key, {
+            "key": a.key, "question": a.question, "answer": a.answer,
+            "polarity": a.polarity, "latency_ms": a.latency_ms,
+            "raw": a.raw_response, "stages": [],
+        })
+        item["stages"].append(stage.title)
+    return list(by_key.values()), model
 
 
 @app.get("/frames/{frame_id}", response_class=HTMLResponse)
@@ -908,6 +971,7 @@ def frame_detail(frame_id: int, request: Request,
     if f is None:
         return HTMLResponse("Кадр не найден", status_code=404)
     cam = s.get(Camera, f.camera_id)
+    answers, model_name = _frame_answers(s, frame_id)
 
     prev = s.scalar(select(Frame).where(Frame.camera_id == f.camera_id,
                                         Frame.captured_at < f.captured_at)
@@ -918,6 +982,7 @@ def frame_detail(frame_id: int, request: Request,
 
     return templates.TemplateResponse(request, "frame.html", {
         "user": user, "cam": cam, "f": f, "prev": prev, "next": nxt,
+        "answers": answers, "model_name": model_name,
         "orig_url": storage.url(f.object_key),
         "masked_url": storage.url(f.masked_key) if f.masked_key else None,
         "overlay_url": storage.url(f.overlay_key) if f.overlay_key else None,
@@ -1088,6 +1153,139 @@ async def api_ingest(request: Request,
         return JSONResponse({"error": "очередь переполнена, повторите позже"},
                             status_code=503)
     return JSONResponse({"ok": True, "queued": True}, status_code=202)
+
+
+# ---------------------------------------------------------------------------
+# настройки: где считать модель Б
+# ---------------------------------------------------------------------------
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, user: str = Depends(auth.require_user),
+                  s: Session = Depends(get_session)):
+    profiles = s.scalars(select(VlmProfile).order_by(VlmProfile.id)).all()
+    note = request.session.pop("settings_note", "")
+    return templates.TemplateResponse(request, "settings.html", {
+        "user": user, "profiles": profiles, "note": note,
+        "env_model": settings.vlm_model, "env_url": settings.vlm_base_url,
+    })
+
+
+@app.post("/settings/vlm/{slug}")
+def settings_vlm_save(slug: str, request: Request,
+                      user: str = Depends(auth.require_user),
+                      s: Session = Depends(get_session),
+                      base_url: str = Form(""), model: str = Form(""),
+                      api_key: str = Form(""), schema_mode: str = Form("json_schema"),
+                      activate: str = Form("")):
+    row = s.scalars(select(VlmProfile).where(VlmProfile.slug == slug)).first()
+    if row is None:
+        return HTMLResponse("Профиль не найден", status_code=404)
+
+    row.base_url = base_url.strip()
+    row.model = model.strip()
+    row.schema_mode = schema_mode if schema_mode in _SCHEMA_MODES else "json_schema"
+    # Пустое поле ключа означает «не трогать», а не «стереть»: ключ в форму
+    # не подставляется, и пустая отправка иначе затирала бы его при любой
+    # правке названия модели.
+    if api_key.strip():
+        row.api_key = api_key.strip()
+
+    if activate == "on":
+        for other in s.scalars(select(VlmProfile)).all():
+            other.is_active = other.id == row.id
+    s.commit()
+    request.session["settings_note"] = f"Профиль «{row.title}» сохранён."
+    return auth.redirect("/settings")
+
+
+@app.post("/settings/vlm/{slug}/activate")
+def settings_vlm_activate(slug: str, request: Request,
+                          user: str = Depends(auth.require_user),
+                          s: Session = Depends(get_session)):
+    row = s.scalars(select(VlmProfile).where(VlmProfile.slug == slug)).first()
+    if row is None:
+        return HTMLResponse("Профиль не найден", status_code=404)
+    for other in s.scalars(select(VlmProfile)).all():
+        other.is_active = other.id == row.id
+    s.commit()
+    request.session["settings_note"] = (
+        f"Считает «{row.title}». Действует со следующего кадра — "
+        "перезапускать сервис не нужно.")
+    return auth.redirect("/settings")
+
+
+@app.post("/settings/vlm/{slug}/check")
+def settings_vlm_check(slug: str, request: Request,
+                       user: str = Depends(auth.require_user),
+                       s: Session = Depends(get_session)):
+    """Проверка профиля настоящим вопросом по настоящему кадру.
+
+    `GET /models` не годится: он отвечает и у эндпоинта, который не умеет ни
+    картинок, ни ограничения ответа схемой. Проверять надо ровно тот путь,
+    которым пойдёт разбор, — иначе профиль «проверен», а на первом же кадре
+    сыплется в поштучный опрос.
+    """
+    from app.pipeline.model_b import Profile, ModelB
+
+    row = s.scalars(select(VlmProfile).where(VlmProfile.slug == slug)).first()
+    if row is None:
+        return HTMLResponse("Профиль не найден", status_code=404)
+
+    img, source = _probe_frame(s)
+    model = ModelB(profile=Profile(base_url=row.base_url, model=row.model,
+                                   api_key=row.api_key or settings.vlm_api_key,
+                                   schema_mode=row.schema_mode))
+    questions = [{"key": "is_construction", "text": PROBE_QUESTION, "hint": ""}]
+
+    from app.pipeline.model_b import encode
+    uri = encode(img)
+    worked, errors = "", []
+    for mode in ("json_schema", "json_object", "text"):
+        try:
+            answer = model.ask_batch(uri, questions, mode=mode)
+        except Exception as exc:
+            errors.append(f"{mode}: {str(exc)[:120]}")
+            continue
+        worked = mode
+        row.schema_mode = mode
+        row.check_note = (f"ответила «{answer['is_construction'].value}» на {source}; "
+                          f"ограничение ответа — {mode}")
+        break
+
+    if not worked:
+        row.check_note = "не отвечает. " + " | ".join(errors)
+    row.checked_at = dt.datetime.now(dt.timezone.utc)
+    s.commit()
+    request.session["settings_note"] = f"«{row.title}»: {row.check_note}"
+    return auth.redirect("/settings")
+
+
+_SCHEMA_MODES = ("json_schema", "json_object", "text")
+
+PROBE_QUESTION = ("Видны ли признаки идущей стройки — незавершённые "
+                  "конструкции, строительные материалы или техника?")
+
+
+def _probe_frame(s: Session):
+    """Кадр для проверки профиля: настоящий, если он есть.
+
+    На синтетическом квадрате проверка вырождается — модель, которая не
+    умеет картинок вовсе, на нём может ответить не хуже рабочей. Ровный
+    серый квадрат остаётся только как запасной вариант на пустой базе.
+    """
+    from PIL import Image
+
+    from app.storage import storage
+
+    row = s.scalar(select(Frame).order_by(Frame.captured_at.desc()).limit(1))
+    if row is not None:
+        try:
+            import io
+            data = storage.get(row.masked_key or row.object_key)
+            return Image.open(io.BytesIO(data)).convert("RGB"), "реальном кадре"
+        except Exception:
+            pass
+    return Image.new("RGB", (512, 384), (127, 127, 127)), "пустом кадре"
 
 
 @app.get("/api/fs")

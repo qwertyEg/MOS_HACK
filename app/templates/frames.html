@@ -23,7 +23,8 @@
   </a>
   {% endfor %}
   <span class="ml-auto text-xs text-slate-500">
-    «С погашенным фоном» — ровно то, что получила бы модель Б
+    «С погашенным фоном» — ровно то, что получила бы модель Б.
+    Клик по кадру — ответы модели по чек-листу.
   </span>
 </div>
 
@@ -40,6 +41,13 @@
         {%- if it.frame.is_night %} · ночь{% endif %}
         {%- if not it.frame.quality_ok %} · {{ it.frame.reject_reason }}{% endif %}
       </div>
+      {% if it.asked %}
+      <div class="text-slate-500">
+        <span class="text-green-700 font-medium">{{ it.yes }}</span> «да» из {{ it.asked }}
+      </div>
+      {% else %}
+      <div class="text-slate-300">не разбирался</div>
+      {% endif %}
     </div>
   </a>
   {% endfor %}

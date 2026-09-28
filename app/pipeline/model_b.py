@@ -177,6 +177,10 @@ _LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1", "host.docker.interna
 _CHOICES = ("да", "нет", "не видно")
 _TO_ANSWER = {"да": Answer.YES, "нет": Answer.NO, "не видно": Answer.UNSURE}
 
+# Строгость ограничения ответа. Откатываться можно только вниз:
+# профиль, которому схема не по силам, не должен её пробовать вовсе.
+_WEAKER = {"json_schema": 2, "json_object": 1, "text": 0}
+
 SYSTEM_PROMPT = (
     "Ты отвечаешь на вопросы строго по тому, что ВИДНО на снимке "
     "строительной площадки.\n"
@@ -204,6 +208,18 @@ def build_schema(keys: list[str]) -> dict:
     }
 
 
+def _json_blob(content: str) -> str:
+    """JSON из ответа модели, которую схема не обязывала.
+
+    Без ограничения декодирования модель охотно оборачивает объект в
+    ```json ... ``` или предваряет его фразой. Берём подстроку от первой
+    фигурной скобки до последней — этого достаточно, потому что вложенный
+    объект нам не возвращают, а разбор всё равно проверяет состав ключей.
+    """
+    lo, hi = content.find("{"), content.rfind("}")
+    return content[lo:hi + 1] if lo >= 0 and hi > lo else content
+
+
 def question_line(q: dict) -> str:
     """Строка вопроса для промпта: ключ, текст и «как выглядит».
 
@@ -216,10 +232,54 @@ def question_line(q: dict) -> str:
     return f'{q["key"]}: {q["text"]}' + (f" (как выглядит: {hint})" if hint else "")
 
 
+@dataclass(slots=True)
+class Profile:
+    """Куда ходить за моделью. Значения по умолчанию — из окружения."""
+    base_url: str = ""
+    model: str = ""
+    api_key: str = ""
+    schema_mode: str = "json_schema"
+
+    @classmethod
+    def from_env(cls) -> "Profile":
+        return cls(base_url=settings.vlm_base_url, model=settings.vlm_model,
+                   api_key=settings.vlm_api_key)
+
+
+def active_profile() -> Profile:
+    """Активный профиль из базы; если его там нет — окружение.
+
+    Читается на каждом создании `ModelB`, то есть раз на кадр. Это дешевле
+    одного запроса к модели на четыре порядка и даёт то, ради чего настройка
+    вообще нужна: смена профиля действует со следующего кадра, без
+    перезапуска сервиса с живыми очередями камер.
+    """
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import VlmProfile
+
+    try:
+        with SessionLocal() as s:
+            row = s.scalars(select(VlmProfile)
+                            .where(VlmProfile.is_active.is_(True))).first()
+    except Exception:
+        return Profile.from_env()          # база не поднялась — работаем как раньше
+    if row is None or not row.base_url:
+        return Profile.from_env()
+    return Profile(base_url=row.base_url, model=row.model,
+                   api_key=row.api_key or settings.vlm_api_key,
+                   schema_mode=row.schema_mode)
+
+
 class ModelB:
-    def __init__(self, base_url: str | None = None, model: str | None = None) -> None:
-        self.base_url = (base_url or settings.vlm_base_url).rstrip("/")
-        self.model = model or settings.vlm_model
+    def __init__(self, base_url: str | None = None, model: str | None = None,
+                 profile: Profile | None = None) -> None:
+        p = profile or active_profile()
+        self.base_url = (base_url or p.base_url).rstrip("/")
+        self.model = model or p.model
+        self.api_key = p.api_key
+        self.schema_mode = p.schema_mode
         self.session = requests.Session()
 
         # Если модель крутится локально, системный прокси надо обойти.
@@ -246,7 +306,7 @@ class ModelB:
         t0 = time.perf_counter()
         r = self.session.post(
             f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {settings.vlm_api_key}"},
+            headers={"Authorization": f"Bearer {self.api_key}"},
             json=payload,
             timeout=settings.vlm_timeout,
         )
@@ -265,35 +325,67 @@ class ModelB:
                             latency_ms=dt)
         return VlmReply(answer=parse_answer(raw), raw=raw, latency_ms=dt)
 
-    def ask_batch(self, data_uri: str, questions: list[dict]) -> dict[str, Answer]:
-        """Все вопросы одного чек-листа одним запросом, ответ по схеме."""
+    def _response_format(self, keys: list[str], mode: str) -> dict | None:
+        if mode == "json_schema":
+            return {"type": "json_schema",
+                    "json_schema": {"name": "checklist",
+                                    "schema": build_schema(keys)}}
+        if mode == "json_object":
+            return {"type": "json_object"}
+        return None
+
+    def ask_batch(self, data_uri: str, questions: list[dict],
+                  mode: str | None = None) -> dict[str, Answer]:
+        """Все вопросы одного чек-листа одним запросом.
+
+        Чем ограничен ответ, задаёт профиль. При `json_schema` разбор сводится
+        к `json.loads`: пропустить вопрос или ответить не из списка модель
+        структурно не может. При более слабых режимах то же самое приходится
+        просить словами и проверять руками — отсюда `_TO_ANSWER.get` и
+        `parse_answer` вместо прямого обращения по ключу.
+        """
         keys = [q["key"] for q in questions]
         body = "\n".join(question_line(q) for q in questions)
+        mode = mode or self.schema_mode
+        fmt = self._response_format(keys, mode)
+
+        ask = ("Ответь на каждый вопрос. Ключ в ответе — ровно тот, "
+               "что слева от двоеточия.")
+        if mode != "json_schema":
+            # Схему эндпоинт не гарантирует — значит форму ответа приходится
+            # просить словами, и просить точно: иначе придёт проза.
+            ask += (f'\nВерни ТОЛЬКО JSON-объект с ключами: {", ".join(keys)}. '
+                    f'Значение каждого — строго одно из: {", ".join(_CHOICES)}. '
+                    "Ничего кроме объекта не пиши.")
+
         payload = {
             "model": self.model,
             "temperature": settings.vlm_temperature,
             "max_tokens": settings.vlm_max_tokens,
-            "response_format": {"type": "json_schema",
-                                "json_schema": {"name": "checklist",
-                                                "schema": build_schema(keys)}},
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": [
                     {"type": "image_url", "image_url": {"url": data_uri}},
-                    {"type": "text", "text":
-                     "Ответь на каждый вопрос. Ключ в ответе — ровно тот, "
-                     "что слева от двоеточия.\n\n" + body},
+                    {"type": "text", "text": ask + "\n\n" + body},
                 ]},
             ],
         }
+        if fmt is not None:
+            payload["response_format"] = fmt
+
         r = self.session.post(
             f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {settings.vlm_api_key}"},
+            headers={"Authorization": f"Bearer {self.api_key}"},
             json=payload, timeout=settings.vlm_timeout)
         r.raise_for_status()
         content = r.json()["choices"][0]["message"].get("content") or ""
-        data = json.loads(content)
-        return {k: _TO_ANSWER[data[k]] for k in keys}
+        data = json.loads(_json_blob(content))
+        missing = [k for k in keys if k not in data]
+        if missing:
+            raise ValueError(f"модель не ответила на {len(missing)} из {len(keys)}: "
+                             + ", ".join(missing[:5]))
+        return {k: _TO_ANSWER.get(str(data[k]).strip().lower(),
+                                  parse_answer(str(data[k]))) for k in keys}
 
     def fill_checklist(
         self,
@@ -304,30 +396,39 @@ class ModelB:
     ) -> list[dict]:
         """Заполняет чек-лист одного этапа по одному кадру.
 
-        Сначала пробуем один запрос со схемой. Если эндпоинт ограничение
-        декодирования не умеет или ответ не разобрался — откатываемся на
-        поштучный опрос со свободным разбором. Молча возвращать «не видно»
-        на всё нельзя: это выглядело бы как честный результат.
+        Сначала один запрос в режиме профиля, затем — режимами послабее, и
+        только потом поштучный опрос. Промежуточная ступень нужна из-за
+        облачных эндпоинтов: `json_schema` поддерживают не все, а падать с
+        неё сразу в 36 отдельных запросов на кадр — это разбор длиной в часы
+        там, где хватило бы восьми запросов. Молча возвращать «не видно» на
+        всё нельзя: это выглядело бы как честный результат.
         """
         if not questions:
             return []
         prepared = apply_mask(img, mask, mask_mode)
         uri = encode(prepared)
 
+        chain = [m for m in ("json_schema", "json_object", "text")
+                 if m == self.schema_mode or _WEAKER[self.schema_mode] > _WEAKER[m]]
         t0 = time.perf_counter()
-        try:
-            answers = self.ask_batch(uri, questions)
-        except Exception as exc:
-            # Откат записывается в данные, а не проглатывается. Один раз это
-            # уже стоило дорого: в конфиге стояла thinking-версия модели,
-            # она тратила весь бюджет токенов на рассуждение и возвращала
-            # пустой ответ — схема не разбиралась, всё тихо уезжало в
-            # поштучный опрос, и прогон вместо минут шёл часами.
-            return self._fill_one_by_one(uri, questions, reason=str(exc)[:200])
-        dt = int((time.perf_counter() - t0) * 1000)
-        per = dt // max(1, len(questions))
-        return [{**q, "answer": answers[q["key"]], "raw": answers[q["key"]].value,
-                 "latency_ms": per} for q in questions]
+        last = ""
+        for mode in chain:
+            try:
+                answers = self.ask_batch(uri, questions, mode=mode)
+            except Exception as exc:
+                last = f"{mode}: {exc}"
+                continue
+            dt = int((time.perf_counter() - t0) * 1000)
+            per = dt // max(1, len(questions))
+            return [{**q, "answer": answers[q["key"]], "raw": answers[q["key"]].value,
+                     "latency_ms": per} for q in questions]
+
+        # Откат записывается в данные, а не проглатывается. Один раз это уже
+        # стоило дорого: в конфиге стояла thinking-версия модели, она тратила
+        # весь бюджет токенов на рассуждение и возвращала пустой ответ —
+        # схема не разбиралась, всё тихо уезжало в поштучный опрос, и прогон
+        # вместо минут шёл часами.
+        return self._fill_one_by_one(uri, questions, reason=last[:200])
 
     def _fill_one_by_one(self, uri: str, questions: list[dict],
                          reason: str = "") -> list[dict]:

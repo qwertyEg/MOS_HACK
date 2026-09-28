@@ -531,3 +531,34 @@ class AuditLog(Base):
     payload: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True),
                                                     server_default=func.now())
+
+
+class VlmProfile(Base):
+    """Куда ходить за моделью Б. Профиль выбирается оператором на лету.
+
+    Почему в базе, а не в переменных окружения: окружение читается один раз
+    при старте, а переключить модель нужно между прогонами, не роняя сервис
+    с очередями камер. Профилей несколько и ключ хранится у каждого свой —
+    иначе переключение «в облако и обратно» означало бы вводить ключ заново
+    каждый раз.
+
+    `schema_mode` — чем ограничивать ответ модели. Локальная Ollama понимает
+    `json_schema` и тогда пропустить вопрос структурно невозможно. Облачные
+    эндпоинты поддерживают её вразнобой: кто-то умеет только `json_object`
+    (валидный JSON, но состав полей на совести модели), кто-то ничего.
+    Значение подбирается кнопкой «Проверить», а не угадывается в коде.
+
+    Ключ лежит открытым текстом. Шифровать его нечем: сервис расшифровал бы
+    его тем же ключом, который лежал бы рядом. Защита здесь — доступ к базе.
+    """
+    __tablename__ = "vlm_profiles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(32), unique=True)
+    title: Mapped[str] = mapped_column(String(128))
+    base_url: Mapped[str] = mapped_column(Text, default="")
+    model: Mapped[str] = mapped_column(String(128), default="")
+    api_key: Mapped[str] = mapped_column(Text, default="")
+    schema_mode: Mapped[str] = mapped_column(String(16), default="json_schema")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    checked_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    check_note: Mapped[str] = mapped_column(Text, default="")

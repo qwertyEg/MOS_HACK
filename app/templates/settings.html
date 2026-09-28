@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block content %}
+
+<h1 class="text-xl font-semibold mb-1">Настройки</h1>
+<p class="text-sm text-slate-500 mb-6">
+  Где считается модель Б — та, что заполняет чек-листы по кадру.
+</p>
+
+{% if note %}
+<div class="mb-6 text-sm text-slate-700 bg-slate-100 border border-slate-200 rounded px-4 py-3">
+  {{ note }}
+</div>
+{% endif %}
+
+<section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
+  <h2 class="font-medium mb-1">Модель Б</h2>
+  <p class="text-sm text-slate-600">
+    Активен один профиль. Переключение действует со следующего кадра —
+    сервис перезапускать не нужно, очереди камер не прерываются.
+  </p>
+  <p class="text-xs text-slate-500 mt-1">
+    Модель должна быть <b>зрячей</b> (VLM) и понимать OpenAI-совместимый
+    <code>/chat/completions</code> с картинкой в <code>image_url</code>.
+    Название модели и адрес правятся — провайдеры переименовывают их чаще,
+    чем выходят релизы этого сервиса.
+  </p>
+</section>
+
+<div class="space-y-4">
+  {% for p in profiles %}
+  <section class="bg-white border rounded-lg
+                  {{ 'border-slate-900 ring-1 ring-slate-900' if p.is_active
+                     else 'border-slate-200' }}">
+    <div class="flex items-center gap-3 px-6 py-4 border-b border-slate-100">
+      <h3 class="font-medium">{{ p.title }}</h3>
+      {% if p.is_active %}
+      <span class="text-xs bg-slate-900 text-white rounded px-2 py-0.5">считает сейчас</span>
+      {% endif %}
+      {% if p.api_key %}
+      <span class="text-xs text-green-700">ключ сохранён</span>
+      {% elif p.slug != "local" %}
+      <span class="text-xs text-amber-600">ключа нет</span>
+      {% endif %}
+
+      <div class="ml-auto flex items-center gap-2">
+        <form method="post" action="/settings/vlm/{{ p.slug }}/check">
+          <button class="text-sm bg-slate-100 rounded px-3 py-1.5 hover:bg-slate-200">
+            Проверить
+          </button>
+        </form>
+        {% if not p.is_active %}
+        <form method="post" action="/settings/vlm/{{ p.slug }}/activate">
+          <button class="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-700">
+            Считать здесь
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if p.check_note %}
+    <div class="px-6 pt-3 text-xs {{ 'text-red-600' if 'не отвечает' in p.check_note
+                                     else 'text-slate-500' }}">
+      проверка {{ p.checked_at.strftime("%d.%m.%Y %H:%M") if p.checked_at else "" }}:
+      {{ p.check_note }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/settings/vlm/{{ p.slug }}"
+          class="px-6 py-4 grid md:grid-cols-2 gap-4">
+      <label class="block">
+        <span class="text-xs text-slate-500">адрес эндпоинта</span>
+        <input name="base_url" value="{{ p.base_url }}"
+               placeholder="https://.../v1"
+               class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono">
+      </label>
+
+      <label class="block">
+        <span class="text-xs text-slate-500">модель</span>
+        <input name="model" value="{{ p.model }}"
+               class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono">
+      </label>
+
+      <label class="block">
+        <span class="text-xs text-slate-500">
+          API-ключ {% if p.api_key %}— оставьте пустым, чтобы не менять{% endif %}
+        </span>
+        <input name="api_key" type="password" autocomplete="off"
+               placeholder="{{ '••••••••' if p.api_key else 'не задан' }}"
+               class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono">
+      </label>
+
+      <label class="block">
+        <span class="text-xs text-slate-500">чем ограничен ответ модели</span>
+        <select name="schema_mode"
+                class="mt-1 w-full border border-slate-300 rounded px-3 py-2 text-sm">
+          {% for value, label in [
+               ("json_schema", "JSON-схема — вопрос пропустить невозможно"),
+               ("json_object", "просто JSON — состав полей на совести модели"),
+               ("text", "без ограничения — разбор свободного текста")] %}
+          <option value="{{ value }}" {{ "selected" if p.schema_mode == value }}>
+            {{ label }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <div class="md:col-span-2 flex items-center gap-4">
+        <button class="bg-slate-100 text-sm rounded px-4 py-2 hover:bg-slate-200">
+          Сохранить
+        </button>
+        {% if not p.is_active %}
+        <label class="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" name="activate"> и сразу считать здесь
+        </label>
+        {% endif %}
+      </div>
+    </form>
+  </section>
+  {% endfor %}
+</div>
+
+<p class="text-xs text-slate-500 mt-6">
+  Профиль по умолчанию берётся из окружения:
+  <code>{{ env_url }}</code>, модель <code>{{ env_model }}</code>.
+  Если активного профиля нет, сервис работает по этим значениям.
+  Ключи лежат в базе открытым текстом — шифровать их нечем, ключ шифрования
+  лежал бы рядом с ними.
+</p>
+{% endblock %}

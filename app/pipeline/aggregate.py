@@ -43,6 +43,18 @@
 опалубка, — которые физически пропадают из кадра, когда работа кончается.
 Для голосования «кто сейчас лидирует» (сравнение счёта с соседним этапом)
 это разделение не нужно и не делается: там считаются все `must_have` разом.
+
+**Признак, горящий всегда, не держит границу.** Право вето — вещь опасная:
+достаточно одного вопроса, на который ответ «да» приходит каждый день, и
+граница прогресса встаёт навсегда, молча и без единой ошибки в остальном.
+Ровно это и случилось на первом трёхкамерном прогоне: «видны ли кучи
+строительного мусора» — правда на стройке всегда, а числился вопрос
+временным признаком подготовки территории. Стройка простояла на первом
+этапе тринадцать месяцев. Поэтому перед разбором считается, на какой доле
+всех наблюдавшихся дней ключ вообще говорил «да»: тот, что горит почти
+всегда, характеризует не этап, а наличие стройки как таковой, и вето у
+него отбирается (`constant_keys`). Считать это можно только на достаточной
+истории — на первой неделе съёмки «всегда» и «сейчас» неразличимы.
 """
 
 from __future__ import annotations
@@ -68,6 +80,14 @@ MAX_JUMP = 1
 # Требуем несколько дней подряд, где старый этап молчит, а новый лидирует,
 # прежде чем сдвинуть границу. Разовый всплеск — шум, не переход.
 MIN_STREAK_DAYS = 3
+
+# Доля дней с «да», после которой признак считается постоянным и теряет право
+# вето. Семь этапов на всю историю: признак одного из них физически не может
+# гореть на девяти днях из десяти — значит он про стройку вообще, а не про этап.
+CONSTANT_SHARE = 0.9
+# Пока истории мало, «горит всегда» и «горит сейчас» — одно и то же, и
+# отбирать вето не за что. Месяц съёмки — минимум, на котором различие есть.
+CONSTANT_MIN_DAYS = 30
 
 
 @dataclass(slots=True)
@@ -110,6 +130,27 @@ def daily_answers(
     return out
 
 
+def constant_keys(
+    days: dict[dt.date, dict[str, Answer]],
+    share: float = CONSTANT_SHARE,
+    min_days: int = CONSTANT_MIN_DAYS,
+) -> set[str]:
+    """Ключи, горящие «да» почти на всей истории, — см. шапку модуля.
+
+    Такой ключ описывает не этап, а стройку целиком, и права задерживать
+    границу прогресса у него быть не должно. На короткой истории множество
+    пустое: отличить постоянный признак от идущего прямо сейчас не на чем.
+    """
+    if len(days) < min_days:
+        return set()
+    yes: defaultdict[str, int] = defaultdict(int)
+    for answers in days.values():
+        for key, answer in answers.items():
+            if answer is Answer.YES:
+                yes[key] += 1
+    return {key for key, n in yes.items() if n >= share * len(days)}
+
+
 def daily_feature_counts(
     days: dict[dt.date, dict[str, Answer]],
     stages: list[tuple[int, str, list[dict]]],
@@ -122,6 +163,7 @@ def daily_feature_counts(
     свои признаки». Возвращается список, а не словарь: порядок дней важен
     дальше, а словарь его не хранит.
     """
+    constant = constant_keys(days)
     out = []
     for day in sorted(days):
         answers = days[day]
@@ -129,7 +171,8 @@ def daily_feature_counts(
         for stage_id, _, questions in stages:
             must = [q for q in questions if q["polarity"] == "must_have"]
             total = sum(1 for q in must if answers.get(q["key"]) is Answer.YES)
-            transient = sum(1 for q in must if not q.get("latching")
+            transient = sum(1 for q in must
+                            if not q.get("latching") and q["key"] not in constant
                             and answers.get(q["key"]) is Answer.YES)
             counts[stage_id] = (total, transient)
         out.append((day, counts))

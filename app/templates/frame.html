@@ -45,6 +45,74 @@
   </div>
 </div>
 
+{# ------------------------------------------------------------------ #}
+{# Ответы модели по чек-листу. Строка на вопрос, а не на этап: ответ на  #}
+{# ключ один, а этапов, которые его спрашивают, бывает несколько.        #}
+{# ------------------------------------------------------------------ #}
+{% if answers %}
+<section class="bg-white border border-slate-200 rounded-lg mb-5">
+  <div class="flex items-center flex-wrap gap-x-4 gap-y-1 px-5 py-4 border-b border-slate-200">
+    <h2 class="font-medium">Ответы модели по чек-листу</h2>
+    <span class="text-xs text-slate-500">
+      вопросов {{ answers|length }}
+      · «да» {{ answers|selectattr("answer.value", "equalto", "yes")|list|length }}
+      · «нет» {{ answers|selectattr("answer.value", "equalto", "no")|list|length }}
+      · «не видно» {{ answers|selectattr("answer.value", "equalto", "unsure")|list|length }}
+    </span>
+    <label class="ml-auto flex items-center gap-2 text-xs text-slate-600">
+      <input type="checkbox" id="only-yes"> только «да»
+    </label>
+    {% if model_name %}
+    <span class="text-xs text-slate-400 font-mono">{{ model_name }}</span>
+    {% endif %}
+  </div>
+
+  <table class="w-full text-sm">
+    <tbody>
+      {% for a in answers %}
+      <tr class="border-b border-slate-100 last:border-0 align-top"
+          data-answer="{{ a.answer.value }}">
+        <td class="px-5 py-2 w-24">
+          {% if a.answer.value == "yes" %}
+          <span class="text-green-700 font-medium">да</span>
+          {% elif a.answer.value == "no" %}
+          <span class="text-slate-500">нет</span>
+          {% else %}
+          <span class="text-amber-600">не видно</span>
+          {% endif %}
+        </td>
+        <td class="py-2 pr-5">
+          <div>{{ a.question }}</div>
+          <div class="text-xs text-slate-400 mt-0.5">
+            <span class="font-mono">{{ a.key }}</span>
+            · {{ a.polarity }}
+            · {{ a.stages|join(", ") }}
+            {%- if a.latency_ms %} · {{ a.latency_ms }} мс{% endif %}
+          </div>
+          {% if a.raw and a.raw not in ("yes", "no", "unsure") %}
+          <div class="text-xs text-slate-500 mt-1 font-mono break-words">{{ a.raw }}</div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<script>
+  document.getElementById("only-yes").addEventListener("change", function () {
+    var on = this.checked;
+    document.querySelectorAll("tr[data-answer]").forEach(function (row) {
+      row.hidden = on && row.dataset.answer !== "yes";
+    });
+  });
+</script>
+{% else %}
+<section class="bg-white border border-slate-200 rounded-lg px-5 py-4 mb-5 text-sm text-slate-500">
+  Модель Б этот кадр не разбирала — чек-листов по нему нет.
+</section>
+{% endif %}
+
 <div class="space-y-5">
   {% if masked_url %}
   <div>

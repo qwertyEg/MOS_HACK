@@ -195,8 +195,11 @@ def save_checklists(session: Session, camera: Camera, frame_row: Frame,
     участвует в нескольких. Возвращает число заполненных чек-листов.
     """
     from app.models import Checklist, ChecklistAnswer
-    from app.config import settings
+    from app.pipeline.model_b import active_profile
 
+    # Имя модели пишется рядом с ответом: профиль переключается на лету, и
+    # без этого нельзя сказать, чей ответ лежит в конкретной строке.
+    model_name = active_profile().model
     filled = 0
     for stage in camera.site.stages:
         items = [answered[q["key"]] for q in (stage.questions or [])
@@ -204,7 +207,7 @@ def save_checklists(session: Session, camera: Camera, frame_row: Frame,
         if not items:
             continue
         cl = Checklist(frame_id=frame_row.id, site_stage_id=stage.id,
-                       model_name=settings.vlm_model)
+                       model_name=model_name)
         session.add(cl)
         session.flush()
         filled += 1
