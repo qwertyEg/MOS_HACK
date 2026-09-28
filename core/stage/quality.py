@@ -16,8 +16,9 @@
 - по картинке ночь — это темно (средняя яркость < 45) или ИК-режим камеры:
   кадр почти идеально серый (межканальная разница < 1 уровня) — у пасмурного
   дня цвет приглушён, но каналы не совпадают;
-- по времени съёмки (если есть) считается высота солнца над Москвой
-  (формулы NOAA): солнце ниже −6° (гражданские сумерки) — ночь, если кадр не
+- по времени съёмки (если есть) считается высота солнца над Москвой или над
+  городом часового пояса объекта (`config_for_timezone`, формулы NOAA):
+  солнце ниже −6° (гражданские сумерки) — ночь, если кадр не
   ярок и не цветен (тогда вероятнее, что врут часы или часовой пояс);
   солнце выше горизонта — день, если кадр не тёмный; монохромный, но светлый
   кадр днём — ч/б камера, а не ночь; в сумерках решает яркость.
@@ -44,9 +45,13 @@
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
+import functools
 import math
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -55,6 +60,53 @@ from core.contracts import QualityReport, Weather
 
 MOSCOW_LAT = 55.7558
 MOSCOW_LON = 37.6173
+_ZONE_COORD = re.compile(r"([+-])(\d{2})(\d{2})(\d{2})?([+-])(\d{3})(\d{2})(\d{2})?")
+
+
+@functools.lru_cache(maxsize=256)
+def tz_coordinates(tz_name: str | None) -> tuple[float, float] | None:
+    """Широта и долгота главного города часового пояса — из zone1970.tab базы tz.
+
+    Высота солнца по умолчанию считается над Москвой; для объекта в другом поясе
+    (архив Чикаго, Эдинбурга, Канберры) ночь по часам уезжала на 8–10 часов, и
+    ночные кадры с фонарями шли в модель Б как дневные. Координат у объекта в
+    карточке нет, а часовой пояс есть всегда — город пояса даёт солнце с
+    точностью в пару градусов, этого хватает для «ночь / сумерки / день».
+    None — пояс неизвестен или базы нет (тогда остаётся Москва)."""
+    if not tz_name:
+        return None
+    for path in _zone_tables():
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            parts = line.split("\t")
+            if len(parts) >= 3 and not line.startswith("#") and parts[2] == tz_name:
+                m = _ZONE_COORD.fullmatch(parts[1])
+                if not m:
+                    return None
+                la = int(m[2]) + int(m[3]) / 60 + int(m[4] or 0) / 3600
+                lo = int(m[6]) + int(m[7]) / 60 + int(m[8] or 0) / 3600
+                return (la if m[1] == "+" else -la, lo if m[5] == "+" else -lo)
+    return None
+
+
+def _zone_tables() -> list[Path]:
+    out = []
+    try:
+        import tzdata  # пакет из requirements: есть и в slim-образе без системной базы
+        out += [Path(tzdata.__file__).parent / "zoneinfo" / n for n in ("zone1970.tab", "zone.tab")]
+    except ImportError:
+        pass
+    return out + [Path("/usr/share/zoneinfo") / n for n in ("zone1970.tab", "zone.tab")]
+
+
+def config_for_timezone(tz_name: str | None, base: "QualityConfig | None" = None) -> "QualityConfig":
+    """QualityConfig с солнцем над городом часового пояса объекта (см. tz_coordinates)."""
+    cfg = base or QualityConfig()
+    ll = tz_coordinates(tz_name)
+    return dataclasses.replace(cfg, latitude=ll[0], longitude=ll[1]) if ll else cfg
 
 
 @dataclass

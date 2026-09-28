@@ -88,10 +88,14 @@ def basic_quality(img: np.ndarray) -> c.QualityReport:
                            usable_for_stage=ok and not night)
 
 
-def assess_quality(img: np.ndarray, captured_at: dt.datetime) -> c.QualityReport:
+def assess_quality(img: np.ndarray, captured_at: dt.datetime, timezone: str | None = None) -> c.QualityReport:
+    """timezone — пояс объекта: ночь по часам считается по солнцу над его городом, а не над Москвой."""
     quality = providers.optional_module("core.stage.quality")
     if quality is None:
         return basic_quality(img)
+    for_tz = getattr(quality, "config_for_timezone", None)
+    if timezone and for_tz is not None:
+        return quality.assess(img, captured_at=captured_at, config=for_tz(timezone))
     return quality.assess(img, captured_at=captured_at)
 
 
@@ -411,7 +415,7 @@ def process_frame(frame_id: int) -> str:
         errors: list[str] = []
         postponed = False
         try:
-            quality = assess_quality(img, fr.captured_at)
+            quality = assess_quality(img, fr.captured_at, site.timezone)
         except Exception as exc:  # noqa: BLE001
             errors.append(f"оценка качества: {type(exc).__name__}: {exc}")
             quality = basic_quality(img)

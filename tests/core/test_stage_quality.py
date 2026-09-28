@@ -176,6 +176,27 @@ def test_sun_elevation_for_moscow():
     assert Q.sun_elevation_deg(naive_utc) == pytest.approx(Q.sun_elevation_deg(NOON_JUNE))
 
 
+def test_sun_is_taken_over_the_city_of_the_site_timezone():
+    """Архив Чикаго: 20:00 по местному времени — ночь, хотя над Москвой в этот момент 05:00 утра
+    и солнце вот-вот взойдёт; полдень в Чикаго — день, хотя в Москве уже ночь."""
+    lat, lon = Q.tz_coordinates("America/Chicago")
+    assert lat == pytest.approx(41.85, abs=0.1) and lon == pytest.approx(-87.65, abs=0.1)
+    assert Q.tz_coordinates("Australia/Sydney")[0] < 0
+    assert Q.tz_coordinates("Europe/Moscow") == pytest.approx((55.76, 37.62), abs=0.1)
+    assert Q.tz_coordinates("Нет/Такого") is None and Q.tz_coordinates(None) is None
+    cfg = Q.config_for_timezone("America/Chicago")
+    evening = dt.datetime(2016, 11, 29, 2, 0, tzinfo=dt.timezone.utc)      # 20:00 в Чикаго
+    noon = dt.datetime(2016, 11, 29, 18, 0, tzinfo=dt.timezone.utc)        # 12:00 в Чикаго
+    assert Q.sun_elevation_deg(evening, cfg.latitude, cfg.longitude) < -6
+    assert Q.sun_elevation_deg(noon, cfg.latitude, cfg.longitude) > 20
+    assert Q.sun_elevation_deg(noon) < -6, "над Москвой в этот момент ночь — отсюда и ошибка"
+    lit = scene()           # ночь с прожекторами: светло, но не «ярко и цветно» настолько, чтобы спорить с часами
+    lit = cv2.addWeighted(lit, 0.55, np.zeros_like(lit), 0.45, 0)
+    assert Q.assess(lit, evening, config=cfg).is_night
+    assert not Q.assess(lit, noon, config=cfg).is_night
+    assert Q.config_for_timezone("Нет/Такого") == Q.QualityConfig()
+
+
 def test_resolution_does_not_change_verdict():
     img = scene()
     big = cv2.resize(img, (1920, 1440), interpolation=cv2.INTER_CUBIC)
