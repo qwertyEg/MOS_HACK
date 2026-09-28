@@ -185,6 +185,24 @@ def test_parse_answer_does_not_turn_not_visible_into_no():
     assert parse_answer("Нет") is Answer.NO and parse_answer("no") is Answer.NO
 
 
+# Перенесено интегратором из tests/test_parse_answer.py Дениса (тестировал удалённый
+# app/pipeline/model_b.py). Сознательно изменились три случая: «Нет, конструкций не
+# видно» теперь UNSURE (маркер «не видно» проверяется первым — баг D5 выше), «На
+# изображении да, присутствует» — UNSURE (развёрнутый ответ не угадываем), а пары
+# «Стройка»/«завершено» нет — такого вопроса в новом чек-листе нет.
+@pytest.mark.parametrize("raw,expected", [
+    ("Да", Answer.YES), ("да.", Answer.YES), ("ДА", Answer.YES),
+    ("Нет", Answer.NO), ("нет,", Answer.NO), ("No", Answer.NO),
+    ("Не уверен", Answer.UNSURE), ("не уверен.", Answer.UNSURE), ("Не уверена", Answer.UNSURE),
+    ("Я не могу определить", Answer.UNSURE), ("Сложно сказать, кадр засвечен", Answer.UNSURE),
+    ("**Да**", Answer.YES), ("Да, виден котлован", Answer.YES),
+    ("Нет, конструкций не видно", Answer.UNSURE), ("На изображении да, присутствует", Answer.UNSURE),
+    ("", Answer.UNSURE), ("Изображение показывает строительную площадку", Answer.UNSURE),
+])
+def test_parse_answer_legacy_cases(raw, expected):
+    assert parse_answer(raw) is expected
+
+
 class FakeLocal:
     provider, model, thinking = "local", "qwen2.5vl:3b", False
 

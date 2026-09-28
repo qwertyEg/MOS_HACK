@@ -1,21 +1,23 @@
-/data
-
+# окружение и кэши
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
 .env
+
+# данные сервиса: БД, хранилище кадров, временные файлы
 var/
-vlm_bench_*.json
-# объединённый сервис (egor-unified)
-var/
+/data
+
+# веса моделей и датасеты — не в git (см. models/README.md)
 models/*.pt
 models/*.onnx
 models/*.engine
+models/*.json
+!models/README.md
 datasets/
 *.avi
 *.mp4
-.venv/
-__pycache__/
-.pytest_cache/
-.env
+
+# рабочие копии веток агентов (git worktree)
+.claude/worktrees/
