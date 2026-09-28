@@ -1,35 +1,64 @@
-name: stroyka
+# СтройВзор: приложение + PostgreSQL; MinIO (S3) — по профилю s3.
+#
+#   cp .env.example .env    # и задать пароли/ключи — в этом файле секретов нет
+#   docker compose up --build
+#   docker compose --profile s3 up --build          # кадры в MinIO вместо ./var/storage
+#   WITH_ML=0 docker compose up --build              # лёгкий образ: только внешний API
+#
+# Веса моделей — в ./models (там же кэш HuggingFace для SigLIP), демо-данные — ./datasets (только чтение).
+name: stroyvzor
 
 services:
   db:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: stroyka
-      POSTGRES_PASSWORD: stroyka
-      POSTGRES_DB: stroyka
-    ports:
-      - "127.0.0.1:5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-stroyvzor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env (см. .env.example)}
+      POSTGRES_DB: ${POSTGRES_DB:-stroyvzor}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U stroyka"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stroyvzor} -d ${POSTGRES_DB:-stroyvzor}"]
       interval: 5s
-      retries: 10
+      retries: 20
 
-  # Кадры лежат здесь, а не в БД и не в контейнере приложения: приложение
-  # можно пересобрать, снимки останутся. Организатор может подставить свой S3,
-  # поменяв S3_ENDPOINT — код не меняется.
+  app:
+    build:
+      context: .
+      args:
+        WITH_ML: ${WITH_ML:-1}
+    # .env попадает в контейнер (у ветки Дениса не попадал — правки конфигурации молча не действовали)
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-stroyvzor}:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}@db:5432/${POSTGRES_DB:-stroyvzor}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      # Локальная VLM (Ollama/vLLM) живёт на хосте: localhost из контейнера — это сам контейнер.
+      VLM_BASE_URL: ${VLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      DEMO_DIR: /app/datasets/demo
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - ./var:/app/var
+      - ./models:/app/models
+      - ./datasets:/app/datasets:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   minio:
-    # Docker Hub с конца 2024 отдаёт "pull access denied" на minio/minio —
-    # MinIO Inc. закрыла анонимный доступ к своему org на Hub. Тот же образ
-    # официально публикуется на quay.io.
-    image: quay.io/minio/minio:latest
+    profiles: ["s3"]
+    image: quay.io/minio/minio:latest    # Docker Hub отдаёт pull denied на minio/minio (находка Дениса)
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-}
     ports:
-      - "127.0.0.1:9000:9000"
       - "127.0.0.1:9001:9001"
     volumes:
       - miniodata:/data
@@ -37,27 +66,6 @@ services:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       retries: 10
-
-  app:
-    build: .
-    depends_on:
-      db: {condition: service_healthy}
-      minio: {condition: service_started}
-    environment:
-      DATABASE_URL: postgresql+psycopg://stroyka:stroyka@db:5432/stroyka
-      S3_ENDPOINT: http://minio:9000
-      # Браузер ходит за снимками напрямую в MinIO, минуя бэкенд, поэтому
-      # presigned-ссылки должны указывать на адрес, видимый снаружи.
-      S3_PUBLIC_ENDPOINT: http://localhost:9000
-      # Модель Б живёт вне compose — она внешний сервис по условию задачи.
-      # Из контейнера localhost указывает на сам контейнер, поэтому host-gateway.
-      VLM_BASE_URL: http://host.docker.internal:11435/v1
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "127.0.0.1:8000:8000"
-    volumes:
-      - ./data:/app/data:ro
 
 volumes:
   pgdata:

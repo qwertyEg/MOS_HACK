@@ -1,0 +1,14 @@
+# Локальные модели: модель А — YOLO (ultralytics), модель Б — SigLIP (transformers).
+# Тяжёлые (~1–2 ГБ), поэтому отдельно от requirements.txt: без них сервис
+# работает с внешним API, а локальные провайдеры показывают «не готов» с причиной.
+#
+# CPU-сборка torch: индекс PyTorch. Локальная версия «+cpu» старше одноимённой
+# с PyPI, поэтому pip возьмёт её и не потянет CUDA. На macOS torch с PyPI и так
+# без CUDA (CPU/MPS).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.4,<3
+torchvision>=0.19
+ultralytics>=8.3,<9
+transformers>=4.45,<5
+sentencepiece>=0.2         # токенайзер SigLIP
+safetensors>=0.4

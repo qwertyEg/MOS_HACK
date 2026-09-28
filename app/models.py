@@ -1,161 +1,86 @@
-"""Модель данных.
+"""Схема БД (docs/ARCHITECTURE.md §11).
 
-Схема — это сами классы, отдельного schema.sql нет: за хакатон схема меняется
-пересборкой БД, и держать два источника правды дороже, чем один.
+Типы только переносимые — `JSON`, строки, числа, даты; никаких ARRAY/JSONB:
+одна и та же схема работает на SQLite (по умолчанию, ноутбук жюри) и на
+PostgreSQL (docker compose). Миграций нет: `create_all` при старте.
 
-Три вещи, которые стоит объяснить сразу, потому что они неочевидны:
+Поверх §11 добавлено (только добавлено, ничего не убрано):
+- `sites.report`/`report_at` — снимок последнего пересчёта площадки (вердикт,
+  «полоски» часов, ряды план/факт), чтобы дашборд не гонял аналитику на
+  каждый GET;
+- `cameras.source_uri`, `created_at` — адрес камеры-потока (simcam);
+- `camera_states.initial_mask_key`, `stage_mask_ratio` — под ручную правку
+  маски и «внеочередной» вызов модели Б при сильном изменении маски;
+- `frames.status`/`note`/`job_id`/`created_at` — понятный статус анализа
+  («отложен: нет ключа ZAI_API_KEY») и прогресс заданий загрузки;
+- `stage_states.evidence` — кадры-доказательства этапа;
+- `activity_intervals.manual/note` (и `unit_id` допускает NULL) — ручные поправки
+  моточасов оператором;
+- `plan_items.position`, `deviations.note/created_at/updated_at`;
+- таблица `jobs` — задания загрузки/переанализа, переживают рестарт.
 
-1. Планирование живёт на площадке (`SiteStage`), а не на корпусе. Организаторы
-   просили аналитику по объекту целиком. Корпуса (`Building`) остаются
-   внутренней единицей измерения — у них своя этажность и свой вес в свёртке.
-
-2. `CameraState` хранит накопленное состояние динамической маски. Это главная
-   долгоживущая сущность конвейера: она копится месяцами и переживает
-   перестановку камеры через пересчёт гомографией.
-
-3. Ответ модели Б тернарный — да / нет / не уверена. Третье значение нужно,
-   чтобы кадр, где признак не разглядеть, не голосовал вовсе, вместо того
-   чтобы разбавлять статистику случайным «нет».
+Все времена хранятся как UTC без зоны и отдаются как aware-UTC (`UTCDateTime`):
+SQLite зону не хранит вовсе, и без этого сравнение времён расходилось бы
+между SQLite и PostgreSQL.
 """
-
 from __future__ import annotations
 
 import datetime as dt
-import enum
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text,
-    UniqueConstraint, func,
+    JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text,
+    TypeDecorator, UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
     pass
 
 
-# --------------------------------------------------------------------------
-# перечисления
-# --------------------------------------------------------------------------
-
-class Answer(str, enum.Enum):
-    YES = "yes"
-    NO = "no"
-    UNSURE = "unsure"
+def utcnow() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
 
 
-class EquipmentStatus(str, enum.Enum):
-    ACTIVE = "ACTIVE"        # сместилась между кадрами либо изменила позу
-    IDLE = "IDLE"            # стоит меньше смены
-    PARKED = "PARKED"        # стоит сутками — ждёт вывоза, в этап не засчитывается
-    DEPARTED = "DEPARTED"    # ушла с площадки
+class UTCDateTime(TypeDecorator):
+    """Aware-datetime на входе и выходе, в БД — наивное UTC."""
+    impl = DateTime(timezone=False)
+    cache_ok = True
 
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=dt.UTC)
+        return value.astimezone(dt.UTC).replace(tzinfo=None)
 
-class ViewType(str, enum.Enum):
-    SIDE = "side"            # сбоку: этажность, фасад
-    TOP = "top"              # с мачты: котлован, плита, благоустройство
-    REMOTE = "remote"        # с соседнего дома: общий план
-
-
-class ZoneType(str, enum.Enum):
-    WORK = "work"
-    PARKING = "parking"      # зона отстоя: техника тут не сопоставляется с этапом
-    STORAGE = "storage"
-
-
-class DeviationType(str, enum.Enum):
-    STAGE_BEHIND = "STAGE_BEHIND"
-    STAGE_AHEAD = "STAGE_AHEAD"
-    STAGE_MISMATCH = "STAGE_MISMATCH"
-    STAGE_NOT_STARTED = "STAGE_NOT_STARTED"
-    EQUIPMENT_MISSING = "EQUIPMENT_MISSING"
-    EQUIPMENT_UNEXPECTED = "EQUIPMENT_UNEXPECTED"
-    EQUIPMENT_WRONG_ZONE = "EQUIPMENT_WRONG_ZONE"
-    EQUIPMENT_PARKED_ONLY = "EQUIPMENT_PARKED_ONLY"
-    SITE_IDLE = "SITE_IDLE"
-    ACTIVITY_DROP = "ACTIVITY_DROP"
-    CREW_SHRINK = "CREW_SHRINK"
-    TEMPO_DECAY = "TEMPO_DECAY"
-    CAMERA_MOVED = "CAMERA_MOVED"
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=dt.UTC)
+        return value.astimezone(dt.UTC)
 
 
 # --------------------------------------------------------------------------
-# справочники
+# пользователи и настройки
 # --------------------------------------------------------------------------
 
-class ObjectType(Base):
-    __tablename__ = "object_types"
+class User(Base):
+    __tablename__ = "users"
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(128), unique=True)
+    login: Mapped[str] = mapped_column(String(64), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(256))
 
 
-class WorkType(Base):
-    """Строка исходного справочника. Храним целиком, вместе с исходным кодом
-    и обоснованием отнесения к макроэтапу — чтобы решение было прослеживаемым.
-    """
-    __tablename__ = "work_types"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    code: Mapped[str] = mapped_column(String(32), default="")
-    parent_code: Mapped[str] = mapped_column(String(32), default="")
-    level: Mapped[int] = mapped_column(Integer, default=0)
-    name: Mapped[str] = mapped_column(Text)
-    macro_stage_id: Mapped[int | None] = mapped_column(
-        ForeignKey("macro_stages.id"), nullable=True)
-    excluded_reason: Mapped[str] = mapped_column(Text, default="")
-    mapping_reason: Mapped[str] = mapped_column(Text, default="")
-    object_types: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
-
-
-class MacroStage(Base):
-    """Макроэтап — то, что различимо с камеры. 8 штук, §3.1 плана."""
-    __tablename__ = "macro_stages"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(128), unique=True)
-    order_default: Mapped[int] = mapped_column(Integer)
-    description: Mapped[str] = mapped_column(Text, default="")
-    progress_metric: Mapped[str] = mapped_column(String(64), default="")
-    progress_view: Mapped[str] = mapped_column(String(16), default="")
-    # Пусто = применим ко всем типам объектов. Для дороги нет ни монолита,
-    # ни кровли, и предлагать их в плане незачем.
-    object_types: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
-
-    template: Mapped["StageTemplate"] = relationship(back_populates="macro_stage",
-                                                     uselist=False)
-
-
-class StageTemplate(Base):
-    """Шаблон чек-листа: что должно быть, чего быть не должно, что спросить."""
-    __tablename__ = "stage_templates"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    macro_stage_id: Mapped[int] = mapped_column(ForeignKey("macro_stages.id"),
-                                                unique=True)
-    must_have: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-    must_not_have: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-    equipment_expected: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-    equipment_forbidden: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-    measurements: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-    questions: Mapped[list[dict]] = mapped_column(JSONB, default=list)
-
-    macro_stage: Mapped[MacroStage] = relationship(back_populates="template")
-
-
-class StageNorm(Base):
-    """Нормативы темпа из открытых данных — лечат холодный старт прогноза."""
-    __tablename__ = "stage_norms"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    object_type_id: Mapped[int | None] = mapped_column(ForeignKey("object_types.id"))
-    macro_stage_id: Mapped[int] = mapped_column(ForeignKey("macro_stages.id"))
-    unit: Mapped[str] = mapped_column(String(32), default="")
-    tempo_min: Mapped[float | None] = mapped_column(Float)
-    tempo_median: Mapped[float | None] = mapped_column(Float)
-    tempo_max: Mapped[float | None] = mapped_column(Float)
-    active_days_ratio: Mapped[float | None] = mapped_column(Float)
-    source: Mapped[str] = mapped_column(Text, default="")
+class Setting(Base):
+    __tablename__ = "settings"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict | list | str | float | None] = mapped_column(JSON, nullable=True)
 
 
 # --------------------------------------------------------------------------
-# объект
+# объект, камеры, зоны
 # --------------------------------------------------------------------------
 
 class Site(Base):
@@ -163,355 +88,260 @@ class Site(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(256))
     address: Mapped[str] = mapped_column(Text, default="")
-    object_type_id: Mapped[int | None] = mapped_column(ForeignKey("object_types.id"))
-    cadastral_no: Mapped[str] = mapped_column(String(64), default="")
-    land_area: Mapped[float | None] = mapped_column(Float)
-    permit_no: Mapped[str] = mapped_column(String(64), default="")
-    permit_date: Mapped[dt.date | None] = mapped_column(Date)
-    status: Mapped[str] = mapped_column(String(32), default="active")
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True),
-                                                    server_default=func.now())
+    object_type: Mapped[str] = mapped_column(String(64), default="Жильё")
+    floors_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="Europe/Moscow")
+    shift_hours: Mapped[float] = mapped_column(Float, default=10.0)
+    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
+    report: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    report_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
-    object_type: Mapped[ObjectType | None] = relationship()
-    buildings: Mapped[list["Building"]] = relationship(
-        back_populates="site", cascade="all, delete-orphan")
-    stages: Mapped[list["SiteStage"]] = relationship(
-        back_populates="site", cascade="all, delete-orphan",
-        order_by="SiteStage.order_idx")
-    cameras: Mapped[list["Camera"]] = relationship(
-        back_populates="site", cascade="all, delete-orphan")
-
-
-class Building(Base):
-    """Корпус. Внутренняя единица измерения: у него своя этажность, свой
-    прогресс и свой вес при свёртке в показатели объекта (вес = площадь).
-    В отчётности наружу корпуса не фигурируют — так просили организаторы.
-    """
-    __tablename__ = "buildings"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"))
-    name: Mapped[str] = mapped_column(String(128))
-    floors_total: Mapped[int | None] = mapped_column(Integer)
-    area: Mapped[float | None] = mapped_column(Float)
-    weight: Mapped[float] = mapped_column(Float, default=1.0)
-    structure_type: Mapped[str] = mapped_column(String(128), default="")
-    has_underground: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    site: Mapped[Site] = relationship(back_populates="buildings")
-
-
-class SiteStage(Base):
-    """Этап в календарном плане объекта. Даты конкретные, не кварталы —
-    организаторы указали это явно. `dates_confirmed` отличает подтверждённые
-    пользователем даты от черновых, развёрнутых из вех проектной декларации.
-    """
-    __tablename__ = "site_stages"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"))
-    macro_stage_id: Mapped[int | None] = mapped_column(ForeignKey("macro_stages.id"))
-    order_idx: Mapped[int] = mapped_column(Integer, default=0)
-    custom_name: Mapped[str] = mapped_column(String(256), default="")
-    planned_start: Mapped[dt.date | None] = mapped_column(Date)
-    planned_end: Mapped[dt.date | None] = mapped_column(Date)
-    dates_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
-    on_critical_path: Mapped[bool] = mapped_column(Boolean, default=True)
-    lag_to_next: Mapped[int] = mapped_column(Integer, default=0)
-    equipment_expected: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-    equipment_forbidden: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    # Снимок чек-листа на момент сохранения плана. Правка CSV не должна
-    # задним числом менять вопросы у объекта, который наблюдается месяцами:
-    # иначе половина истории окажется по одному набору вопросов, половина
-    # по другому, и сравнивать их будет нельзя.
-    questions: Mapped[list[dict]] = mapped_column(JSONB, default=list)
-
-    site: Mapped[Site] = relationship(back_populates="stages")
-    macro_stage: Mapped[MacroStage | None] = relationship()
-
-    @property
-    def title(self) -> str:
-        return self.custom_name or (self.macro_stage.name if self.macro_stage else "?")
-
-
-class Declaration(Base):
-    __tablename__ = "declarations"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"))
-    file_key: Mapped[str] = mapped_column(Text, default="")
-    parsed: Mapped[dict] = mapped_column(JSONB, default=dict)
-    milestones: Mapped[list] = mapped_column(JSONB, default=list)
-
-
-# --------------------------------------------------------------------------
-# наблюдение
-# --------------------------------------------------------------------------
 
 class Camera(Base):
-    """Источник кадров.
-
-    Два режима, `source_type`:
-
-        folder  — папка на диске, прогоняется целиком по команде. Режим
-                  разработки: на нём мерялось качество маски, он повторяем.
-        stream  — камера как отдельный сервис. `source_uri` — её адрес,
-                  сервис сам шлёт кадры по одному, а мы принимаем и
-                  разбираем их на лету. Это то, как система работает в жизни.
-
-    `ingest_key` — пропуск камеры к приёмнику. Кадры приходят без сессии
-    оператора, и отличить свою камеру от чужого запроса больше нечем.
-    Ключ у каждой камеры свой: увели один — отключается одна камера.
-    """
     __tablename__ = "cameras"
     id: Mapped[int] = mapped_column(primary_key=True)
-    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"))
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(128))
-    source_type: Mapped[str] = mapped_column(String(32), default="folder")
-    source_uri: Mapped[str] = mapped_column(Text, default="")
+    kind: Mapped[str] = mapped_column(String(16), default="upload")   # upload | folder | stream | video
     ingest_key: Mapped[str] = mapped_column(String(64), default="")
-    last_seen_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
-    view_type: Mapped[ViewType] = mapped_column(Enum(ViewType), default=ViewType.SIDE)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    reference_frame_key: Mapped[str] = mapped_column(Text, default="")
-
-    site: Mapped[Site] = relationship(back_populates="cameras")
-    state: Mapped["CameraState"] = relationship(
-        back_populates="camera", uselist=False, cascade="all, delete-orphan")
-    zones: Mapped[list["Zone"]] = relationship(
-        back_populates="camera", cascade="all, delete-orphan")
+    interval_min: Mapped[int] = mapped_column(Integer, default=20)
+    homography: Mapped[list | None] = mapped_column(JSON, nullable=True)      # 3×3 кадр → план, метры
+    calib_points: Mapped[dict | None] = mapped_column(JSON, nullable=True)    # {image_points, site_points, reproj_error}
+    image_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_h: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_frame_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    source_uri: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
 class CameraState(Base):
-    """Состояние маски фона по камере. Живёт месяцами.
-
-    `initial_mask_key` — то, что нарисовал оператор, хранится неизменным:
-    по нему считается, сколько маски уже съедено растущим зданием.
-    `background_key` — текущая маска, только сжимается.
-    `evidence_key` — счётчик по клеткам: устойчивое изменение накапливается
-    и пробивает порог, разовое откатывается назад.
-    """
+    """Состояние динамической маски камеры (core.stage.DynamicMask.dumps → хранилище)."""
     __tablename__ = "camera_states"
     id: Mapped[int] = mapped_column(primary_key=True)
-    camera_id: Mapped[int] = mapped_column(
-        ForeignKey("cameras.id", ondelete="CASCADE"), unique=True)
-    initial_mask_key: Mapped[str] = mapped_column(Text, default="")
-    background_key: Mapped[str] = mapped_column(Text, default="")
-    evidence_key: Mapped[str] = mapped_column(Text, default="")
-    work_w: Mapped[int] = mapped_column(Integer, default=0)
-    work_h: Mapped[int] = mapped_column(Integer, default=0)
-    mask_approved: Mapped[bool] = mapped_column(Boolean, default=False)
-    windows_accumulated: Mapped[int] = mapped_column(Integer, default=0)
+    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"), unique=True)
+    mask_key: Mapped[str] = mapped_column(String(512), default="")
+    initial_mask_key: Mapped[str] = mapped_column(String(512), default="")
+    counters_key: Mapped[str] = mapped_column(String(512), default="")
+    windows: Mapped[int] = mapped_column(Integer, default=0)
     masked_ratio: Mapped[float] = mapped_column(Float, default=0.0)
     retained: Mapped[float] = mapped_column(Float, default=1.0)
-    mask_top_edge_px: Mapped[int | None] = mapped_column(Integer)
-    px_per_floor: Mapped[float | None] = mapped_column(Float)
-    last_reset_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
-    updated_at: Mapped[dt.datetime | None] = mapped_column(
-        DateTime(timezone=True), onupdate=func.now())
-
-    camera: Mapped[Camera] = relationship(back_populates="state")
+    stage_mask_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    updated_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
 
 class Zone(Base):
     __tablename__ = "zones"
     id: Mapped[int] = mapped_column(primary_key=True)
-    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"))
-    building_id: Mapped[int | None] = mapped_column(ForeignKey("buildings.id"))
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"),
+                                                  nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(128), default="")
-    polygon: Mapped[list] = mapped_column(JSONB, default=list)
-    zone_type: Mapped[ZoneType] = mapped_column(Enum(ZoneType), default=ZoneType.WORK)
-    view_quality: Mapped[float] = mapped_column(Float, default=1.0)
+    kind: Mapped[str] = mapped_column(String(16), default="work")   # work | parking | storage | restricted
+    polygon: Mapped[list] = mapped_column(JSON, default=list)       # [[x, y], ...] в пикселях кадра
 
-    camera: Mapped[Camera] = relationship(back_populates="zones")
 
+# --------------------------------------------------------------------------
+# кадры и выводы моделей
+# --------------------------------------------------------------------------
 
 class Frame(Base):
-    """Кадр и результаты его обработки.
-
-    Три картинки на кадр: исходник, кадр с погашенным фоном (то, что ушло бы
-    в модель Б) и наложение маски красным (чтобы оценить границы глазом).
-    Хранятся в объектном хранилище, в БД только ключи.
-    """
     __tablename__ = "frames"
     id: Mapped[int] = mapped_column(primary_key=True)
-    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"))
-    captured_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), index=True)
-    object_key: Mapped[str] = mapped_column(Text)
-    masked_key: Mapped[str] = mapped_column(Text, default="")
-    overlay_key: Mapped[str] = mapped_column(Text, default="")
-    width: Mapped[int | None] = mapped_column(Integer)
-    height: Mapped[int | None] = mapped_column(Integer)
-    phash: Mapped[str] = mapped_column(String(32), default="")
+    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"), index=True)
+    captured_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, index=True)
+    key: Mapped[str] = mapped_column(String(512))
+    preview_key: Mapped[str] = mapped_column(String(512), default="")
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_night: Mapped[bool] = mapped_column(Boolean, default=False)
+    weather: Mapped[str] = mapped_column(String(16), default="unknown")
     quality_ok: Mapped[bool] = mapped_column(Boolean, default=True)
-    reject_reason: Mapped[str] = mapped_column(String(64), default="")
-    masked_ratio: Mapped[float] = mapped_column(Float, default=0.0)
-    retained: Mapped[float] = mapped_column(Float, default=1.0)
-    top_edge_px: Mapped[int | None] = mapped_column(Integer)
-    change_pct: Mapped[float] = mapped_column(Float, default=0.0)
-    # Что камера сообщила о кадре помимо картинки: модель, выдержка, погода,
-    # номер в серии. Схему сюда не навязываем — у разных камер она разная,
-    # а терять то, чего мы не ждали, хуже, чем хранить лишнее.
-    meta: Mapped[dict] = mapped_column(JSONB, default=dict)
+    reject_reason: Mapped[str] = mapped_column(String(256), default="")
+    blur: Mapped[float | None] = mapped_column(Float, nullable=True)
+    brightness: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stage_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    processed_a: Mapped[bool] = mapped_column(Boolean, default=False)
+    processed_b: Mapped[bool] = mapped_column(Boolean, default=False)
+    meta: Mapped[dict] = mapped_column(JSON, default=dict)
+    # pending | processing | done | postponed | error
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    job_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
 
-    __table_args__ = (UniqueConstraint("camera_id", "captured_at",
-                                       name="uq_frame_camera_time"),)
+    __table_args__ = (UniqueConstraint("camera_id", "captured_at", name="uq_frame_camera_time"),)
 
 
-# --------------------------------------------------------------------------
-# выводы моделей
-# --------------------------------------------------------------------------
+class EquipmentUnit(Base):
+    __tablename__ = "equipment_units"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    uid: Mapped[str] = mapped_column(String(64))
+    cls: Mapped[str] = mapped_column(String(32))
+    label: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(16), default="idle")
+    first_seen: Mapped[dt.datetime] = mapped_column(UTCDateTime)
+    last_seen: Mapped[dt.datetime] = mapped_column(UTCDateTime)
+    last_moved: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    worked_hours: Mapped[float] = mapped_column(Float, default=0.0)
+    cameras: Mapped[list] = mapped_column(JSON, default=list)
+    plate: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    site_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    site_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    __table_args__ = (UniqueConstraint("site_id", "uid", name="uq_unit_site_uid"),)
+
 
 class Detection(Base):
     __tablename__ = "detections"
     id: Mapped[int] = mapped_column(primary_key=True)
-    frame_id: Mapped[int] = mapped_column(ForeignKey("frames.id", ondelete="CASCADE"))
-    cls: Mapped[str] = mapped_column("class", String(64))
-    bbox: Mapped[list] = mapped_column(JSONB)
+    frame_id: Mapped[int] = mapped_column(ForeignKey("frames.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(32))     # ключ провайдера из настроек: yolo | glm
+    cls: Mapped[str] = mapped_column(String(32))
     conf: Mapped[float] = mapped_column(Float)
-    zone_id: Mapped[int | None] = mapped_column(ForeignKey("zones.id"))
-    moved_since_prev: Mapped[bool] = mapped_column(Boolean, default=False)
+    x: Mapped[float] = mapped_column(Float)
+    y: Mapped[float] = mapped_column(Float)
+    w: Mapped[float] = mapped_column(Float)
+    h: Mapped[float] = mapped_column(Float)
+    track_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    unit_id: Mapped[int | None] = mapped_column(ForeignKey("equipment_units.id", ondelete="SET NULL"),
+                                                nullable=True, index=True)
+    moved: Mapped[bool] = mapped_column(Boolean, default=False)
     displacement_px: Mapped[float] = mapped_column(Float, default=0.0)
-    bbox_shape_delta: Mapped[float] = mapped_column(Float, default=0.0)
-    track_id: Mapped[int | None] = mapped_column(ForeignKey("equipment_tracks.id"))
+    shape_delta: Mapped[float] = mapped_column(Float, default=0.0)
+    appearance_delta: Mapped[float] = mapped_column(Float, default=0.0)
+    activity: Mapped[str] = mapped_column(String(16), default="unknown")
+    zone_id: Mapped[int | None] = mapped_column(Integer, nullable=True)   # без FK: удаление зоны не ломает историю
+    site_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    site_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    extra: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
-class EquipmentTrack(Base):
-    """Единица техники во времени. Нужна ровно ради различения «присутствует»
-    и «задействована»: организаторы предупредили, что техника неделями стоит
-    на площадке в ожидании вывоза, и наличие её в кадре ничего не доказывает.
-    """
-    __tablename__ = "equipment_tracks"
+class ActivityInterval(Base):
+    """Строка журнала моточасов. `manual` — поправка оператора («экскаватор
+    работал ещё 3 ч, камера не видела»): без единицы техники, часы могут быть
+    отрицательными; переанализ ручные поправки не стирает."""
+    __tablename__ = "activity_intervals"
     id: Mapped[int] = mapped_column(primary_key=True)
-    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"))
-    cls: Mapped[str] = mapped_column("class", String(64))
-    first_seen: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
-    last_seen: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
-    status: Mapped[EquipmentStatus] = mapped_column(
-        Enum(EquipmentStatus), default=EquipmentStatus.ACTIVE)
-    status_since: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
-    last_position: Mapped[list] = mapped_column(JSONB, default=list)
-    position_variance: Mapped[float] = mapped_column(Float, default=0.0)
+    unit_id: Mapped[int | None] = mapped_column(ForeignKey("equipment_units.id", ondelete="CASCADE"),
+                                                nullable=True, index=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    cls: Mapped[str] = mapped_column(String(32))
+    stage_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    start: Mapped[dt.datetime] = mapped_column(UTCDateTime)
+    end: Mapped[dt.datetime] = mapped_column(UTCDateTime)
+    hours: Mapped[float] = mapped_column(Float)
+    frame_ids: Mapped[list] = mapped_column(JSON, default=list)
+    manual: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str] = mapped_column(Text, default="")
 
 
-class Checklist(Base):
-    """Одно заполнение чек-листа по одному кадру. Версии копятся во времени —
-    аналитика строится по всей хронологии, а не по последнему кадру.
-    """
-    __tablename__ = "checklists"
+class StageObservation(Base):
+    __tablename__ = "stage_observations"
     id: Mapped[int] = mapped_column(primary_key=True)
-    frame_id: Mapped[int] = mapped_column(ForeignKey("frames.id", ondelete="CASCADE"))
-    site_stage_id: Mapped[int] = mapped_column(
-        ForeignKey("site_stages.id", ondelete="CASCADE"))
-    zone_id: Mapped[int | None] = mapped_column(ForeignKey("zones.id"))
-    model_name: Mapped[str] = mapped_column(String(128), default="")
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True),
-                                                    server_default=func.now())
-
-    answers: Mapped[list["ChecklistAnswer"]] = relationship(
-        back_populates="checklist", cascade="all, delete-orphan")
-
-
-class ChecklistAnswer(Base):
-    __tablename__ = "checklist_answers"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    checklist_id: Mapped[int] = mapped_column(
-        ForeignKey("checklists.id", ondelete="CASCADE"))
-    key: Mapped[str] = mapped_column(String(64), default="")
-    question: Mapped[str] = mapped_column(Text)
-    answer: Mapped[Answer] = mapped_column(Enum(Answer))
-    polarity: Mapped[str] = mapped_column(String(16), default="must_have")
-    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
-    raw_response: Mapped[str] = mapped_column(Text, default="")
-
-    checklist: Mapped[Checklist] = relationship(back_populates="answers")
-
-
-class Measurement(Base):
-    __tablename__ = "measurements"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    frame_id: Mapped[int] = mapped_column(ForeignKey("frames.id", ondelete="CASCADE"))
-    building_id: Mapped[int | None] = mapped_column(ForeignKey("buildings.id"))
-    metric: Mapped[str] = mapped_column(String(64))
-    value: Mapped[float] = mapped_column(Float)
-    source: Mapped[str] = mapped_column(String(32), default="")
-
-
-# --------------------------------------------------------------------------
-# аналитика
-# --------------------------------------------------------------------------
-
-class DailyActivity(Base):
-    """Активность площадки по дням. Питает расчёт темпа в активных днях —
-    связка между требованием «работает или стоит» и требованием «предсказывай
-    задержку». Ночные смены считаются: работы ночью идут.
-    """
-    __tablename__ = "daily_activity"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"))
-    date: Mapped[dt.date] = mapped_column(Date, index=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=False)
-    frames_total: Mapped[int] = mapped_column(Integer, default=0)
-    frames_with_motion: Mapped[int] = mapped_column(Integer, default=0)
-    night_frames_with_motion: Mapped[int] = mapped_column(Integer, default=0)
-    workers_median: Mapped[float] = mapped_column(Float, default=0.0)
-
-    __table_args__ = (UniqueConstraint("site_id", "date", name="uq_activity_day"),)
-
-
-class StageScore(Base):
-    __tablename__ = "stage_scores"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    site_stage_id: Mapped[int] = mapped_column(
-        ForeignKey("site_stages.id", ondelete="CASCADE"))
-    date: Mapped[dt.date] = mapped_column(Date, index=True)
-    probability: Mapped[float] = mapped_column(Float, default=0.0)
-    progress_pct: Mapped[float | None] = mapped_column(Float)
+    frame_id: Mapped[int] = mapped_column(ForeignKey("frames.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(32))     # siglip | local_vlm | glm
+    model: Mapped[str] = mapped_column(String(128), default="")
+    answers: Mapped[dict] = mapped_column(JSON, default=dict)
+    scores: Mapped[dict] = mapped_column(JSON, default=dict)
+    stage_likelihood: Mapped[dict] = mapped_column(JSON, default=dict)
     unsure_ratio: Mapped[float] = mapped_column(Float, default=0.0)
-    source_frames: Mapped[int] = mapped_column(Integer, default=0)
+    latency_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    raw: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
 
-    __table_args__ = (UniqueConstraint("site_stage_id", "date",
-                                       name="uq_score_stage_day"),)
+
+# --------------------------------------------------------------------------
+# этапы, план, парк, отклонения
+# --------------------------------------------------------------------------
+
+class StageState(Base):
+    __tablename__ = "stage_states"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    stage_id: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="not_started")
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    actual_start: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    actual_end: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    manual: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str] = mapped_column(Text, default="")
+    evidence: Mapped[list] = mapped_column(JSON, default=list)
+    updated_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    __table_args__ = (UniqueConstraint("site_id", "stage_id", name="uq_stage_state"),)
+
+
+class PlanItem(Base):
+    __tablename__ = "plan_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    stage_id: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(256), default="")
+    work_codes: Mapped[list] = mapped_column(JSON, default=list)
+    planned_start: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    planned_end: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    equipment: Mapped[dict] = mapped_column(JSON, default=dict)
+    planned_hours: Mapped[dict] = mapped_column(JSON, default=dict)
+    hours_manual: Mapped[bool] = mapped_column(Boolean, default=False)
+    source: Mapped[str] = mapped_column(String(16), default="manual")   # manual | import | demo
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class SiteFleet(Base):
+    __tablename__ = "site_fleet"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    cls: Mapped[str] = mapped_column(String(32))
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+    __table_args__ = (UniqueConstraint("site_id", "cls", name="uq_fleet_cls"),)
 
 
 class Deviation(Base):
     __tablename__ = "deviations"
     id: Mapped[int] = mapped_column(primary_key=True)
-    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"))
-    site_stage_id: Mapped[int | None] = mapped_column(ForeignKey("site_stages.id"))
-    type: Mapped[DeviationType] = mapped_column(Enum(DeviationType))
-    severity: Mapped[str] = mapped_column(String(16), default="medium")
-    detected_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True),
-                                                     server_default=func.now())
-    resolved_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
-    description: Mapped[str] = mapped_column(Text, default="")
-    evidence_frame_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), default=list)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(256))
+    type: Mapped[str] = mapped_column(String(48))
+    severity: Mapped[str] = mapped_column(String(16), default="warning")
+    title: Mapped[str] = mapped_column(String(256), default="")
+    message: Mapped[str] = mapped_column(Text, default="")
+    stage_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    camera_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    zone_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    frame_ids: Mapped[list] = mapped_column(JSON, default=list)
+    unit_ids: Mapped[list] = mapped_column(JSON, default=list)
+    started_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    last_seen_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="open")   # open | ack | resolved
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    __table_args__ = (UniqueConstraint("site_id", "key", name="uq_deviation_key"),)
 
 
-class Forecast(Base):
-    __tablename__ = "forecasts"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    site_stage_id: Mapped[int] = mapped_column(
-        ForeignKey("site_stages.id", ondelete="CASCADE"))
-    date: Mapped[dt.date] = mapped_column(Date, index=True)
-    projected_end: Mapped[dt.date | None] = mapped_column(Date)
-    delay_days: Mapped[int | None] = mapped_column(Integer)
-    delay_low: Mapped[int | None] = mapped_column(Integer)
-    delay_high: Mapped[int | None] = mapped_column(Integer)
-    method: Mapped[str] = mapped_column(String(64), default="")
-    v_recent: Mapped[float | None] = mapped_column(Float)
-    v_overall: Mapped[float | None] = mapped_column(Float)
-    v_plan: Mapped[float | None] = mapped_column(Float)
-    k_idle: Mapped[float | None] = mapped_column(Float)
-    confidence: Mapped[str] = mapped_column(String(16), default="low")
-    explanation: Mapped[str] = mapped_column(Text, default="")
+class Job(Base):
+    """Задание: загрузка файлов, засев демо, переанализ. Прогресс считается по кадрам."""
+    __tablename__ = "jobs"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    site_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    camera_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    kind: Mapped[str] = mapped_column(String(16), default="upload")    # upload | reprocess | seed | cli
+    state: Mapped[str] = mapped_column(String(16), default="ingesting")  # ingesting | queued | failed
+    total: Mapped[int] = mapped_column(Integer, default=0)        # кадров сохранено заданием
+    duplicates: Mapped[int] = mapped_column(Integer, default=0)
+    skipped: Mapped[int] = mapped_column(Integer, default=0)
+    errors: Mapped[list] = mapped_column(JSON, default=list)
+    message: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
+    finished_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
 
-class AuditLog(Base):
-    __tablename__ = "audit_log"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_login: Mapped[str] = mapped_column(String(64), default="")
-    action: Mapped[str] = mapped_column(String(64))
-    entity: Mapped[str] = mapped_column(String(64), default="")
-    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True),
-                                                    server_default=func.now())
+Index("ix_frames_camera_status", Frame.camera_id, Frame.status)
+Index("ix_detections_frame_provider", Detection.frame_id, Detection.provider)
