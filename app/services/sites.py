@@ -215,6 +215,23 @@ def delete_camera(s: Session, camera_id: int) -> None:
     """Порядок удаления явный: на SQLite без каскада ORM-дерево из тысяч кадров
     грузилось бы в память. Файлы в хранилище не трогаем (решение Дениса)."""
     frames = _frame_ids_subq([camera_id])
+    cam = s.get(Camera, camera_id)
+    if cam is not None:
+        # Техника, которую видела только эта камера, уходит вместе с ней (иначе в
+        # объекте оставался «фантомный» Экскаватор №2 с моточасами — отчёт UI);
+        # у общих с другими камерами единиц камера просто вычёркивается.
+        for unit in s.scalars(select(EquipmentUnit).where(EquipmentUnit.site_id == cam.site_id)).all():
+            seen_by = [str(x) for x in (unit.cameras or [])]
+            if str(camera_id) not in seen_by:
+                continue
+            rest = [x for x in seen_by if x != str(camera_id)]
+            if rest:
+                unit.cameras = rest
+            else:
+                s.execute(delete(ActivityInterval).where(ActivityInterval.unit_id == unit.id))
+                s.execute(update(Detection).where(Detection.unit_id == unit.id).values(unit_id=None))
+                s.delete(unit)
+        s.flush()
     s.execute(delete(Detection).where(Detection.frame_id.in_(frames)))
     s.execute(delete(StageObservation).where(StageObservation.frame_id.in_(frames)))
     s.execute(delete(Frame).where(Frame.camera_id == camera_id))

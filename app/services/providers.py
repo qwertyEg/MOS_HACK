@@ -73,6 +73,58 @@ def optional_module(name: str) -> ModuleType | Any | None:
         return None
 
 
+def _thresholds() -> dict:
+    """Пороги из таблицы settings (лениво: settings импортирует этот модуль).
+    БД недоступна (утилита до bootstrap) — умолчания реализаций."""
+    try:
+        from app import db
+        from app.services import settings as settings_svc
+        with db.session() as s:
+            return settings_svc.get_state(s)["thresholds"]
+    except Exception:  # noqa: BLE001 — пороги не должны мешать собрать провайдера
+        return {}
+
+
+def equipment_config(values: dict) -> Any | None:
+    """EquipmentConfig модели А из порогов UI; None — модуль не подключён."""
+    eq = optional_module("core.equipment")
+    if eq is None or not hasattr(eq, "EquipmentConfig"):
+        return None
+    try:
+        return eq.EquipmentConfig.from_dict(values or {})
+    except Exception:  # noqa: BLE001 — кривой порог в БД не должен выключать детектор
+        return eq.EquipmentConfig()
+
+
+_embedders: dict[str, Any] = {}
+
+
+def shared_embedder(model_name: str) -> Any | None:
+    """Один SigLIP на процесс для модели Б и уточнения подтипа грузовиков (модель А).
+
+    Обе модели по умолчанию — google/siglip2-base-patch16-224; две копии весов
+    на ноутбуке 8 ГБ — лишние ~1.5 ГБ. core.equipment.refine.SiglipEmbedder
+    держит модель в общем кэше по (имя, устройство) и понимает ответы и
+    transformers 4, и transformers 5. None — transformers/torch не установлены
+    (тогда классификатор сам объяснит это в ready()).
+    """
+    if model_name in _embedders:
+        return _embedders[model_name]
+    refine = optional_module("core.equipment.refine")
+    if refine is None or not hasattr(refine, "SiglipEmbedder"):
+        return None
+    try:
+        if not refine.transformers_available():
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    import os
+    threads = os.environ.get("EQUIPMENT_THREADS", "").strip()
+    emb = refine.SiglipEmbedder(model_name, threads=int(threads) if threads.isdigit() and int(threads) > 0 else None)
+    _embedders[model_name] = emb
+    return emb
+
+
 def _construct(factory: Callable, name: str, kwargs: dict) -> Any:
     """Имена kwargs у реализаций заранее не согласованы (контракт — `**kw`),
     поэтому пробуем с нашими параметрами, а при TypeError — без них: реализации
@@ -114,10 +166,29 @@ class Registry:
     # --- экземпляры ------------------------------------------------------
 
     def _kwargs(self, kind: str, name: str) -> dict:
+        """Параметры конструкторов реальных реализаций (core.equipment / core.stage).
+
+        Пороги из настроек уходят в конструкторы, поэтому PUT /api/settings со
+        сменой порогов делает registry.reset() — экземпляры пересобираются.
+        """
+        thr = _thresholds()
         if kind == "detector" and name == "yolo":
-            return {"weights": str(settings.path(settings.equipment_weights))}
+            kw: dict[str, Any] = {"weights": str(settings.path(settings.equipment_weights))}
+            cfg = equipment_config(thr.get("equipment") or {})
+            if cfg is not None:
+                kw["config"] = cfg          # min_conf, пороги уточнения подтипа грузовиков и т.п.
+            return kw
         if kind == "classifier" and name == "siglip":
-            return {"model": settings.stage_clip_model}
+            stage = thr.get("stage") or {}
+            kw = {"model_name": settings.stage_clip_model}
+            if "yes_thr" in stage:
+                kw["yes_threshold"] = float(stage["yes_thr"])
+            if "no_thr" in stage:
+                kw["no_threshold"] = float(stage["no_thr"])
+            emb = shared_embedder(settings.stage_clip_model)
+            if emb is not None:
+                kw["embedder"] = emb
+            return kw
         return {}
 
     def get(self, kind: str, name: str) -> Any:
@@ -182,8 +253,12 @@ class Registry:
         (glm) упирается в сеть, его вызовы параллелим."""
         if name == "glm":
             return contextlib.nullcontext()
+        # YOLO и SigLIP — один замок: они делят процессорные потоки torch и одну
+        # копию SigLIP (уточнение подтипа грузовиков + модель Б), а быстрый
+        # токенизатор HF не терпит одновременных вызовов из разных потоков.
+        key = ("local", "torch") if name in ("yolo", "siglip") else (kind, name)
         with self._lock:
-            return self._call_locks.setdefault((kind, name), threading.Lock())
+            return self._call_locks.setdefault(key, threading.Lock())
 
     def require(self, kind: str, name: str) -> Any:
         """Готовый экземпляр или ProviderUnavailable с человекочитаемой причиной."""

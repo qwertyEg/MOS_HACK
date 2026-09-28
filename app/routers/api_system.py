@@ -86,6 +86,14 @@ async def put_settings(request: Request, s: Session = Depends(get_session)) -> d
     return _settings_json(state)
 
 
+def _pair_json(p) -> dict | list:
+    """Пара «ведущая ↔ обслуживающая» (core.plan.norms.Pair) для UI и документации."""
+    if isinstance(p, (list, tuple)):
+        return list(p)
+    return {"id": p.id, "leader": list(p.leader), "followers": list(p.followers), "severity": p.severity,
+            "window_h": p.window_h, "title": p.title}
+
+
 @router.get("/catalog")
 def catalog() -> dict:
     """Справочник для редактора плана и подписей UI: этапы с подэтапами, кодами работ
@@ -101,7 +109,8 @@ def catalog() -> dict:
         works = []
         if cat is not None:
             try:
-                works = [{"code": w.code, "name": w.name, "status": w.status, "substage_id": w.substage_id}
+                works = [{"code": w.code, "name": w.name, "status": w.status, "substage_id": w.substage_id,
+                          "key": getattr(w, "key", w.code)}
                          for w in cat.works_for_stage(st.id)]
             except Exception:  # noqa: BLE001 — справочник работ не обязателен для остального
                 works = []
@@ -110,7 +119,7 @@ def catalog() -> dict:
             try:
                 req = norms.requirement(st.id)
                 rule = {"expected": list(req.expected), "optional": list(req.optional),
-                        "forbidden": list(req.forbidden), "pairs": [list(p) for p in req.pairs],
+                        "forbidden": list(req.forbidden), "pairs": [_pair_json(p) for p in req.pairs],
                         "min_count": dict(req.min_count), "default_equipment": norms.default_equipment(st.id)}
             except Exception:  # noqa: BLE001
                 rule = None

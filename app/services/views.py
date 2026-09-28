@@ -84,12 +84,16 @@ def site_card(s: Session, site: Site) -> dict[str, Any]:
 
 
 @functools.lru_cache(maxsize=1)
-def _catalog_names() -> dict[str, str]:
+def _catalog_names() -> dict[str, tuple[str, str]]:
+    """Ключ работы (как в PlanItem.work_codes) → (код, название).
+
+    Ключ каталога — собственный код строки («12.3.1.») или «родитель/название»
+    для строк-детализаций без своего кода (core.plan.catalog.WorkItem.key)."""
     catalog = providers.optional_module("core.plan.catalog")
     if catalog is None:
         return {}
     try:
-        return {w.code: w.name for w in catalog.load()}
+        return {getattr(w, "key", w.code): (w.code, w.name) for w in catalog.load()}
     except Exception:  # noqa: BLE001
         return {}
 
@@ -98,7 +102,13 @@ def stage_works(stage_id: int, plan_row: PlanItem | None) -> list[dict[str, str]
     """Коды работ из xlsx при этапе: из плана, если там указаны, иначе — каталог."""
     if plan_row is not None and plan_row.work_codes:
         names = _catalog_names()
-        return [{"code": code, "name": names.get(code, "")} for code in plan_row.work_codes]
+        out = []
+        for key in plan_row.work_codes:
+            code, name = names.get(key, (key, ""))
+            if not code and "/" in key:      # детализация без своего кода: код родителя
+                code = key.split("/", 1)[0]
+            out.append({"code": code, "name": name, "key": key})
+        return out
     catalog = providers.optional_module("core.plan.catalog")
     if catalog is None:
         return []
@@ -106,7 +116,8 @@ def stage_works(stage_id: int, plan_row: PlanItem | None) -> list[dict[str, str]
         items = catalog.works_for_stage(stage_id)
     except Exception:  # noqa: BLE001
         return []
-    return [{"code": w.code, "name": w.name} for w in items if getattr(w, "status", "substage") == "substage"][:40]
+    return [{"code": w.code, "name": w.name, "key": getattr(w, "key", w.code)} for w in items
+            if getattr(w, "status", "substage") == "substage" and w.code][:40]
 
 
 def _active_plan_stages(plan: list[PlanItem], today: dt.date) -> set[int]:

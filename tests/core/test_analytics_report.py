@@ -53,6 +53,14 @@ def test_no_data_report_says_why():
     assert r.explanation[-1] == "Отклонений не выявлено." or r.deviations
 
 
+def test_unsure_only_report_is_not_called_no_data():
+    """Модель Б кадры разобрала, но всё «не уверен»: объяснение не должно говорить «не разобрала ни одного»."""
+    r = report.build(sc.context(NOW, plan_items=sc.excavation_plan(TODAY), config={"stage_observations": 7}))
+    assert r.verdict == Verdict.NO_DATA
+    assert "не определён" in r.explanation[0] and "7" in r.explanation[0]
+    assert "ни одного дневного кадра" not in r.explanation[0]
+
+
 def test_partial_plan_progress_is_comparable():
     """С частичным планом «план» и «факт» в отчёте считаются по одним этапам — и объяснение это говорит."""
     tl = sc.timeline({1: ("done", 1.0), 2: ("done", 1.0), 3: ("active", 0.5, TODAY - 10 * DAY)}, front=3,

@@ -183,6 +183,10 @@ def seed(s: Session, root: Path | None = None, only: list[str] | None = None, re
             cam = Camera(site_id=site.id, name=spec.get("name") or folder.name, kind="folder",
                          interval_min=int(spec.get("interval_min", settings.default_interval_min)),
                          ingest_key=auth.new_ingest_key(), source_uri=str(folder))
+            size = spec.get("image_size")
+            if isinstance(size, (list, tuple)) and len(size) == 2:
+                # размер, на котором сняты точки калибровки: гомография масштабируется от него
+                cam.image_w, cam.image_h = int(size[0]), int(size[1])
             _calibrate(cam, spec, warnings)
             s.add(cam)
             s.flush()

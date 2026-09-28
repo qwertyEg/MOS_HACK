@@ -59,7 +59,9 @@ def test_manual_plan_hours_take_priority():
     got = hours.planned_hours(plan, {"excavator": 5})
     assert got[3]["excavator"] == 16.0
     assert got[3]["mobile_crane"] == 28.0
-    assert got[3]["dump_truck"] == pytest.approx(6 * 10 * 0.7), "что не правили руками — по формуле"
+    # парк этапа по нормам core.plan.norms (после слияния модулей — 4 самосвала на котловане)
+    n = hours._default_units(3)["dump_truck"]
+    assert got[3]["dump_truck"] == pytest.approx(n * 6 * 10 * 0.7), "что не правили руками — по формуле"
 
 
 def test_stage_without_dates_has_no_computed_hours():

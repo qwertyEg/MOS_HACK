@@ -29,12 +29,7 @@ from . import postprocess
 from .classes import canonical_class
 from .config import EquipmentConfig
 
-try:
-    import core.vlm_client as _vlm
-except ModuleNotFoundError as e:      # модуль модели Б ещё не влит — см. _vlm_compat
-    if e.name != "core.vlm_client":   # сломан сам модуль (нет requests и т.п.) — не прятать
-        raise
-    from . import _vlm_compat as _vlm
+import core.vlm_client as _vlm   # общий клиент VLM (модель Б): GLM-4.6V и локальная VLM
 
 VLMError = _vlm.VLMError
 

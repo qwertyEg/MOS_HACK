@@ -77,6 +77,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "tmp_dir", str(tmp_path / "tmp"))
     monkeypatch.setattr(settings, "demo_dir", str(tmp_path / "demo"))
     monkeypatch.setattr(settings, "default_mode", "local")
+    monkeypatch.setattr(settings, "warm_models", False)   # фоновый прогрев сбил бы счётчики вызовов фейков
     db.configure(f"sqlite:///{tmp_path}/app.db")
     storage.configure("local", tmp_path / "storage")
 

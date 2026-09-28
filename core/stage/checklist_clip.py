@@ -80,6 +80,20 @@ def _normalize(x: np.ndarray) -> np.ndarray:
     return x / np.maximum(np.linalg.norm(x, axis=-1, keepdims=True), 1e-8)
 
 
+def _features(out: Any):
+    """transformers 5 отдаёт из get_*_features объект (BaseModelOutputWithPooling), 4.x — тензор.
+    Правка интегратора: на сервере (transformers 5.17) `.float()` падал на объекте, и модель Б
+    не разбирала ни одного кадра (отчёты UI и модели А)."""
+    if hasattr(out, "float"):
+        return out
+    pooled = getattr(out, "pooler_output", None)
+    if pooled is not None:
+        return pooled
+    if isinstance(out, (tuple, list)):
+        return out[1] if len(out) > 1 else out[0]
+    return out[0]
+
+
 class _CachedTexts:
     """Кэш эмбеддингов текстов: формулировки не меняются, считать их на каждом кадре незачем."""
 
@@ -138,7 +152,7 @@ class TransformersEmbedder(_CachedTexts):
         pil = [Image.fromarray(np.ascontiguousarray(im)) for im in images_rgb]
         with self._torch.no_grad():
             inputs = self._proc(images=pil, return_tensors="pt").to(self.device)
-            feats = self._model.get_image_features(**inputs)
+            feats = _features(self._model.get_image_features(**inputs))
         return _normalize(feats.float().cpu().numpy())
 
     def _embed_texts_raw(self, texts: list[str]) -> np.ndarray:
@@ -147,7 +161,7 @@ class TransformersEmbedder(_CachedTexts):
         with self._torch.no_grad():
             inputs = self._proc(text=texts, padding="max_length", max_length=64, truncation=True,
                                 return_tensors="pt").to(self.device)
-            feats = self._model.get_text_features(**inputs)
+            feats = _features(self._model.get_text_features(**inputs))
         return feats.float().cpu().numpy()
 
 
@@ -259,7 +273,7 @@ class ClipChecklistClassifier:
             try:
                 from huggingface_hub import try_to_load_from_cache
                 if try_to_load_from_cache(self.config.model_name, "config.json") is None:
-                    return False, f"веса {self.config.model_name} не скачаны (tools/fetch_models.py), а сеть выключена"
+                    return False, f"веса {self.config.model_name} не скачаны (huggingface-cli download, см. models/README.md), а сеть выключена"
             except Exception:  # noqa: BLE001 — проверка кэша не должна ронять страницу настроек
                 pass
         return True, ""

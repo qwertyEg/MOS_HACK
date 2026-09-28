@@ -188,8 +188,9 @@ def test_overview_has_all_contract_fields(env):
     assert len(ov["stages"]) == 8 and all(OVERVIEW_STAGE <= s.keys() for s in ov["stages"])
     st3 = ov["stages"][2]
     assert st3["planned_start"] == "2025-05-01" and st3["status"] == "active"
-    assert st3["works"] == [{"code": "12.3.1.", "name": "Устройство котлована"}]
-    assert ov["stages"][0]["works"] == [{"code": "10.2.", "name": "Вынос инженерных систем"}]   # из каталога
+    assert st3["works"] == [{"code": "12.3.1.", "name": "Устройство котлована", "key": "12.3.1."}]
+    assert ov["stages"][0]["works"] == [{"code": "10.2.", "name": "Вынос инженерных систем",
+                                        "key": "10.2."}]   # из каталога
     exc = next(e for e in ov["equipment"] if e["cls"] == "excavator")
     assert OVERVIEW_EQUIPMENT <= exc.keys()
     assert exc["units"] == 1 and exc["active"] == 1 and exc["worked_hours"] == 1.0

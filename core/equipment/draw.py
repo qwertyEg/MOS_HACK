@@ -19,31 +19,33 @@ import numpy as np
 from core import taxonomy
 from core.contracts import Activity, Detection
 
-# Цвета подобраны так, чтобы восемь классов ТЗ различались сильнее всего.
+# Палитра — ровно та же, что app/static/js/palette.js (источник — UI: восемь классов ТЗ
+# в слотах проверенной категориальной палитры, различимой при дальтонизме). Рамки на
+# annotated.jpg и SVG-оверлей в браузере одного цвета; tests/ui/test_ui_static.py сверяет таблицы.
 CLASS_COLORS: dict[str, str] = {
-    "excavator": "#F97316",          # оранжевый
-    "dump_truck": "#EF4444",         # красный
-    "bulldozer": "#EAB308",          # жёлтый
-    "roller": "#84CC16",             # салатовый
-    "concrete_mixer": "#06B6D4",     # бирюзовый
-    "truck": "#3B82F6",              # синий
-    "mobile_crane": "#A855F7",       # фиолетовый
-    "crane_manipulator": "#EC4899",  # розовый
-    "tower_crane": "#8B5CF6",
-    "crawler_crane": "#6366F1",
-    "concrete_pump": "#14B8A6",
-    "drilling_rig": "#B45309",
-    "pile_driver": "#78350F",
-    "wheel_loader": "#22C55E",
-    "skid_steer": "#10B981",
-    "backhoe_loader": "#F59E0B",
-    "telehandler": "#0EA5E9",
-    "grader": "#65A30D",
-    "asphalt_paver": "#475569",
-    "aerial_platform": "#D946EF",
-    "facade_hoist": "#94A3B8",
+    "excavator": "#3987e5",  # 1 синий
+    "dump_truck": "#d95926",  # 2 оранжевый
+    "bulldozer": "#199e70",  # 3 бирюзовый
+    "mobile_crane": "#c98500",  # 4 жёлтый
+    "concrete_mixer": "#d55181",  # 5 маджента
+    "roller": "#008300",  # 6 зелёный
+    "truck": "#9085e9",  # 7 фиолетовый
+    "crane_manipulator": "#e66767",  # 8 красный
+    "tower_crane": "#0ea5e9",
+    "crawler_crane": "#14b8a6",
+    "concrete_pump": "#c026d3",
+    "drilling_rig": "#b45309",
+    "pile_driver": "#a8a29e",
+    "wheel_loader": "#84cc16",
+    "skid_steer": "#65a30d",
+    "backhoe_loader": "#6366f1",
+    "telehandler": "#0891b2",
+    "grader": "#a3a635",
+    "asphalt_paver": "#78716c",
+    "aerial_platform": "#f472b6",
+    "facade_hoist": "#94a3b8",
 }
-DEFAULT_COLOR = "#E5E7EB"
+DEFAULT_COLOR = "#a1a1aa"
 
 ACTIVITY_RU = {Activity.WORKING: "работает", Activity.IDLE: "стоит", Activity.UNKNOWN: ""}
 STATUS_RU = {"parked": "на стоянке", "departed": "уехала"}

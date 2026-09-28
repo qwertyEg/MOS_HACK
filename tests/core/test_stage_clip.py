@@ -175,3 +175,20 @@ def test_heavy_ml_packages_are_imported_lazily():
             "print(','.join(m for m in ('torch', 'transformers', 'open_clip') if m in sys.modules))")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == ""                       # веб-слой и тесты не тянут torch
+
+
+def test_features_accept_transformers5_output():
+    """transformers 5: get_*_features возвращает объект с pooler_output, а не тензор (падало на сервере)."""
+    from core.stage.checklist_clip import _features
+
+    class Tensor:
+        def float(self):
+            return self
+
+    t = Tensor()
+    assert _features(t) is t                      # transformers 4.x — уже тензор
+
+    class Output:
+        pooler_output = t
+
+    assert _features(Output()) is t               # transformers 5.x — BaseModelOutputWithPooling

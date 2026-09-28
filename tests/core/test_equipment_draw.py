@@ -1,6 +1,8 @@
 """Отрисовка рамок и единая палитра классов."""
 from __future__ import annotations
 
+import re
+
 import numpy as np
 
 from core import taxonomy
@@ -48,4 +50,15 @@ def test_palette_covers_taxonomy_with_distinct_colors():
     assert len(set(colors)) == len(colors)
     tz = [np.array(draw.color_bgr(k), float) for k in taxonomy.TZ_EQUIPMENT]
     closest = min(np.linalg.norm(a - b) for i, a in enumerate(tz) for b in tz[i + 1:])
-    assert closest > 60, "восемь классов ТЗ должны различаться на глаз"
+    # Палитра взята из UI (app/static/js/palette.js): восемь классов ТЗ проверены там по ΔE,
+    # в том числе при протанопии; грубое евклидово расстояние в RGB у неё ≥ 38.
+    assert closest > 30, "восемь классов ТЗ должны различаться на глаз"
+
+
+def test_palette_matches_ui():
+    """Рамки на annotated.jpg и SVG-оверлей браузера — одного цвета (отчёт UI: палитры расходились)."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[2] / "app/static/js/palette.js").read_text(encoding="utf-8")
+    block = js[js.index("CLASS_COLORS = {"):js.index("};", js.index("CLASS_COLORS = {"))]
+    ui = dict(re.findall(r'^\s*([a-z_]+):\s*"(#[0-9a-f]{6})"', block, re.M))
+    assert ui == {k: v.lower() for k, v in draw.CLASS_COLORS.items()}

@@ -51,9 +51,12 @@ def test_camera_crud_and_delete_cascades(env):
 
     env.upload(cam["id"], series(2))
     assert c.get(f"/api/cameras/{cam['id']}").json()["frames_total"] == 2
+    assert c.get(f"/api/sites/{site['id']}/equipment").json()["units"]
     assert c.delete(f"/api/cameras/{cam['id']}").status_code == 200
     assert c.get(f"/api/cameras/{cam['id']}").status_code == 404
     assert c.get(f"/api/sites/{site['id']}/cameras").json() == []
+    # техника, которую видела только удалённая камера, не остаётся «фантомом» (отчёт UI)
+    assert c.get(f"/api/sites/{site['id']}/equipment").json()["units"] == []
 
 
 def test_zones_create_list_delete(env):

@@ -35,6 +35,43 @@ def _warm_up() -> None:
         registry.status()
     except Exception:  # noqa: BLE001
         log.exception("прогрев провайдеров")
+    if settings.warm_models:
+        _warm_models()
+
+
+def _warm_models() -> None:
+    """Загрузить локальные модели текущего режима заранее: иначе первый кадр
+    (или первая «Проверить снимок» у жюри) ждёт загрузки YOLO и SigLIP ~50 с.
+    Внешний API не трогаем — это сеть и деньги."""
+    import datetime as dt
+
+    import numpy as np
+
+    from app.services import settings as settings_svc
+    from core.contracts import FrameInfo
+
+    try:
+        with db.session() as s:
+            state = settings_svc.get_state(s)
+    except Exception:  # noqa: BLE001
+        return
+    img = np.full((224, 224, 3), 127, np.uint8)
+    info = FrameInfo(frame_id="warmup", camera_id="warmup", site_id="warmup",
+                     captured_at=dt.datetime.now(dt.UTC), width=224, height=224)
+    jobs = [("detector", state["model_a"]), ("classifier", state["model_b"])]
+    for kind, name in jobs:
+        if name not in ("yolo", "siglip"):
+            continue
+        try:
+            obj = registry.require(kind, name)
+            with registry.call_lock(kind, name):
+                if kind == "detector":
+                    obj.detect(img, info)
+                else:
+                    obj.assess(img, info)
+            log.info("модель %s загружена заранее", name)
+        except Exception as exc:  # noqa: BLE001 — не загрузилась сейчас — загрузится на первом кадре
+            log.warning("прогрев %s не удался: %s", name, exc)
 
 
 @contextlib.asynccontextmanager

@@ -183,7 +183,6 @@ def write_work_map(records, path):
 
 
 def render_md(checklist, records):
-    signs = {s["key"]: s for s in checklist["signs"]}
     eq = {e["key"]: e["name"] for e in checklist["equipment"]}
     by_sub = defaultdict(list)
     for r in records:

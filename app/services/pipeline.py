@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import inspect
 import logging
 import threading
 from collections import defaultdict
@@ -23,6 +24,7 @@ from typing import Any
 import cv2
 import numpy as np
 from sqlalchemy import delete, func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app import db, storage
@@ -101,16 +103,32 @@ def _mask_key(camera_id: int) -> str:
     return f"masks/{camera_id}/mask.bin"
 
 
+def _params(fn: Any) -> set[str]:
+    try:
+        return set(inspect.signature(fn).parameters)
+    except (TypeError, ValueError):
+        return set()
+
+
+def mask_class() -> Any | None:
+    """DynamicMask модели Б (core.stage.mask); None — модуль не подключён."""
+    for name in ("core.stage.mask", "core.stage"):
+        mod = providers.optional_module(name)
+        if mod is not None and hasattr(mod, "DynamicMask"):
+            return mod.DynamicMask
+    return None
+
+
 def load_mask(s: Session, cam: Camera) -> Any | None:
     if cam.id in _masks:
         return _masks[cam.id]
-    stage = providers.optional_module("core.stage")
-    if stage is None or not hasattr(stage, "DynamicMask"):
+    cls = mask_class()
+    if cls is None:
         return None
     state = s.scalar(select(CameraState).where(CameraState.camera_id == cam.id))
     if state is not None and state.mask_key:
         try:
-            mask = stage.DynamicMask.loads(storage.get().get(state.mask_key))
+            mask = cls.loads(storage.get().get(state.mask_key))
             _masks[cam.id] = mask
             return mask
         except Exception as exc:  # noqa: BLE001 — маска восстановима наблюдением
@@ -119,20 +137,28 @@ def load_mask(s: Session, cam: Camera) -> Any | None:
 
 
 def _update_mask(s: Session, cam: Camera, img: np.ndarray, when: dt.datetime,
-                 thresholds: dict) -> tuple[Any | None, bool]:
-    """Обновить маску годным дневным кадром. → (маска, изменилась ли сильно)."""
-    stage = providers.optional_module("core.stage")
-    if stage is None or not hasattr(stage, "DynamicMask"):
+                 thresholds: dict, weather: Any = None) -> tuple[Any | None, bool]:
+    """Обновить маску годным дневным кадром. → (маска, изменилась ли сильно).
+
+    «Сильно» (внеочередной вызов модели Б, ARCHITECTURE §4): маска только что
+    инициализировалась или стёрла клетки (стройка заползла на фон —
+    `MaskUpdate.erased_cells`), либо доля маски с прошлого вызова модели Б
+    сдвинулась больше порога `stage_mask_change`.
+    """
+    cls = mask_class()
+    if cls is None:
         return None, False
     mask = load_mask(s, cam)
     if mask is None:
-        mask = stage.DynamicMask.new(img.shape[:2])
+        mask = cls.new(img.shape[:2])
+    # Погода нужна маске, чтобы снег не «стирал» соседний дом (окно замораживается).
+    kw = {"weather": weather} if weather is not None and "weather" in _params(mask.update) else {}
     try:
-        mask.update(img, when)
+        upd = mask.update(img, when, **kw)
     except Exception as exc:  # noqa: BLE001 — камеру переставили / сменилось разрешение
         log.warning("маска камеры %s сброшена: %s", cam.id, exc)
-        mask = stage.DynamicMask.new(img.shape[:2])
-        mask.update(img, when)
+        mask = cls.new(img.shape[:2])
+        upd = mask.update(img, when, **kw)
     _masks[cam.id] = mask
 
     state = s.scalar(select(CameraState).where(CameraState.camera_id == cam.id))
@@ -142,9 +168,12 @@ def _update_mask(s: Session, cam: Camera, img: np.ndarray, when: dt.datetime,
     state.mask_key = storage.get().put(_mask_key(cam.id), mask.dumps(), "application/octet-stream")
     state.windows = (state.windows or 0) + 1
     state.masked_ratio = float(mask.masked_ratio)
+    state.retained = float(getattr(mask, "retained", 1.0) or 0.0)
     state.updated_at = utcnow()
-    changed = (state.stage_mask_ratio is not None and
-               abs(state.masked_ratio - state.stage_mask_ratio) >= thresholds["pipeline"]["stage_mask_change"])
+    changed = bool(getattr(upd, "initialized_now", False) or (getattr(upd, "erased_cells", 0) or 0) > 0)
+    if state.stage_mask_ratio is not None and \
+            abs(state.masked_ratio - state.stage_mask_ratio) >= thresholds["pipeline"]["stage_mask_change"]:
+        changed = True
     return mask, changed
 
 
@@ -157,7 +186,17 @@ def _engine(s: Session, site: Site, thresholds: dict, provider: str) -> Any:
     if engine is not None:
         return engine
     eq = providers.module("core.equipment")
-    config = eq.EquipmentConfig.from_dict(thresholds.get("equipment") or {})
+    values = dict(thresholds.get("equipment") or {})
+    # День плана, на который списываются моточасы, — по часовому поясу площадки;
+    # смена и коэффициент использования — из карточки объекта и порогов аналитики.
+    if site.timezone:
+        values["timezone"] = site.timezone
+    if site.shift_hours:
+        values["shift_hours"] = float(site.shift_hours)
+    if "utilization" in (thresholds.get("analytics") or {}):
+        values["utilization"] = float(thresholds["analytics"]["utilization"])
+    known = set(getattr(eq.EquipmentConfig, "__dataclass_fields__", {}) or values)
+    config = eq.EquipmentConfig.from_dict({k: v for k, v in values.items() if k in known})
     engine = eq.EquipmentEngine(config)
     engine.restore(adapters.units(s, site.id), adapters.last_detections_by_camera(s, site.id, provider))
     _engines[site.id] = engine
@@ -191,6 +230,20 @@ def _write_equipment(s: Session, fr: Frame, site: Site, update: Any, provider: s
             uid_to_id[uid] = found
         return uid_to_id[uid]
 
+    # Склейка дубля (EquipmentUpdate.merged: {старый unit_id: новый}): единица,
+    # родившаяся на стыке камер, оказалась уже известной машиной — её детекции и
+    # моточасы переходят к настоящей единице, запись дубля удаляется.
+    for old_uid, new_uid in (getattr(update, "merged", None) or {}).items():
+        old = s.scalar(select(EquipmentUnit).where(EquipmentUnit.site_id == site.id,
+                                                   EquipmentUnit.uid == old_uid))
+        new_id = unit_row_id(new_uid)
+        if old is None or new_id is None or old.id == new_id:
+            continue
+        s.execute(sa_update(Detection).where(Detection.unit_id == old.id).values(unit_id=new_id))
+        s.execute(sa_update(ActivityInterval).where(ActivityInterval.unit_id == old.id).values(unit_id=new_id))
+        s.delete(old)
+        s.flush()
+
     for d in update.detections or []:
         s.add(adapters.detection_row(d, fr.id, provider, unit_row_id(d.unit_id)))
     for iv in update.intervals or []:
@@ -208,7 +261,8 @@ def _write_equipment(s: Session, fr: Frame, site: Site, update: Any, provider: s
 
 
 def _run_model_a(s: Session, fr: Frame, cam: Camera, site: Site, img: np.ndarray,
-                 info: c.FrameInfo, state: dict) -> None:
+                 info: c.FrameInfo, state: dict) -> list[str]:
+    """→ события кадра от движка («камера сдвинулась…») — в примечание кадра."""
     name = state["model_a"]
     detector = registry.require("detector", name)
     with registry.call_lock("detector", name):
@@ -219,6 +273,9 @@ def _run_model_a(s: Session, fr: Frame, cam: Camera, site: Site, img: np.ndarray
                                 adapters.zones_for_camera(s, cam), adapters.plan_items(s, site.id))
         _write_equipment(s, fr, site, update, name)
         s.commit()
+    # «Камера не откалибрована» движок пишет на каждом кадре — UI и так показывает
+    # это у камеры, в примечании кадра оставляем только события кадра.
+    return [str(n) for n in (getattr(update, "notes", None) or []) if "не откалибрована" not in str(n)]
 
 
 # --------------------------------------------------------------------------
@@ -239,30 +296,74 @@ def _stage_due(s: Session, fr: Frame, cam: Camera, thresholds: dict, mask_change
     return not near
 
 
-def stage_context(s: Session, site: Site) -> dict[str, Any]:
-    """Что уже известно о стройке — подсказка модели Б (контекст Никиты)."""
-    states = {r.stage_id: r.status for r in s.scalars(select(StageState).where(StageState.site_id == site.id))}
+def _context_text(s: Session, site: Site, before: dt.datetime, front: int | None,
+                  rows: dict[int, StageState]) -> str:
+    """Текст контекста стройки для VLM — порт ContextBuilder.text() Никиты
+    (api-solution/core/site.py): достигнутый этап, виденная техника, «стройка не
+    идёт назад». Пустая строка, если модель Б этот объект ещё не видела."""
+    n, last = s.execute(
+        select(func.count(StageObservation.id), func.max(Frame.captured_at))
+        .join(Frame, Frame.id == StageObservation.frame_id).join(Camera, Camera.id == Frame.camera_id)
+        .where(Camera.site_id == site.id, Frame.captured_at < before)).one()
+    if not n:
+        return ""
+    tz = adapters.site_tz(site)
+    last = last if last.tzinfo else last.replace(tzinfo=dt.UTC)
+    lines = [f"Контекст этой стройки по {n} предыдущим снимкам (последний — {last.astimezone(tz):%d.%m.%Y}):"]
+    if front:
+        since = rows.get(front).actual_start if rows.get(front) else None
+        done = f"; этапы 1–{front - 1} выполнены" if front > 1 else ""
+        lines.append(f"- достигнутый этап: {front} «{taxonomy.stage_name(front)}»"
+                     f"{f' (с {since:%d.%m.%Y})' if since else ''}{done}.")
+    seen = s.execute(select(EquipmentUnit.cls, func.count(EquipmentUnit.id))
+                     .where(EquipmentUnit.site_id == site.id).group_by(EquipmentUnit.cls)).all()
+    if seen:
+        eq = ", ".join(f"{taxonomy.equipment_name(cls)} (до {cnt})" for cls, cnt in sorted(seen))
+        lines.append(f"- техника, которую уже видели на площадке: {eq}.")
+    lines.append("Стройка не идёт назад. Используй контекст, чтобы не противоречить истории, "
+                 "но отвечай только по тому, что видно на этом снимке. Если снимок явно противоречит "
+                 "контексту, коротко опиши это в поле context_conflict.")
+    return "\n".join(lines)
+
+
+def stage_context(s: Session, site: Site, before: dt.datetime | None = None,
+                  mask: Any | None = None) -> dict[str, Any]:
+    """Что уже известно о стройке — context классификатора модели Б.
+
+    Ключи, которые читают реализации core.stage (build_model-b): `mask` — маска
+    камеры (DynamicMask; классификатор сам гасит фон и говорит VLM, что тёмное —
+    фон), `front` — текущий этап по хронологии, `text` — контекст стройки для
+    GLM (Никита). Остальное — для отладки и фейков в тестах.
+    """
+    rows = {r.stage_id: r for r in s.scalars(select(StageState).where(StageState.site_id == site.id))}
+    states = {k: r.status for k, r in rows.items()}
     report = site.report or {}
-    return {
+    front = report.get("current_stage")
+    front = int(front) if isinstance(front, (int, float)) else None
+    ctx: dict[str, Any] = {
         "site_id": site.id, "object_type": site.object_type, "floors_total": site.floors_total,
-        "current_stage": report.get("current_stage"), "stage_states": states,
+        "current_stage": front, "stage_states": states,
         "done_stages": sorted(k for k, v in states.items() if v == "done"),
+        "front": front,
     }
+    if mask is not None:
+        ctx["mask"] = mask
+    try:
+        ctx["text"] = _context_text(s, site, before or dt.datetime.now(dt.UTC), front, rows)
+    except Exception as exc:  # noqa: BLE001 — без контекста разбор хуже, но возможен
+        log.warning("контекст стройки %s не собран: %s", site.id, exc)
+    return ctx
 
 
 def _run_model_b(s: Session, fr: Frame, cam: Camera, site: Site, img: np.ndarray,
                  info: c.FrameInfo, state: dict, mask: Any | None) -> None:
     name = state["model_b"]
     classifier = registry.require("classifier", name)
-    image = img
-    if mask is not None and getattr(mask, "masked_ratio", 0) > 0:
-        try:
-            image = mask.apply(img, mode="darken")
-        except Exception as exc:  # noqa: BLE001 — без маски хуже, но не повод терять кадр
-            log.warning("маска не применилась к кадру %s: %s", fr.id, exc)
-    context = stage_context(s, site)
+    # Маску не накладываем здесь: классификатор делает это сам (core.stage.mask.
+    # masked_for_model) и знает, применилась ли она, — GLM тогда получает пояснение.
+    context = stage_context(s, site, before=fr.captured_at, mask=mask)
     with registry.call_lock("classifier", name):
-        result = classifier.assess(image, info, keys=None, context=context)
+        result = classifier.assess(img, info, keys=None, context=context)
     s.execute(delete(StageObservation).where(StageObservation.frame_id == fr.id,
                                              StageObservation.provider == name))
     s.add(adapters.observation_row(result, fr.id, name))
@@ -323,7 +424,7 @@ def process_frame(frame_id: int) -> str:
             mask = load_mask(s, cam)        # повторный заход (отложенный кадр): маска этот кадр уже видела
         elif quality.usable_for_stage:
             try:
-                mask, mask_changed = _update_mask(s, cam, img, fr.captured_at, thresholds)
+                mask, mask_changed = _update_mask(s, cam, img, fr.captured_at, thresholds, quality.weather)
                 fr.meta = {**(fr.meta or {}), "mask_done": True}
                 s.commit()
             except Exception as exc:  # noqa: BLE001
@@ -332,7 +433,7 @@ def process_frame(frame_id: int) -> str:
 
         if not fr.processed_a:
             try:
-                _run_model_a(s, fr, cam, site, img, info, state)
+                notes.extend(_run_model_a(s, fr, cam, site, img, info, state))
                 fr.processed_a = True
                 s.commit()
             except ProviderUnavailable as exc:
@@ -480,6 +581,55 @@ def compute_plan_hours(s: Session, site: Site, thresholds: dict | None = None) -
     return []
 
 
+def _tz_offset_hours(site: Site, now: dt.datetime) -> float:
+    """Смещение пояса площадки на момент `now` — границы суток хронологии модели Б."""
+    off = now.astimezone(adapters.site_tz(site)).utcoffset()
+    return off.total_seconds() / 3600 if off else 0.0
+
+
+def _detectable(model_a: str) -> list[str] | None:
+    """Классы, которые умеет текущий детектор: типы вне списка не порождают
+    «нет техники этапа» (у YOLO нет башенного крана сверху и асфальтоукладчика)."""
+    try:
+        registry.get("detector", model_a)      # дёшево: веса грузятся при первом detect()
+    except ProviderUnavailable:
+        return None
+    return sorted(c["key"] for c in settings_svc.classes(model_a) if c["supported"])
+
+
+def _sequence_config(thr: dict, site: Site, now: dt.datetime) -> dict:
+    """Пороги UI → SequenceConfig модели Б (имена в UI исторические)."""
+    cfg = {**thr["stage"], **thr["pipeline"]}
+    if "unsure_review_ratio" in thr["stage"]:
+        cfg["needs_review_ratio"] = float(thr["stage"]["unsure_review_ratio"])
+    cfg["tz_offset_hours"] = _tz_offset_hours(site, now)
+    return cfg
+
+
+def _analytics_config(s: Session, thr: dict, site: Site, model_a: str) -> dict:
+    """Пороги UI + то, что правила аналитики хотят знать о площадке (build_plan-analytics):
+    пояс, что умеет детектор, камеры с типом (папка/видео не «молчат»)."""
+    cfg = {**thr["analytics"], **thr["stage"], "shift_hours": site.shift_hours,
+           "floors_total": site.floors_total, "object_type": site.object_type,
+           "timezone": site.timezone or "Europe/Moscow"}
+    if "on_track_days" in thr["analytics"]:
+        cfg["schedule_tolerance_days"] = float(thr["analytics"]["on_track_days"])
+    detectable = _detectable(model_a)
+    if detectable is not None:
+        cfg["detectable"] = detectable
+    cams = s.scalars(select(Camera).where(Camera.site_id == site.id).order_by(Camera.id)).all()
+    cfg["cameras"] = [{"id": cam.id, "name": cam.name, "kind": cam.kind,
+                       "last_frame_at": adapters.iso(cam.last_frame_at)} for cam in cams]
+    cfg["camera_names"] = {str(cam.id): cam.name for cam in cams}
+    return cfg
+
+
+def _balances(hours_mod: Any, plan: list[c.PlanItem], intervals: list[c.ActivityInterval], site: Site) -> list:
+    if "tz" in _params(hours_mod.balances):
+        return hours_mod.balances(plan, intervals, tz=site.timezone or "Europe/Moscow")
+    return hours_mod.balances(plan, intervals)
+
+
 def recompute_site(site_id: int) -> dict | None:
     """Пересчитать этапы, часы, отклонения и отчёт площадки. Идемпотентно."""
     with _recompute_locks[site_id]:
@@ -496,7 +646,7 @@ def recompute_site(site_id: int) -> dict | None:
             manual = {r.stage_id: adapters.stage_state(r) for r in
                       s.scalars(select(StageState).where(StageState.site_id == site_id, StageState.manual.is_(True)))}
             observations = adapters.observations(s, site_id, state["model_b"])
-            seq_config = {**thr["stage"], **thr["pipeline"]}
+            seq_config = _sequence_config(thr, site, now)
 
             timeline = _step(errors, "хронология этапов",
                              lambda: providers.module("core.stage.sequence").infer(
@@ -509,7 +659,7 @@ def recompute_site(site_id: int) -> dict | None:
 
             intervals = adapters.intervals(s, site_id)
             balances = _step(errors, "моточасы",
-                             lambda: providers.module("core.equipment.hours").balances(plan, intervals), [])
+                             lambda: _balances(providers.module("core.equipment.hours"), plan, intervals, site), [])
             ctx = None
             ctx_mod = providers.optional_module("core.analytics.context")
             if ctx_mod is not None:
@@ -519,24 +669,37 @@ def recompute_site(site_id: int) -> dict | None:
                     recent=adapters.recent(s, site_id, now, float(thr["pipeline"]["recent_window_h"]),
                                            state["model_a"]),
                     intervals=intervals, balances=balances, zones=adapters.zones_for_site(s, site_id),
-                    config={**thr["analytics"], **thr["stage"], "shift_hours": site.shift_hours,
-                            "floors_total": site.floors_total, "object_type": site.object_type},
+                    config={**_analytics_config(s, thr, site, state["model_a"]),
+                            "stage_observations": len(observations)},
                 )
             else:
                 errors.append("аналитика: модуль core.analytics не подключён")
 
+            plan_fact = None
             if ctx is not None:
-                records = _step(errors, "правила отклонений",
-                                lambda: providers.module("core.analytics.rules").evaluate(ctx), None)
-                if records is not None:
-                    _upsert_deviations(s, site_id, records, now)
-                report = _step(errors, "отчёт", lambda: providers.module("core.analytics.report").build(ctx),
-                               lambda: _fallback_report(plan, timeline))
+                report_mod = providers.optional_module("core.analytics.report")
+                if report_mod is not None and hasattr(report_mod, "build_full"):
+                    # Один проход: build_full сам вызывает rules.evaluate и plan_vs_fact
+                    # с темпом в активных днях (по журналу моточасов модели А).
+                    built = _step(errors, "отчёт", lambda: report_mod.build_full(ctx), None)
+                    if built is not None:
+                        report, plan_fact = built
+                        _upsert_deviations(s, site_id, list(report.deviations or []), now)
+                    else:
+                        report = _fallback_report(plan, timeline)
+                else:
+                    records = _step(errors, "правила отклонений",
+                                    lambda: providers.module("core.analytics.rules").evaluate(ctx), None)
+                    if records is not None:
+                        _upsert_deviations(s, site_id, records, now)
+                    report = _step(errors, "отчёт", lambda: providers.module("core.analytics.report").build(ctx),
+                                   lambda: _fallback_report(plan, timeline))
             else:
                 report = _fallback_report(plan, timeline)
-            plan_fact = _step(errors, "план/факт",
-                              lambda: providers.module("core.analytics.timeline").plan_vs_fact(
-                                  plan, timeline, now.date()), None)
+            if plan_fact is None:
+                plan_fact = _step(errors, "план/факт",
+                                  lambda: providers.module("core.analytics.timeline").plan_vs_fact(
+                                      plan, timeline, now.date()), None)
 
             series = {"days": [], "expected": [], "actual": []}
             if plan_fact is not None and isinstance(getattr(plan_fact, "series", None), dict):
@@ -558,6 +721,10 @@ def recompute_site(site_id: int) -> dict | None:
                               "worked_hours": float(b.worked_hours),
                               "last_worked_at": adapters.iso(b.last_worked_at)} for b in balances],
                 "series": series,
+                "planned_finish": adapters.jsonable(getattr(plan_fact, "planned_finish", None)),
+                "delay_days": adapters.jsonable(getattr(plan_fact, "delay_days", None)),
+                "forecast_note": str(getattr(plan_fact, "forecast_note", "") or ""),
+                "stage_obs": len(observations),
                 "now": now.isoformat(),
                 "errors": errors,
             })

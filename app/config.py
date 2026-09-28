@@ -50,8 +50,13 @@ class Settings(BaseSettings):
     vlm_api_key: str = ""
 
     # --- локальные модели ---
-    equipment_weights: str = "models/equipment.pt"          # YOLO, модель А
-    stage_clip_model: str = "google/siglip-base-patch16-224"  # SigLIP, модель Б (id HF или путь)
+    # YOLO модели А: файл весов, каталог с ними или equipment_classes.json (см. models/README.md)
+    equipment_weights: str = "models/equipment_yolo.pt"
+    # SigLIP модели Б (id HF или путь). Та же модель по умолчанию уточняет подтип
+    # грузовиков у модели А — в памяти одна копия (providers.shared_embedder).
+    stage_clip_model: str = "google/siglip2-base-patch16-224"
+    equipment_threads: int = 0     # потоков torch на CPU для YOLO/SigLIP; 0 — как решит torch
+    warm_models: bool = True       # при старте загрузить модели текущего режима (первый кадр без ~50 с ожидания)
 
     # --- веб ---
     secret_key: str = "dev-secret-change-me"
@@ -93,11 +98,13 @@ class Settings(BaseSettings):
             "ZAI_API_KEY": self.zai_api_key,
             "ZAI_BASE_URL": self.zai_base_url,
             "ZAI_MODEL": self.zai_model,
+            "GLM_MODEL": self.zai_model,          # так имя модели читает core.vlm_client
             "VLM_BASE_URL": self.vlm_base_url,
             "VLM_MODEL": self.vlm_model,
             "VLM_API_KEY": self.vlm_api_key,
             "EQUIPMENT_WEIGHTS": str(self.path(self.equipment_weights)) if self.equipment_weights else "",
             "STAGE_CLIP_MODEL": self.stage_clip_model,
+            "EQUIPMENT_THREADS": str(self.equipment_threads) if self.equipment_threads > 0 else "",
         }
         for key, value in pairs.items():
             if value and not os.environ.get(key):
