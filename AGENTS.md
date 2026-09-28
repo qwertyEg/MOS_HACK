@@ -350,4 +350,4 @@
 Задевает: всех — UI теперь Alpine.js + ECharts + собранный Tailwind поверх JSON API
 (не HTMX); модель Б по умолчанию — SigLIP2 на CPU, локальная VLM — провайдер
 `local_vlm` (`VLM_BASE_URL`, `VLM_MODEL`); запуск — `python -m app`, тесты —
-`python -m pytest -q` (462 теста, без сети и GPU).
+`python -m pytest -q` (463 теста, без сети и GPU).
