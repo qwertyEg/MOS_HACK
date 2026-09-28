@@ -1,0 +1,256 @@
+{
+  "_note": "Формулировки для локальной модели Б (SigLIP/CLIP): по каждому признаку reference/checklist.json — позитивные (признак есть) и негативные (признака нет) описания на английском. Негативные описывают альтернативную сцену, по возможности не называя сам объект: CLIP-подобные модели плохо понимают отрицание, и «no fence» лежит в пространстве эмбеддингов рядом с «fence». Несколько формулировок усредняются (prompt ensembling). Необязательные yes_thr/no_thr на признаке переопределяют общие пороги.",
+  "template": "a photo of {}",
+  "signs": {
+    "fence": {
+      "pos": ["a construction site enclosed by a tall solid corrugated metal hoarding fence", "a long continuous site fence made of painted metal sheets or concrete panels around a building plot"],
+      "neg": ["an open plot of land with unobstructed edges and nothing around it", "a street with open lawns and sidewalks along an open area"]
+    },
+    "gate_checkpoint": {
+      "pos": ["a construction site entrance with a sliding gate, a security booth and a barrier arm", "a truck wheel washing station at the gate of a construction site"],
+      "neg": ["a continuous blank wall of a construction site hoarding", "an empty stretch of road beside an open field"]
+    },
+    "cabins": {
+      "pos": ["stacked portable site cabins and container offices at a construction site", "a row of modular prefab trailers with small windows and outdoor stairs on a building site"],
+      "neg": ["an empty open construction yard with bare soil", "a parking lot with ordinary cars"]
+    },
+    "temp_road": {
+      "pos": ["temporary roads made of precast concrete road slabs inside a construction site", "a crushed stone access road with tire tracks across a building site"],
+      "neg": ["a muddy field with untouched grass", "a finished asphalt street with painted road markings"]
+    },
+    "old_building": {
+      "pos": ["an old abandoned building being demolished inside a construction fence", "a partly destroyed old house with broken windows and exposed rebar"],
+      "neg": ["a cleared empty plot of flat bare ground", "a brand new building under construction with fresh concrete"]
+    },
+    "debris": {
+      "pos": ["piles of demolition debris with broken concrete, bricks and twisted rebar", "heaps of mixed construction rubble and waste on the ground"],
+      "neg": ["neat stacks of new building materials on pallets", "a clean level surface of compacted sand"]
+    },
+    "tree_felling": {
+      "pos": ["freshly cut tree stumps, felled trunks and piles of branches on a site", "logging debris with stacked logs and uprooted tree roots"],
+      "neg": ["a bare cleared plot of soil", "a row of healthy standing trees in a park"]
+    },
+    "vegetation_in_footprint": {
+      "pos": ["trees and shrubs growing wild on an overgrown plot of land", "an untouched green patch of bushes and trees inside a fenced area"],
+      "neg": ["a bare plot of dug soil at a construction site", "a concrete building structure filling the plot"]
+    },
+    "cleared": {
+      "pos": ["a cleared flat open plot of bare soil ready for construction", "a level construction site stripped of buildings and vegetation"],
+      "neg": ["an old building and overgrown trees on a plot of land", "a dense patch of bushes and rubble on an abandoned lot"]
+    },
+    "utility_trench": {
+      "pos": ["a long narrow trench with large pipes being laid in the ground", "a utility trench with concrete manhole rings and cable drums beside it"],
+      "neg": ["a wide deep excavation pit for a building foundation", "flat undisturbed ground with a paved surface"]
+    },
+    "pipes_stock": {
+      "pos": ["stacks of large steel and plastic pipes stored on a construction site", "wooden cable drums and concrete manhole rings stored on the ground"],
+      "neg": ["empty open ground at a construction site", "pallets of bricks and bags of cement"]
+    },
+    "rig": {
+      "pos": ["a piling rig with a tall vertical mast drilling into the ground", "a crawler drilling machine with a high leader mast and an auger at a construction site"],
+      "neg": ["a hydraulic excavator digging soil with its bucket", "a tower crane standing next to a building"]
+    },
+    "sheet_pile": {
+      "pos": ["a wall of corrugated steel sheet piles driven into the ground around a pit", "interlocking steel sheet piling retaining the side of an excavation"],
+      "neg": ["a sloped earth bank of an excavation", "a smooth poured concrete retaining wall"]
+    },
+    "pile_heads": {
+      "pos": ["rows of concrete pile heads with protruding rebar sticking out of the ground", "a grid of cut foundation piles sticking up from the soil of a construction site"],
+      "neg": ["a smooth flat concrete foundation slab", "a flat plot of compacted soil"]
+    },
+    "pile_stock": {
+      "pos": ["stacks of long precast concrete piles lying on a construction site", "bundles of steel sheet piles and long cylindrical rebar cages stored on the ground"],
+      "neg": ["pallets of bricks and bags of cement on a site", "empty bare ground at a construction site"]
+    },
+    "capping_beam": {
+      "pos": ["a continuous concrete capping beam running along the top of piles around an excavation", "a horizontal concrete ring beam on top of a secant pile wall"],
+      "neg": ["the bare top of steel sheet piles around a pit", "the sloped earth edge of an excavation"]
+    },
+    "pit": {
+      "pos": ["a large deep open excavation pit for a building foundation, deeper than a person", "an aerial view of a big rectangular foundation pit dug into the ground with vertical walls"],
+      "neg": ["a flat level plot of land at ground level", "a multi-storey building rising above the surrounding streets"]
+    },
+    "soil_pile": {
+      "pos": ["large piles of excavated soil and clay at a construction site", "heaps of dug earth and sand stockpiled on a building site"],
+      "neg": ["a flat paved yard", "a finished lawn with trees"]
+    },
+    "earthwork": {
+      "pos": ["an excavator digging soil and loading it into a dump truck", "a hydraulic excavator with its bucket in the ground moving earth"],
+      "neg": ["a parked idle truck on a paved road", "workers installing windows on a building facade"]
+    },
+    "struts": {
+      "pos": ["heavy steel struts and braces spanning across a deep excavation pit", "diagonal steel props supporting the walls of a foundation pit"],
+      "neg": ["an open excavation with sloped earth sides", "a flat concrete slab on ground level"]
+    },
+    "pit_bottom_prepared": {
+      "pos": ["the flat leveled bottom of an excavation covered with sand, gravel or lean concrete", "a smooth light gray prepared base at the bottom of a foundation pit"],
+      "neg": ["the rough uneven dug soil at the bottom of a pit with bucket marks", "an excavator digging mud in a pit"]
+    },
+    "formwork": {
+      "pos": ["wooden and metal formwork panels for pouring concrete walls and foundations", "yellow and red formwork boards with props at a construction site"],
+      "neg": ["finished smooth concrete walls", "bare soil at the bottom of an excavation"]
+    },
+    "rebar": {
+      "pos": ["dense steel reinforcement bar mesh laid out for a concrete slab", "rebar cages and vertical reinforcing steel bars sticking up at a construction site"],
+      "neg": ["a smooth finished concrete surface", "a sand base without any steel"]
+    },
+    "concrete_pour": {
+      "pos": ["a concrete pump truck with its boom extended pouring fresh concrete", "workers pouring wet concrete from a pump hose with a concrete mixer truck nearby"],
+      "neg": ["a hardened dry concrete slab with nobody working", "an excavator digging soil"]
+    },
+    "slab": {
+      "pos": ["a large poured concrete foundation slab covering the bottom of an excavation", "a flat continuous gray concrete floor at the bottom of a foundation pit"],
+      "neg": ["the soil bottom of a freshly dug pit", "exposed steel rebar mesh ready for concrete"]
+    },
+    "below_grade": {
+      "pos": ["concrete foundation walls and columns built deep inside an excavation below street level", "an underground basement structure under construction inside a pit"],
+      "neg": ["a tall building frame rising many floors above the ground", "a flat empty lot at street level"]
+    },
+    "basement_walls": {
+      "pos": ["concrete basement walls and columns standing up from the bottom of a foundation pit", "vertical cast concrete walls of an underground floor inside an excavation"],
+      "neg": ["an empty excavation with soil walls", "a flat foundation slab with no walls"]
+    },
+    "zero_slab": {
+      "pos": ["a concrete floor slab at ground level covering an underground basement", "a flat concrete deck at street level where the foundation pit used to be"],
+      "neg": ["an open deep excavation pit", "a multi-storey building frame with many floors"]
+    },
+    "waterproofing": {
+      "pos": ["black bituminous waterproofing membrane applied on basement concrete walls", "foundation walls covered with black roll waterproofing and insulation boards"],
+      "neg": ["bare gray concrete basement walls", "soil backfilled up to a building wall"]
+    },
+    "backfilling": {
+      "pos": ["machines backfilling soil into the gap between basement walls and the side of the pit", "a loader dumping earth next to new concrete foundation walls"],
+      "neg": ["an empty excavation pit with nobody working", "workers on the roof of a tall building"]
+    },
+    "backfill": {
+      "pos": ["soil backfilled flush against the foundation of a new building, no excavation left", "ground level earth reaching right up to the walls of a building under construction"],
+      "neg": ["a deep open gap between basement walls and the excavation side", "an open foundation pit"]
+    },
+    "above_grade": {
+      "pos": ["a concrete building frame rising several floors above the ground", "a multi-storey building under construction standing above the surrounding land"],
+      "neg": ["a flat plot of land at ground level", "a deep excavation pit below ground level"]
+    },
+    "crane": {
+      "pos": ["a tall lattice tower crane with a horizontal jib next to a building", "a tower crane towering over a construction site"],
+      "neg": ["a clear sky above a low building site", "a mobile truck crane with a telescopic boom"]
+    },
+    "formwork_floor": {
+      "pos": ["formwork panels, props and beams on the top floor of a concrete building under construction", "shoring and deck formwork for the next floor slab on top of a building frame"],
+      "neg": ["a finished flat roof with a parapet", "a facade covered with cladding panels"]
+    },
+    "unfinished_top": {
+      "pos": ["an unfinished top floor of a concrete frame with rebar sticking up and no walls", "open concrete floor slabs with exposed reinforcing bars at the top of a building"],
+      "neg": ["a finished roof with a neat parapet and rooftop structures", "a completed building with a clean facade"]
+    },
+    "steel_frame": {
+      "pos": ["a steel structural frame of columns, beams and trusses being erected", "a skeleton of steel girders and roof trusses on a construction site"],
+      "neg": ["a cast concrete building frame", "a brick wall of a finished building"]
+    },
+    "masonry": {
+      "pos": ["walls of light aerated concrete blocks being laid between concrete floor slabs", "bricklaying between floors of a concrete frame with pallets of blocks on the slabs"],
+      "neg": ["open concrete floors with no walls", "a facade with finished cladding panels"]
+    },
+    "bare_concrete": {
+      "pos": ["a bare gray concrete building frame with open floors and no windows or cladding", "an unfinished raw concrete skeleton of a building"],
+      "neg": ["a finished building with windows and colorful facade panels", "a building clad in stone and glass"]
+    },
+    "roof_work": {
+      "pos": ["workers laying roofing rolls and insulation boards on the top of a building", "roofing materials, gas burners and bitumen pots on a flat roof"],
+      "neg": ["an empty finished flat roof", "workers digging in a trench at ground level"]
+    },
+    "roof_superstructures": {
+      "pos": ["small rooftop structures like elevator machine rooms and ventilation shafts on top of a building", "boxy rooftop penthouses and vent stacks above the main roof"],
+      "neg": ["a flat roof slab with nothing on it", "an unfinished top floor with rebar"]
+    },
+    "roof_cover": {
+      "pos": ["a flat roof covered with dark roofing membrane", "a building roof covered with profiled metal sheeting"],
+      "neg": ["a bare concrete roof slab with rebar", "an open top floor under construction"]
+    },
+    "parapet": {
+      "pos": ["a low parapet wall with metal coping around the edge of a flat roof", "roof edge railings and a parapet on top of a building"],
+      "neg": ["an open unprotected edge of a concrete floor slab", "a pitched tiled roof of a house"]
+    },
+    "scaffold": {
+      "pos": ["facade scaffolding with safety netting covering a building", "suspended gondolas and a construction hoist mast on a building facade"],
+      "neg": ["a clean finished facade with nothing attached", "an open field with no structures"]
+    },
+    "window_openings_empty": {
+      "pos": ["empty dark rectangular window openings without frames in the walls of a new building", "a building shell with open holes where windows will be installed"],
+      "neg": ["a building with installed glass windows reflecting the sky", "a blank concrete wall"]
+    },
+    "glazing": {
+      "pos": ["new glass windows installed in a building facade reflecting the sky", "a glass curtain wall facade with window frames"],
+      "neg": ["dark empty window holes in a raw concrete building", "an open concrete frame with no walls"]
+    },
+    "insulation": {
+      "pos": ["yellow mineral wool insulation boards fixed with dowels on a building wall", "facade insulation slabs and windproof membrane without cladding"],
+      "neg": ["a finished facade with decorative panels", "bare gray concrete walls"]
+    },
+    "facade_subframe": {
+      "pos": ["vertical metal rails of a ventilated facade subframe over insulation", "an aluminum facade substructure grid mounted on a building wall without panels"],
+      "neg": ["a facade fully covered with finished panels", "a bare concrete wall"]
+    },
+    "cladding": {
+      "pos": ["a building facade covered with cladding panels, stone or porcelain tiles", "a modern facade finished with colored panels and plaster"],
+      "neg": ["a raw gray concrete building frame", "a brick wall with open window holes"]
+    },
+    "entrance_finished": {
+      "pos": ["a finished building entrance with a canopy, clad steps and doors", "a decorated ground floor with entrance porches and a finished plinth"],
+      "neg": ["a raw concrete ground floor with open holes", "a muddy construction area at the base of a building"]
+    },
+    "grading": {
+      "pos": ["a bulldozer leveling soil around a new building", "a grader spreading fresh sand and grading the ground near a building"],
+      "neg": ["a finished paved courtyard with lawns", "a deep excavation pit"]
+    },
+    "curbs": {
+      "pos": ["new concrete curbstones installed along future roads and paths", "lines of granite curbs set on a gravel base around a building"],
+      "neg": ["muddy ground without any edging", "a construction pit"]
+    },
+    "asphalt_work": {
+      "pos": ["an asphalt paver and a road roller laying fresh steaming asphalt", "workers laying paving tiles near a new building with pallets of pavers"],
+      "neg": ["an old cracked asphalt road with no work going on", "an excavator digging a pit"]
+    },
+    "paving": {
+      "pos": ["finished asphalt driveways and paved sidewalks around a new building", "clean new paving tiles and roads in a residential courtyard"],
+      "neg": ["muddy bare ground with tire ruts around a building", "a construction pit"]
+    },
+    "landscaping": {
+      "pos": ["fresh green lawns and young trees with support stakes around a new building", "a landscaped courtyard with grass, shrubs and flower beds"],
+      "neg": ["bare dirt and construction debris around a building", "an excavation pit with soil piles"]
+    },
+    "amenities": {
+      "pos": ["a new children's playground with rubber flooring next to a residential building", "park benches, trash bins and outdoor sports equipment in a courtyard"],
+      "neg": ["an empty muddy construction yard", "piles of building materials on the ground"]
+    },
+    "lighting_poles": {
+      "pos": ["new metal street lamp posts installed along driveways", "a row of outdoor lighting poles along a paved path"],
+      "neg": ["an open construction area with no poles", "a tower crane mast"]
+    },
+    "permanent_fence": {
+      "pos": ["a light decorative metal railing fence around a finished residential area", "a permanent see-through lattice fence with a barrier gate around a courtyard"],
+      "neg": ["a solid opaque corrugated metal construction hoarding", "an open area with no boundary"]
+    },
+    "bare_ground": {
+      "pos": ["bare muddy ground with tire ruts and debris around a building", "open dirt without any paving or grass around a new building"],
+      "neg": ["paved paths and green lawns around a building", "a landscaped courtyard with trees"]
+    },
+    "is_construction": {
+      "pos": ["an active construction site with building materials, machinery and unfinished structures", "a building under construction with cranes and scaffolding"],
+      "neg": ["a finished quiet residential neighborhood", "a natural landscape with trees and fields"]
+    },
+    "workers_visible": {
+      "pos": ["construction workers in hard hats and high-visibility vests on a site", "builders in orange safety vests working"],
+      "neg": ["an empty construction site with nobody around", "a deserted street"]
+    }
+  },
+  "stages": {
+    "1": ["a construction site being prepared: demolition debris, felled trees, a new site fence and portable cabins", "a cleared empty building plot surrounded by a construction fence with site trailers"],
+    "2": ["a piling rig drilling foundation piles with steel sheet piles along the edge of the plot", "a construction site with drilling rigs and rows of pile heads in the ground"],
+    "3": ["a large excavation pit being dug with excavators loading dump trucks", "an open foundation pit with soil piles and earth moving machinery"],
+    "4": ["rebar mesh and formwork for a concrete foundation slab and basement walls at the bottom of a pit", "concrete basement walls and a foundation slab being built inside an excavation"],
+    "5": ["a multi-storey concrete building frame under construction with a tower crane and formwork on top", "an unfinished concrete skeleton of a building rising floor by floor"],
+    "6": ["workers building the roof of a newly built building with roofing materials on top", "a building under construction with roof waterproofing and rooftop structures being installed"],
+    "7": ["a building covered with scaffolding while facade cladding panels and windows are installed", "a new building facade being finished with insulation, cladding and glazing"],
+    "8": ["a finished new building with fresh asphalt driveways, paved paths, lawns and a playground", "landscaping and paving works around a completed building"]
+  }
+}
