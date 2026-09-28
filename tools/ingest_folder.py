@@ -1,113 +1,88 @@
 #!/usr/bin/env python3
-"""Прогон истории камеры через маску.
+"""Загрузить папку снимков (и видео/zip в ней) в камеру и обработать.
 
-Модель Б не вызывается: на этом шаге проверяется только качество маски.
-Результат складывается в БД и хранилище, смотреть в веб-интерфейсе:
-    /cameras/<id>/frames
+    python tools/ingest_folder.py --camera 1 --folder data/doric
+    python tools/ingest_folder.py --site 1 --camera-name "Камера 2" --folder data/ionic --recursive
+    python tools/ingest_folder.py --camera 1 --folder photos --start-at 2026-05-01T08:00 --interval-min 30
+    python tools/ingest_folder.py --camera 1 --folder data/doric --no-process   # обработает сервис
 
-    python tools/ingest_folder.py --camera 1
-    python tools/ingest_folder.py --camera 1 --limit 60 --threshold 30
-
-Маска должна быть нарисована и подтверждена в интерфейсе до запуска.
+Метка времени кадра — из имени файла (`*_YYYY_MM_DD_HH_MM_SS` и похожие), EXIF,
+иначе start_at + i·interval (см. app/services/ingest.py). Повторный запуск по
+той же папке ничего не дублирует (sha256).
 """
-
 from __future__ import annotations
 
 import argparse
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import select
+from app import auth, db  # noqa: E402
+from app.models import Camera, Site  # noqa: E402
+from app.services import adapters, cli, ingest  # noqa: E402
 
-from app.db import SessionLocal, init_db
-from app.models import Camera
-from app.pipeline import ingest, mask as M
+
+def params_from_args(args, site: Site) -> ingest.UploadParams:
+    start = ingest.parse_datetime_input(args.start_at)
+    return ingest.UploadParams(interval_min=args.interval_min,
+                               start_at=adapters.to_utc(start, adapters.site_tz(site)) if start else None,
+                               video_mode=args.video_mode, step_s=args.step_s, every_n=args.every_n)
+
+
+def add_common(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--interval-min", type=int, default=20, help="шаг съёмки для файлов без даты / timelapse")
+    p.add_argument("--start-at", help="время первого кадра без даты (ISO, время площадки)")
+    p.add_argument("--video-mode", choices=ingest.VIDEO_MODES, default="realtime")
+    p.add_argument("--step-s", type=float, help="realtime-видео: шаг выборки, секунд")
+    p.add_argument("--every-n", type=int, default=1, help="timelapse-видео: брать каждый N-й кадр")
+    p.add_argument("--no-process", action="store_true", help="только сохранить кадры, анализ — в сервисе")
+    p.add_argument("--timeout", type=float, help="ждать обработку не дольше, секунд")
+
+
+def resolve_camera(args) -> tuple[Camera, Site]:
+    with db.session() as s:
+        if args.camera:
+            cam = s.get(Camera, args.camera)
+            if cam is None:
+                raise SystemExit(f"камера {args.camera} не найдена")
+        else:
+            site = s.get(Site, args.site)
+            if site is None:
+                raise SystemExit(f"объект {args.site} не найден")
+            cam = Camera(site_id=site.id, name=args.camera_name, kind="folder", interval_min=args.interval_min,
+                         ingest_key=auth.new_ingest_key(), source_uri=str(Path(args.folder).resolve()))
+            s.add(cam)
+            s.commit()
+            print(f"создана камера {cam.id} «{cam.name}»")
+        return cam, s.get(Site, cam.site_id)
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--camera", type=int, help="id камеры")
-    ap.add_argument("--folder", type=Path,
-                    help="папка с кадрами; по умолчанию берётся из камеры")
-    ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--threshold", type=float, default=M.CHANGE_THRESHOLD,
-                    help=f"порог изменения клетки (по умолчанию {M.CHANGE_THRESHOLD})")
-    ap.add_argument("--lock", type=int, default=M.LOCK_WINDOWS,
-                    help=f"окон подряд до стирания (по умолчанию {M.LOCK_WINDOWS})")
-    ap.add_argument("--window", type=int, default=M.WINDOW_DAYS,
-                    help=f"размер окна в днях (по умолчанию {M.WINDOW_DAYS})")
-    ap.add_argument("--model-b", action="store_true",
-                    help="разбирать кадры моделью Б и писать чек-листы")
-    ap.add_argument("--list", action="store_true", help="показать камеры и выйти")
-    args = ap.parse_args()
+    p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    who = p.add_mutually_exclusive_group(required=True)
+    who.add_argument("--camera", type=int, help="id камеры")
+    who.add_argument("--site", type=int, help="id объекта (камера создаётся, нужен --camera-name)")
+    p.add_argument("--camera-name", default="Камера из папки")
+    p.add_argument("--folder", required=True)
+    p.add_argument("--recursive", action="store_true")
+    add_common(p)
+    args = p.parse_args()
 
-    init_db()
-    with SessionLocal() as s:
-        if args.list or not args.camera:
-            cams = s.scalars(select(Camera).order_by(Camera.id)).all()
-            if not cams:
-                print("камер нет — заведите объект и камеру в интерфейсе")
-                return 1
-            print(f"{'id':>3}  {'камера':<22} {'маска':<12} источник")
-            for c in cams:
-                mark = ("подтверждена" if c.state and c.state.mask_approved
-                        else "НЕ ЗАДАНА")
-                print(f"{c.id:>3}  {c.name[:22]:<22} {mark:<12} {c.source_uri}")
-            return 0 if args.list else 1
-
-        cam = s.get(Camera, args.camera)
-        if cam is None:
-            print(f"камеры {args.camera} нет", file=sys.stderr)
-            return 1
-
-        folder = args.folder or (Path(cam.source_uri) if cam.source_uri else None)
-        if not folder or not folder.is_dir():
-            print(f"папка с кадрами не найдена: {folder}", file=sys.stderr)
-            return 1
-
-        if cam.state is None or not cam.state.mask_approved:
-            print("маска не нарисована. Откройте /cameras/"
-                  f"{cam.id} и закрасьте фон.", file=sys.stderr)
-            return 1
-
-        started = time.time()
-        last = [0.0]
-
-        def report(p: ingest.Progress) -> None:
-            now = time.time()
-            if now - last[0] < 1.0 and p.message != "готово":
-                return
-            last[0] = now
-            pct = p.done / p.total if p.total else 0
-            rate = p.done / max(1e-6, now - started)
-            eta = (p.total - p.done) / rate if rate else 0
-            print(f"\r  {p.done:>5}/{p.total}  {pct:5.0%}  "
-                  f"{rate:4.1f} кадр/с  осталось {eta/60:4.1f} мин  "
-                  f"{p.message}", end="", flush=True)
-
-        print(f"камера {cam.id} «{cam.name}»")
-        print(f"папка  {folder}")
-        print(f"порог {args.threshold}, окно {args.window} дн., "
-              f"стирание после {args.lock} окон\n")
-
-        prog = ingest.run(s, cam, folder, limit=args.limit, model_b=args.model_b,
-                          threshold=args.threshold, lock_windows=args.lock,
-                          window_days=args.window, on_progress=report)
-
-        st = cam.state
-        print(f"\n\n{'─' * 56}")
-        print(f"обработано кадров : {prog.done}  (пропущено {prog.skipped})")
-        print(f"скрыто кадра      : {st.masked_ratio:.1%}")
-        print(f"маски цело        : {st.retained:.0%} от нарисованной")
-        print(f"окон обработано   : {st.windows_accumulated}")
-        print(f"верхняя граница   : {st.mask_top_edge_px}")
-        print(f"время             : {(time.time() - started) / 60:.1f} мин")
-        print(f"\nсмотреть: http://localhost:8000/cameras/{cam.id}/frames")
-    return 0
+    folder = Path(args.folder)
+    if not folder.is_dir():
+        raise SystemExit(f"папка не найдена: {folder}")
+    files = ingest.list_media(folder, recursive=args.recursive)
+    if not files:
+        raise SystemExit(f"в {folder} нет изображений, видео или zip")
+    cli.bootstrap()
+    cam, site = resolve_camera(args)
+    print(f"{len(files)} файл(ов) → камера {cam.id} «{cam.name}»")
+    job_id = cli.ingest_files(cam.id, files, params_from_args(args, site))
+    jobs = cli.jobs_state([job_id]) if args.no_process else cli.process([job_id], timeout=args.timeout)
+    cli.print_jobs(jobs)
+    return 0 if jobs and jobs[0]["state"] != "failed" else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
