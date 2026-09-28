@@ -186,11 +186,16 @@ class EquipmentEngine:
         if out_of_order:
             return EquipmentUpdate([s.detection for s in steps], self._snapshot_all(), [], {}, notes)
 
+        prev_cam_t = self._cam_last.get(cam)
         self._cam_last[cam] = max(self._cam_last.get(cam, t), t)
         for s in steps:
             s.track.site_xy = s.detection.site_xy
 
-        merged = self._assign_units(cam, t, steps)
+        # Камера молчала дольше max_gap (снимает раз в сутки, ночной перерыв):
+        # машины за это время переставили, трекер их не узнаёт по рамкам.
+        gap = t - prev_cam_t if prev_cam_t is not None else None
+        after_gap = gap if gap is not None and gap > dt.timedelta(minutes=cfg.max_gap_min) else None
+        merged = self._assign_units(cam, t, steps, after_gap)
 
         intervals: list[ActivityInterval] = []
         for k, s in enumerate(steps):
@@ -219,7 +224,8 @@ class EquipmentEngine:
     # единицы техники
     # ------------------------------------------------------------------
 
-    def _assign_units(self, cam: str, t: dt.datetime, steps: list[TrackStep]) -> dict[str, str]:
+    def _assign_units(self, cam: str, t: dt.datetime, steps: list[TrackStep],
+                      after_gap: dt.timedelta | None = None) -> dict[str, str]:
         cfg = self.cfg
         merged: dict[str, str] = {}
         for s in steps:                                  # след прошлых склеек
@@ -268,7 +274,10 @@ class EquipmentEngine:
                 self._switch(tr, plate_uid, t, merged)                  # номер — безусловно
             elif tr.unit_id is None:
                 tr.unit_id = ((candidates[0] if candidates else None)
-                              or self._revive(cls, cam, d.site_xy, t) or self._new_unit(cls, t))
+                              or self._revive(cls, cam, d.site_xy, t)
+                              or (self._resume(tr, cls, cam, d.site_xy, t, after_gap, taken | mine)
+                                  if after_gap is not None else None)
+                              or self._new_unit(cls, t))
             elif candidates and self._young_single(tr.unit_id, t):
                 self._switch(tr, candidates[0], t, merged)              # дубль с границы зон камер
             elif (candidates and candidates[0] not in taken and self._young_single(candidates[0], t)
@@ -399,6 +408,48 @@ class EquipmentEngine:
             if best is None or rank > best[0]:
                 best = (rank, uid)
         return best[1] if best else None
+
+    def _resume(self, tr, cls: str, cam: str, xy, t: dt.datetime, gap: dt.timedelta,
+                busy: set[str]) -> str | None:
+        """Кадр после долгого молчания камеры: машина того же типа, которую эта камера
+        уже видела, — та же единица, если сейчас её не ведёт ни один трек.
+
+        `_revive` ждёт статуса DEPARTED, а он ставится только после кадра, на котором
+        машины не оказалось. У камеры, снимающей раз в сутки (архив Эдинбурга,
+        Канберры) или после ночного перерыва, экскаватор к следующему снимку
+        переставили — трекер его не узнаёт, а вчерашняя единица ещё «стоит». Без
+        этого каждый снимок заводил новые единицы: 582 «машины» на Эдинбурге при
+        парке в десяток. Горизонт — не меньше revive_within_h и не меньше недели
+        снимков этой камеры: пропуск детектора на паре снимков единицу не рвёт.
+        Движение по такому кадру не оценивается (трекер помечает разрыв), так что
+        ошибочное «та же машина» моточасов не приписывает.
+        """
+        window = dt.timedelta(minutes=self.cfg.merge_window_min)
+        horizon = max(dt.timedelta(hours=self.cfg.revive_within_h), 7 * gap)
+        gray = self.cfg.merge_radius_m * self.cfg.merge_gray_factor
+        best = None
+        for uid, u in self._units.items():
+            st = u.state
+            if uid in busy or st.plate or cam not in st.cameras:
+                continue
+            if not taxonomy.confusable(st.cls, cls) or st.last_seen > t - window or t - st.last_seen > horizon:
+                continue
+            # За ночь машину могли перегнать через всю площадку — место не запрет,
+            # а только порядок: сначала тот же класс, потом стоявшая рядом, потом недавняя.
+            near = xy is not None and st.site_xy is not None and _dist(xy, st.site_xy) <= gray
+            rank = (st.cls == cls, near, st.last_seen)
+            if best is None or rank > best[0]:
+                best = (rank, uid)
+        if best is None:
+            return None
+        uid = best[1]
+        # Устаревший трек этой камеры с той же единицей (его рамка на этом кадре не
+        # нашлась) больше её не держит: иначе через кадр две рамки — одна машина.
+        tracks = self._cams[cam].tracks
+        for tid in [k for k, other in tracks.items()
+                    if other is not tr and other.unit_id == uid and other.last_seen < t]:
+            del tracks[tid]
+        return uid
 
     def _new_unit(self, cls: str, t: dt.datetime) -> str:
         self._counter += 1

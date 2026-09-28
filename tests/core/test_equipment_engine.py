@@ -250,6 +250,43 @@ def test_parallel_cameras_under_lock():
     assert len(eng.units()) == 4, "некалиброванные камеры: по единице на камеру"
 
 
+def test_daily_camera_does_not_breed_units_when_machines_are_moved_overnight():
+    """Камера снимает раз в сутки (архив Эдинбурга): экскаватор каждый день в новом месте
+    кадра, трекер его по рамке не узнаёт — но единица та же. Со второй машиной одновременно —
+    две единицы, не больше. Моточасов по суточным снимкам нет: движение не оценивается."""
+    eng = EquipmentEngine()
+    xs = [100, 700, 300, 900, 200, 600, 1000, 150]
+    ivs, upd = [], None
+    for k, x in enumerate(xs):
+        dets = [S.det("excavator", (x, 300, 160, 110))]
+        if k >= 4:
+            dets.append(S.det("excavator", ((x + 500) % 1100, 500, 160, 110)))
+        upd = eng.process(fi("c1", 24 * 60 * k, k), None, dets, None, [], PLAN)
+        ivs += upd.intervals
+        assert len({d.unit_id for d in upd.detections}) == len(dets), "две рамки кадра — две машины"
+    assert len(eng.units()) == 2, [u.label for u in eng.units()]
+    assert ivs == []
+
+
+def test_daily_camera_machine_absent_for_many_snapshots_is_a_new_unit():
+    """Горизонт узнавания — неделя снимков камеры: камера снимала каждый день, экскаватора
+    не было десять снимков подряд — появившийся экскаватор уже другая единица."""
+    eng = EquipmentEngine()
+    for day in range(11):
+        dets = [S.det("excavator", (100 + 600 * (day == 10), 300, 160, 110))] if day in (0, 10) else []
+        eng.process(fi("c1", 24 * 60 * day, day), None, dets, None, [], [])
+    assert len(eng.units()) == 2
+
+
+def test_regular_camera_keeps_separate_units_for_a_second_machine():
+    """Без разрыва съёмки поведение прежнее: вторая машина в другом месте — новая единица."""
+    eng = EquipmentEngine()
+    eng.process(fi("c1", 0, 0), None, [S.det("excavator", (100, 300, 160, 110))], None, [], [])
+    upd = eng.process(fi("c1", 25, 1), None, [S.det("excavator", (100, 300, 160, 110)),
+                                              S.det("excavator", (900, 300, 160, 110))], None, [], [])
+    assert len({d.unit_id for d in upd.detections}) == 2 and len(eng.units()) == 2
+
+
 def test_config_roundtrip_and_unknown_keys():
     cfg = EquipmentConfig.from_dict({"merge_radius_m": "7.5", "workdays": [0, 1, 2, 3, 4], "confirm_moves": 1,
                                      "no_such_threshold": 1, "shape_needs_appearance": "false"})
