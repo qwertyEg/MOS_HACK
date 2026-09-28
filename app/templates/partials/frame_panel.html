@@ -1,0 +1,101 @@
+{#- Разбор кадра: качество, техника (модель А), чек-лист и этап (модель Б).
+    Ожидает компонент с SV.frameMixin(): frame, qualityChips, dets, checkGroups, likelihood… -#}
+{%- import "partials/icons.html" as ic -%}
+<div class="space-y-5">
+  <template x-if="!frame">
+    <div class="space-y-3"><div class="skeleton h-4 w-1/2"></div><div class="skeleton h-16 w-full"></div><div class="skeleton h-4 w-1/3"></div><div class="skeleton h-40 w-full"></div></div>
+  </template>
+  <template x-if="frame">
+    <div class="space-y-5">
+      {# качество #}
+      <div>
+        <p class="eyebrow mb-2">Качество кадра</p>
+        <div class="flex flex-wrap gap-1.5">
+          <template x-for="c in qualityChips" :key="c.label">
+            <span class="badge !h-6 !px-2 !text-xs" :class="SV.toneBadge[c.tone]"><span x-html="$icon(c.icon, 'w-3.5 h-3.5')"></span><span x-text="c.label"></span></span>
+          </template>
+        </div>
+        <p x-show="quality.reject_reason" class="mt-2 text-xs text-fg-2" x-text="quality.reject_reason"></p>
+        <dl class="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+          <div class="rounded-lg bg-panel-2 px-2.5 py-2"><dt class="text-fg-3">Резкость</dt><dd class="num mt-0.5 text-fg" x-text="quality.blur != null ? SV.fmt.num(quality.blur) : '—'"></dd></div>
+          <div class="rounded-lg bg-panel-2 px-2.5 py-2"><dt class="text-fg-3">Яркость</dt><dd class="num mt-0.5 text-fg" x-text="quality.brightness != null ? SV.fmt.num(quality.brightness) + ' / 255' : '—'"></dd></div>
+        </dl>
+      </div>
+
+      {# техника #}
+      <div>
+        <div class="mb-2 flex items-center justify-between">
+          <p class="eyebrow">Техника · модель А</p>
+          <span class="text-2xs text-fg-3" x-text="dets.length ? dets.length + ' ' + SV.fmt.plural(dets.length, 'рамка', 'рамки', 'рамок') : ''"></span>
+        </div>
+        <ul class="divide-y divide-line overflow-hidden rounded-lg border border-line">
+          <template x-for="(d, i) in dets" :key="i">
+            <li class="flex items-center gap-2.5 px-3 py-2 transition-colors" :class="highlight === i ? 'bg-panel-3' : 'hover:bg-panel-2'" @mouseenter="highlight = i" @mouseleave="highlight = null">
+              <span class="h-6 w-1 shrink-0 rounded-full" :style="'background:' + SV.palette.color(d.class || d.cls)"></span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm" x-text="detName(d)"></p>
+                <p class="truncate text-2xs text-fg-3" x-text="detSub(d)"></p>
+              </div>
+              <span class="badge" x-show="d.activity === 'working' || d.activity === 'idle' || (frame.id && d.activity)" :class="d.activity === 'working' ? 'badge-good' : d.activity === 'idle' ? 'badge-warn' : 'badge-neutral'"
+                    x-text="d.activity === 'working' ? 'работает' : d.activity === 'idle' ? 'стоит' : 'первый кадр'" :title="d.activity === 'unknown' ? 'Трек только появился — сравнивать не с чем' : ''"></span>
+              <span class="num w-9 text-right text-2xs text-fg-3" x-text="Math.round((d.conf || 0) * 100) + '%'" title="Уверенность детектора"></span>
+            </li>
+          </template>
+          <li x-show="!dets.length" class="px-3 py-4 text-center text-xs text-fg-3">Техники на кадре не найдено.</li>
+        </ul>
+      </div>
+
+      {# чек-лист #}
+      <div>
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <p class="eyebrow">Этап · модель Б</p>
+          <span x-show="checklist" class="truncate text-2xs text-fg-3" :title="checklist && checklist.model" x-text="checklist ? [(SV.META.providers[checklist.provider] || {}).label || String(checklist.model || '').split('/').pop(), checklist.latency_ms ? SV.fmt.num(checklist.latency_ms / 1000, 1) + ' с' : null, checklist.cost_usd ? '$' + SV.fmt.num(checklist.cost_usd, 4) : null].filter(Boolean).join(' · ') : ''"></span>
+        </div>
+        <template x-if="!checklist">
+          <div class="flex gap-2.5 rounded-lg border border-dashed border-line-strong p-3 text-xs text-fg-2">
+            <span class="mt-0.5 text-fg-3" x-html="$icon(quality.is_night ? 'moon-star' : 'info')"></span><span x-text="noChecklistReason"></span>
+          </div>
+        </template>
+        <template x-if="checklist">
+          <div class="space-y-3">
+            <template x-if="likelihood.length">
+              <div class="space-y-1.5">
+                <template x-for="s in likelihood" :key="s.id">
+                  <div class="grid grid-cols-[1fr_44px] items-center gap-2 text-xs">
+                    <div>
+                      <div class="flex justify-between"><span class="truncate" :class="s === likelihood[0] ? 'font-medium text-fg' : 'text-fg-2'" x-text="s.id + '. ' + s.name"></span></div>
+                      <div class="bar-track mt-1 !h-1.5"><div class="bar-fill" :class="s === likelihood[0] ? 'bg-info' : 'bg-fg-3/60'" :style="`width:${Math.round(s.p * 100)}%`"></div></div>
+                    </div>
+                    <span class="num text-right text-fg-2" x-text="SV.fmt.pct(s.p)"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <div class="rounded-lg bg-panel-2 p-2.5">
+              <div class="flex items-center justify-between text-xs"><span class="text-fg-2">Доля «не уверен»</span><span class="num" :class="unsureRatio > unsureThreshold ? 'text-warn-fg' : 'text-fg'" x-text="SV.fmt.pct(unsureRatio)"></span></div>
+              <div class="bar-track mt-1.5 !h-1.5"><div class="bar-fill" :class="unsureRatio > unsureThreshold ? 'bg-warn' : 'bg-fg-3/70'" :style="`width:${Math.round((unsureRatio || 0) * 100)}%`"></div><span class="absolute inset-y-[-2px] w-0.5 bg-fg" :style="`left:${unsureThreshold * 100}%`" :title="'Порог ручной проверки ' + SV.fmt.pct(unsureThreshold)"></span></div>
+              <p x-show="unsureRatio > unsureThreshold" class="mt-2 flex items-start gap-1.5 text-xs text-warn-fg"><span class="mt-px" x-html="$icon('alert-triangle', 'w-3.5 h-3.5')"></span>Слишком много «не уверен» — кадр не голосует за этап, проверьте вручную.</p>
+            </div>
+            <template x-for="g in checkGroups" :key="g.key">
+              <details class="group rounded-lg border border-line" :open="g.key !== 'no'">
+                <summary class="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-medium">
+                  <span class="badge" :class="SV.toneBadge[g.tone]" x-text="g.label"></span><span class="num text-fg-3" x-text="g.items.length"></span>
+                  <span class="ml-auto text-fg-3 transition-transform group-open:rotate-90" x-html="$icon('chevron-right', 'w-3.5 h-3.5')"></span>
+                </summary>
+                <ul class="space-y-1.5 border-t border-line px-3 py-2.5" x-data="{ all: false }">
+                  <template x-for="it in (all ? g.items : g.items.slice(0, 6))" :key="it.key">
+                    <li class="flex gap-2 text-xs leading-[18px]">
+                      <span class="min-w-0 flex-1 text-fg-2" x-text="it.question || it.key"></span>
+                      <span x-show="it.score != null" class="num shrink-0 text-2xs text-fg-3" x-text="it.score != null ? SV.fmt.num(it.score, 2) : ''" title="Сходство / уверенность"></span>
+                    </li>
+                  </template>
+                  <li x-show="g.items.length > 6"><button type="button" class="link text-2xs" @click="all = !all" x-text="all ? 'свернуть' : 'ещё ' + (g.items.length - 6)"></button></li>
+                </ul>
+              </details>
+            </template>
+          </div>
+        </template>
+      </div>
+    </div>
+  </template>
+</div>

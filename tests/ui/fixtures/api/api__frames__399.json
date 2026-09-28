@@ -1,0 +1,71 @@
+{
+ "id": 399,
+ "camera_id": 7,
+ "captured_at": "2020-06-09T14:40:13+00:00",
+ "url": "/media/frames/7/2020/06/09/144013_6a9ee32535_p.jpg",
+ "full_url": "/media/frames/7/2020/06/09/144013_6a9ee32535.jpg",
+ "annotated_url": "/api/frames/399/annotated.jpg",
+ "width": 1600,
+ "height": 900,
+ "is_night": false,
+ "weather": "clear",
+ "quality_ok": true,
+ "reject_reason": "",
+ "stage_used": false,
+ "processed_a": true,
+ "processed_b": true,
+ "status": "done",
+ "note": "",
+ "detections_count": 1,
+ "ts_source": "имя файла",
+ "site_id": 5,
+ "camera_name": "Камера 1 · парковка",
+ "quality": {
+  "quality_ok": true,
+  "is_night": false,
+  "weather": "clear",
+  "reject_reason": "",
+  "blur": 421.97,
+  "brightness": 140.04
+ },
+ "detections": [
+  {
+   "class": "roller",
+   "bbox": [
+    658.6,
+    568.9,
+    78.8,
+    76.8
+   ],
+   "conf": 0.395,
+   "zone_id": null,
+   "moved_since_prev": false,
+   "displacement_px": 3.1,
+   "bbox_shape_delta": 0.064,
+   "track_id": "7-t27",
+   "unit_id": "u0009",
+   "activity": "idle",
+   "name": "Каток",
+   "source": "yolo",
+   "appearance_delta": 0.018,
+   "id": 913,
+   "provider": "yolo",
+   "unit_row_id": 97,
+   "site_xy": null
+  }
+ ],
+ "counts": {
+  "roller": 1
+ },
+ "checklist": null,
+ "observations": [],
+ "meta": {
+  "source_file": "parking_paving_cam_1_2020_06_09_17_40_13.jpg",
+  "ts_source": "имя файла",
+  "mask_done": true
+ },
+ "sha256": "6a9ee32535b166c797b15d7fb417d4a6376072cc09ce85998ec457cdaa3f64fb",
+ "job_id": "b0de26658d7a44b3aff2a64ac83fc18f",
+ "prev_id": 396,
+ "next_id": 401
+}

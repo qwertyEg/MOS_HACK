@@ -1,0 +1,120 @@
+{
+ "id": 346,
+ "camera_id": 7,
+ "captured_at": "2020-06-09T10:24:18+00:00",
+ "url": "/media/frames/7/2020/06/09/102418_019e2b68d1_p.jpg",
+ "full_url": "/media/frames/7/2020/06/09/102418_019e2b68d1.jpg",
+ "annotated_url": "/api/frames/346/annotated.jpg",
+ "width": 1600,
+ "height": 900,
+ "is_night": false,
+ "weather": "clear",
+ "quality_ok": true,
+ "reject_reason": "",
+ "stage_used": false,
+ "processed_a": true,
+ "processed_b": true,
+ "status": "done",
+ "note": "",
+ "detections_count": 3,
+ "ts_source": "имя файла",
+ "site_id": 5,
+ "camera_name": "Камера 1 · парковка",
+ "quality": {
+  "quality_ok": true,
+  "is_night": false,
+  "weather": "clear",
+  "reject_reason": "",
+  "blur": 448.64,
+  "brightness": 140.95
+ },
+ "detections": [
+  {
+   "class": "mobile_crane",
+   "bbox": [
+    558.6,
+    0.8,
+    219.3,
+    638.3
+   ],
+   "conf": 0.315,
+   "zone_id": null,
+   "moved_since_prev": false,
+   "displacement_px": 0.0,
+   "bbox_shape_delta": 0.0,
+   "track_id": "7-t21",
+   "unit_id": "u0010",
+   "activity": "unknown",
+   "name": "Автокран",
+   "source": "yolo",
+   "appearance_delta": 0.0,
+   "id": 841,
+   "provider": "yolo",
+   "unit_row_id": 101,
+   "site_xy": null
+  },
+  {
+   "class": "mobile_crane",
+   "bbox": [
+    554.7,
+    1.2,
+    98.8,
+    637.9
+   ],
+   "conf": 0.271,
+   "zone_id": null,
+   "moved_since_prev": false,
+   "displacement_px": 26.3,
+   "bbox_shape_delta": 0.396,
+   "track_id": "7-t20",
+   "unit_id": "u0005",
+   "activity": "idle",
+   "name": "Автокран",
+   "source": "yolo",
+   "appearance_delta": 0.0,
+   "id": 842,
+   "provider": "yolo",
+   "unit_row_id": 36,
+   "site_xy": null
+  },
+  {
+   "class": "roller",
+   "bbox": [
+    128.4,
+    539.3,
+    122.5,
+    83.4
+   ],
+   "conf": 0.269,
+   "zone_id": null,
+   "moved_since_prev": false,
+   "displacement_px": 0.0,
+   "bbox_shape_delta": 0.0,
+   "track_id": "7-t22",
+   "unit_id": "u0009",
+   "activity": "unknown",
+   "name": "Каток",
+   "source": "yolo",
+   "appearance_delta": 0.0,
+   "id": 843,
+   "provider": "yolo",
+   "unit_row_id": 97,
+   "site_xy": null
+  }
+ ],
+ "counts": {
+  "mobile_crane": 2,
+  "roller": 1
+ },
+ "checklist": null,
+ "observations": [],
+ "meta": {
+  "source_file": "parking_paving_cam_1_2020_06_09_13_24_18.jpg",
+  "ts_source": "имя файла",
+  "mask_done": true
+ },
+ "sha256": "019e2b68d127e4ecdf8c8c155e6f2606dd332c902417b4965b31b4025cc7037d",
+ "job_id": "b0de26658d7a44b3aff2a64ac83fc18f",
+ "prev_id": 342,
+ "next_id": 350
+}

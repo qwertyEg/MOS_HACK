@@ -1,0 +1,253 @@
+{
+ "mode": "local",
+ "model_a": "yolo",
+ "model_b": "siglip",
+ "thresholds": {
+  "pipeline": {
+   "stage_every_h": 1.0,
+   "stage_mask_change": 0.05,
+   "recent_window_h": 24.0,
+   "clock": "auto",
+   "live_gap_days": 3.0
+  },
+  "stage": {
+   "yes_thr": 0.62,
+   "no_thr": 0.38,
+   "unsure_review_ratio": 0.5
+  },
+  "equipment": {
+   "min_conf": 0.25,
+   "conf_by_class": {},
+   "min_box_side_px": 10.0,
+   "min_box_area_frac": 0.0001,
+   "edge_margin_px": 2.0,
+   "edge_min_area_frac": 0.002,
+   "same_class_iou": 0.7,
+   "cross_class_iou": 0.6,
+   "cross_class_ioa": 0.85,
+   "pair_iou": 0.85,
+   "pair_exempt": [
+    [
+     "concrete_pump",
+     "concrete_mixer"
+    ]
+   ],
+   "match_max_cost": 1.8,
+   "match_max_center_diag": 1.5,
+   "class_penalty_confusable": 0.3,
+   "class_penalty_other": 1.0,
+   "rematch_min_similarity": 0.35,
+   "rematch_vacated_min": 0.08,
+   "max_gap_min": 120.0,
+   "vote_window": 20,
+   "move_px_min": 8.0,
+   "move_diag_frac": 0.15,
+   "shape_delta_thr": 0.15,
+   "shape_needs_appearance": true,
+   "move_needs_appearance": true,
+   "appearance_thr": 0.02,
+   "appearance_confirm_thr": 0.008,
+   "appearance_min_std": 3.0,
+   "camera_shift_reset_frac": 0.05,
+   "active_window_min": 15.0,
+   "parked_after_h": 48.0,
+   "departed_after_h": 3.0,
+   "parking_zone_parks": true,
+   "revive_within_h": 72.0,
+   "merge_window_min": 15.0,
+   "merge_radius_m": 5.0,
+   "merge_gray_factor": 1.6,
+   "appearance_min_similarity": 0.5,
+   "appearance_weight": 0.5,
+   "merge_young_min": 60.0,
+   "split_radius_m": 12.0,
+   "split_after": 2,
+   "max_credit_gap_min": 45.0,
+   "confirm_moves": 2,
+   "shift_hours": 10.0,
+   "utilization": 0.7,
+   "workdays": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "timezone": "Europe/Moscow"
+  },
+  "analytics": {
+   "pair_window_h": 2.0,
+   "idle_alert_h": 4.0,
+   "on_track_days": 3.0,
+   "utilization": 0.7,
+   "no_progress_days": 3.0
+  }
+ },
+ "classes": [
+  {
+   "key": "excavator",
+   "name": "Экскаватор",
+   "tz": true,
+   "supported": true
+  },
+  {
+   "key": "dump_truck",
+   "name": "Самосвал",
+   "tz": true,
+   "supported": true
+  },
+  {
+   "key": "bulldozer",
+   "name": "Бульдозер",
+   "tz": true,
+   "supported": true
+  },
+  {
+   "key": "roller",
+   "name": "Каток",
+   "tz": true,
+   "supported": true
+  },
+  {
+   "key": "concrete_mixer",
+   "name": "Автобетоносмеситель",
+   "tz": true,
+   "supported": true
+  },
+  {
+   "key": "truck",
+   "name": "Грузовик (бортовой, длинномер, трал)",
+   "tz": true,
+   "supported": false
+  },
+  {
+   "key": "mobile_crane",
+   "name": "Автокран",
+   "tz": true,
+   "supported": true
+  },
+  {
+   "key": "crane_manipulator",
+   "name": "Кран-манипулятор",
+   "tz": true,
+   "supported": false
+  },
+  {
+   "key": "tower_crane",
+   "name": "Башенный кран",
+   "tz": false,
+   "supported": true
+  },
+  {
+   "key": "crawler_crane",
+   "name": "Гусеничный кран",
+   "tz": false,
+   "supported": false
+  },
+  {
+   "key": "concrete_pump",
+   "name": "Автобетононасос",
+   "tz": false,
+   "supported": true
+  },
+  {
+   "key": "drilling_rig",
+   "name": "Буровая установка",
+   "tz": false,
+   "supported": false
+  },
+  {
+   "key": "pile_driver",
+   "name": "Копёр / вибропогружатель",
+   "tz": false,
+   "supported": true
+  },
+  {
+   "key": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "tz": false,
+   "supported": true
+  },
+  {
+   "key": "skid_steer",
+   "name": "Мини-погрузчик",
+   "tz": false,
+   "supported": false
+  },
+  {
+   "key": "backhoe_loader",
+   "name": "Экскаватор-погрузчик",
+   "tz": false,
+   "supported": true
+  },
+  {
+   "key": "telehandler",
+   "name": "Телескопический погрузчик",
+   "tz": false,
+   "supported": false
+  },
+  {
+   "key": "grader",
+   "name": "Автогрейдер",
+   "tz": false,
+   "supported": true
+  },
+  {
+   "key": "asphalt_paver",
+   "name": "Асфальтоукладчик",
+   "tz": false,
+   "supported": false
+  },
+  {
+   "key": "aerial_platform",
+   "name": "Автовышка / подъёмник",
+   "tz": false,
+   "supported": false
+  },
+  {
+   "key": "facade_hoist",
+   "name": "Строительный подъёмник / фасадная люлька",
+   "tz": false,
+   "supported": false
+  }
+ ],
+ "providers": {
+  "yolo": {
+   "ready": true,
+   "reason": "",
+   "role": "model_a"
+  },
+  "siglip": {
+   "ready": true,
+   "reason": "",
+   "role": "model_b"
+  },
+  "glm": {
+   "ready": false,
+   "reason": "нет ZAI_API_KEY в окружении (.env) — внешний API недоступен",
+   "role": "model_a+model_b",
+   "model_a": false,
+   "model_b": false
+  },
+  "local_vlm": {
+   "ready": false,
+   "reason": "локальная VLM не отвечает по адресу http://localhost:11434/v1: ConnectionError",
+   "role": "model_b"
+  }
+ },
+ "presets": {
+  "local": {
+   "model_a": "yolo",
+   "model_b": "siglip"
+  },
+  "external": {
+   "model_a": "glm",
+   "model_b": "glm"
+  },
+  "hybrid": {
+   "model_a": "yolo",
+   "model_b": "glm"
+  }
+ }
+}

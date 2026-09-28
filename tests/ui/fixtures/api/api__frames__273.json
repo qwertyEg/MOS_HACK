@@ -1,0 +1,120 @@
+{
+ "id": 273,
+ "camera_id": 7,
+ "captured_at": "2020-06-09T05:02:31+00:00",
+ "url": "/media/frames/7/2020/06/09/050231_cc8869988c_p.jpg",
+ "full_url": "/media/frames/7/2020/06/09/050231_cc8869988c.jpg",
+ "annotated_url": "/api/frames/273/annotated.jpg",
+ "width": 1600,
+ "height": 900,
+ "is_night": false,
+ "weather": "clear",
+ "quality_ok": true,
+ "reject_reason": "",
+ "stage_used": false,
+ "processed_a": true,
+ "processed_b": true,
+ "status": "done",
+ "note": "",
+ "detections_count": 3,
+ "ts_source": "имя файла",
+ "site_id": 5,
+ "camera_name": "Камера 1 · парковка",
+ "quality": {
+  "quality_ok": true,
+  "is_night": false,
+  "weather": "clear",
+  "reject_reason": "",
+  "blur": 443.89,
+  "brightness": 136.77
+ },
+ "detections": [
+  {
+   "class": "dump_truck",
+   "bbox": [
+    1061.7,
+    551.8,
+    195.4,
+    68.9
+   ],
+   "conf": 0.721,
+   "zone_id": null,
+   "moved_since_prev": false,
+   "displacement_px": 0.0,
+   "bbox_shape_delta": 0.0,
+   "track_id": "7-t18",
+   "unit_id": "u0006",
+   "activity": "unknown",
+   "name": "Самосвал",
+   "source": "yolo",
+   "appearance_delta": 0.0,
+   "id": 754,
+   "provider": "yolo",
+   "unit_row_id": 41,
+   "site_xy": null
+  },
+  {
+   "class": "wheel_loader",
+   "bbox": [
+    788.0,
+    545.4,
+    178.3,
+    105.5
+   ],
+   "conf": 0.653,
+   "zone_id": null,
+   "moved_since_prev": false,
+   "displacement_px": 0.0,
+   "bbox_shape_delta": 0.0,
+   "track_id": "7-t19",
+   "unit_id": "u0004",
+   "activity": "unknown",
+   "name": "Фронтальный погрузчик",
+   "source": "yolo",
+   "appearance_delta": 0.0,
+   "id": 755,
+   "provider": "yolo",
+   "unit_row_id": 35,
+   "site_xy": null
+  },
+  {
+   "class": "wheel_loader",
+   "bbox": [
+    984.0,
+    560.4,
+    86.6,
+    98.9
+   ],
+   "conf": 0.556,
+   "zone_id": null,
+   "moved_since_prev": true,
+   "displacement_px": 25.4,
+   "bbox_shape_delta": 0.621,
+   "track_id": "7-t13",
+   "unit_id": "u0008",
+   "activity": "working",
+   "name": "Фронтальный погрузчик",
+   "source": "yolo",
+   "appearance_delta": 0.417,
+   "id": 756,
+   "provider": "yolo",
+   "unit_row_id": 62,
+   "site_xy": null
+  }
+ ],
+ "counts": {
+  "dump_truck": 1,
+  "wheel_loader": 2
+ },
+ "checklist": null,
+ "observations": [],
+ "meta": {
+  "source_file": "parking_paving_cam_1_2020_06_09_08_02_31.jpg",
+  "ts_source": "имя файла",
+  "mask_done": true
+ },
+ "sha256": "cc8869988c4a63adaf234fbd6d2ea6b9ae7d432eb20beed03921ae26a0346cba",
+ "job_id": "b0de26658d7a44b3aff2a64ac83fc18f",
+ "prev_id": 270,
+ "next_id": 276
+}

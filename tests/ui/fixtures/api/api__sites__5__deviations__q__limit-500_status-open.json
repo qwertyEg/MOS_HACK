@@ -1,0 +1,82 @@
+[
+ {
+  "id": 33,
+  "key": "needs_review:outliers",
+  "type": "needs_review",
+  "severity": "info",
+  "title": "8 кадров противоречат хронологии этапов",
+  "message": "Видели: на этих кадрах этап «откатывается» назад или перескакивает вперёд — вероятно, в кадр попала соседняя стройка или случайное перекрытие; в расчёт готовности они не вошли. Ожидается: этапы идут только вперёд и не перескакивают через один. Что сделать: проверьте кадры; если это реальный скачок — отметьте этап вручную.",
+  "stage_id": null,
+  "stage_name": null,
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   201,
+   270,
+   285,
+   300,
+   336,
+   396
+  ],
+  "frames": [
+   {
+    "id": 201,
+    "camera_id": 7,
+    "captured_at": "2020-06-08T11:45:03+00:00",
+    "url": "/media/frames/7/2020/06/08/114503_7b031ea92d_p.jpg",
+    "full_url": "/media/frames/7/2020/06/08/114503_7b031ea92d.jpg",
+    "annotated_url": "/api/frames/201/annotated.jpg"
+   },
+   {
+    "id": 270,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T04:32:48+00:00",
+    "url": "/media/frames/7/2020/06/09/043248_bdc03190ec_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/043248_bdc03190ec.jpg",
+    "annotated_url": "/api/frames/270/annotated.jpg"
+   },
+   {
+    "id": 285,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T05:52:37+00:00",
+    "url": "/media/frames/7/2020/06/09/055237_a97acb0dff_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/055237_a97acb0dff.jpg",
+    "annotated_url": "/api/frames/285/annotated.jpg"
+   },
+   {
+    "id": 300,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T07:07:13+00:00",
+    "url": "/media/frames/7/2020/06/09/070713_edcf5004b2_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/070713_edcf5004b2.jpg",
+    "annotated_url": "/api/frames/300/annotated.jpg"
+   },
+   {
+    "id": 336,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T09:44:55+00:00",
+    "url": "/media/frames/7/2020/06/09/094455_dad30c9a96_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/094455_dad30c9a96.jpg",
+    "annotated_url": "/api/frames/336/annotated.jpg"
+   },
+   {
+    "id": 396,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T14:10:56+00:00",
+    "url": "/media/frames/7/2020/06/09/141056_e12fed6c7b_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/141056_e12fed6c7b.jpg",
+    "annotated_url": "/api/frames/396/annotated.jpg"
+   }
+  ],
+  "unit_ids": [],
+  "started_at": "2020-06-09T15:23:09+00:00",
+  "last_seen_at": "2020-06-09T15:23:09+00:00",
+  "status": "open",
+  "data": {
+   "count": 8
+  },
+  "note": ""
+ }
+]

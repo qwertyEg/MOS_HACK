@@ -1,0 +1,281 @@
+{#- Вкладка «Сводка»: вердикт с объяснением, ключевые цифры, Гант план/факт, кривая готовности, главные отклонения. -#}
+{%- import "partials/icons.html" as ic -%}
+<div class="grid gap-4 lg:grid-cols-12">
+  {# вердикт #}
+  <section class="card relative overflow-hidden lg:col-span-5" aria-labelledby="verdict-h">
+    <div class="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full opacity-[0.12] blur-3xl" :class="SV.toneBg[vmeta.tone]"></div>
+    <div class="relative card-pad">
+      <p id="verdict-h" class="eyebrow" x-text="isArchive ? 'Вердикт на ' + SV.fmt.dateLong(todayIso) : 'Вердикт на сегодня'">Вердикт на сегодня</p>
+      <div class="mt-3 flex items-end gap-4">
+        <div>
+          <p class="flex items-center gap-2 text-lg font-semibold" :class="SV.toneText[vmeta.tone]">
+            <span x-html="$icon(vmeta.icon, 'w-5 h-5')"></span><span x-text="vmeta.label"></span>
+          </p>
+          <template x-if="report.lag_days != null && (report.verdict === 'behind' || report.verdict === 'ahead')">
+            <p class="mt-1 flex items-baseline gap-2">
+              <span class="num text-[64px] font-semibold leading-[60px] tracking-[-0.05em]" x-text="Math.round(Math.abs(report.lag_days))"></span>
+              <span class="text-lg text-fg-2" x-text="SV.fmt.plural(Math.round(Math.abs(report.lag_days)), 'день', 'дня', 'дней') + (report.verdict === 'behind' ? ' отставания' : ' опережения')"></span>
+            </p>
+          </template>
+          <template x-if="report.verdict === 'on_track'">
+            <p class="mt-2 text-sm text-fg-2">Расхождение с планом в пределах ±3 дней.</p>
+          </template>
+          <template x-if="report.verdict === 'no_plan'">
+            <p class="mt-2 text-sm text-fg-2">Загрузите календарный план на вкладке «План», чтобы сравнивать факт с графиком.</p>
+          </template>
+          <template x-if="report.verdict === 'no_data'">
+            <p class="mt-2 text-sm text-fg-2" x-text="pendingFrames ? 'Кадры ещё анализируются — вердикт появится после первых разобранных дневных снимков.' : 'Этап по снимкам пока не определён: нужны дневные кадры хорошего качества.'"></p>
+          </template>
+        </div>
+      </div>
+
+      <dl class="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line">
+        <div class="bg-panel p-3">
+          <dt class="text-2xs text-fg-3">Готовность по снимкам</dt>
+          <dd class="num mt-1 text-lg font-semibold" x-text="SV.fmt.pct(report.actual_progress, 1)"></dd>
+          <dd class="text-2xs text-fg-3" x-text="report.expected_progress != null ? 'по плану ' + SV.fmt.pct(report.expected_progress, 1) : 'плана нет'"></dd>
+        </div>
+        <div class="bg-panel p-3">
+          <dt class="text-2xs text-fg-3">Прогноз окончания</dt>
+          <dd class="tnum mt-1 text-lg font-semibold" x-text="forecastFinish ? SV.fmt.date(forecastFinish) : 'пока нет'"></dd>
+          <dd class="text-2xs" :class="finishShift > 3 ? 'text-bad-fg' : 'text-fg-3'"
+              x-text="plannedFinish ? 'план — ' + SV.fmt.date(plannedFinish) + (finishShift ? (finishShift > 0 ? ' · +' : ' · −') + SV.fmt.days(finishShift) : '') : ''"></dd>
+        </div>
+      </dl>
+
+      <div class="mt-5">
+        <p class="flex items-center gap-1.5 text-xs font-semibold text-fg-2">{{ ic.icon("help-circle", "w-3.5 h-3.5") }}Почему так</p>
+        <ol class="mt-2 space-y-2">
+          <template x-for="(line, i) in (report.explanation || [])" :key="i">
+            <li class="flex gap-2.5 text-sm leading-5 text-fg-2">
+              <span class="num mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded bg-panel-3 text-[10px] text-fg-3" x-text="i + 1"></span>
+              <span x-text="line"></span>
+            </li>
+          </template>
+          <li x-show="!(report.explanation || []).length" class="text-sm text-fg-3">Объяснение появится после первых проанализированных кадров.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  {# ключевые цифры #}
+  <div class="grid gap-4 sm:grid-cols-2 lg:col-span-7">
+    {# текущий этап #}
+    <section class="card card-pad flex flex-col">
+      <div class="flex items-center justify-between"><p class="eyebrow">Текущий этап</p>
+        <template x-if="currentStage"><span class="badge" :class="SV.toneBadge[stageOverdue(currentStage) ? 'bad' : stageMeta(currentStage).tone]" x-text="stageOverdue(currentStage) ? 'просрочен на ' + SV.fmt.days(stageOverdue(currentStage)) : stageMeta(currentStage).label"></span></template>
+      </div>
+      <template x-if="currentStage">
+        <div class="mt-2 flex flex-1 flex-col">
+          <p class="text-[15px] font-semibold leading-5" x-text="currentStage.name"></p>
+          <div class="mt-1.5 flex flex-wrap gap-1">
+            <template x-for="w in (currentStage.works || []).slice(0, 3)" :key="w.code">
+              <span class="badge badge-neutral max-w-full" :title="w.name"><span class="num" x-text="w.code"></span><span class="truncate font-normal" x-text="w.name"></span></span>
+            </template>
+          </div>
+          <dl class="mt-3 grid grid-cols-3 gap-2 text-2xs">
+            <div><dt class="text-fg-3">План</dt><dd class="tnum mt-0.5 text-xs text-fg-2" x-text="SV.fmt.date(currentStage.planned_start) + ' — ' + SV.fmt.date(currentStage.planned_end)"></dd></div>
+            <div><dt class="text-fg-3">Начат</dt><dd class="tnum mt-0.5 text-xs text-fg-2" x-text="currentStage.actual_start ? SV.fmt.date(currentStage.actual_start) : '—'"></dd></div>
+            <div><dt class="text-fg-3">Уверенность</dt><dd class="tnum mt-0.5 text-xs text-fg-2" x-text="currentStage.manual ? 'вручную' : SV.fmt.pct(currentStage.confidence)"></dd></div>
+          </dl>
+          <div class="mt-auto pt-4">
+            <div class="flex items-baseline justify-between"><span class="text-xs text-fg-3">Готовность этапа</span><span class="num text-sm font-semibold" x-text="SV.fmt.pct(currentStage.progress)"></span></div>
+            <div class="bar-track mt-1.5"><div class="bar-fill" :class="factClass(currentStage)" :style="`width:${Math.round((currentStage.progress || 0) * 100)}%`"></div></div>
+          </div>
+        </div>
+      </template>
+      <p x-show="!currentStage" class="mt-3 text-sm text-fg-3">Этап ещё не определён: нужны дневные кадры хорошего качества.</p>
+    </section>
+
+    {# техника сейчас #}
+    <section class="card card-pad flex flex-col">
+      <div class="flex items-center justify-between"><p class="eyebrow">Техника сейчас</p><button class="link text-xs" @click="select('equipment')">Подробно</button></div>
+      <p class="mt-2 flex items-baseline gap-1.5"><span class="num text-[28px] font-semibold leading-8" x-text="unitsNow.active"></span><span class="text-sm text-fg-2" x-text="SV.fmt.plural(unitsNow.active, 'работает', 'работают', 'работают') + ' из ' + unitsNow.total"></span></p>
+      <div class="mt-3 flex h-2 overflow-hidden rounded-full bg-panel-3" x-show="unitsNow.total" role="img" :aria-label="`Работают ${unitsNow.active}, стоят ${unitsNow.idle}, на стоянке ${unitsNow.parked}`">
+        <div class="bg-good" :style="`width:${unitsNow.active / unitsNow.total * 100}%`"></div>
+        <div class="bg-warn" :style="`width:${unitsNow.idle / unitsNow.total * 100}%`" :class="unitsNow.active && 'ml-0.5'"></div>
+        <div class="bg-fg-3/60" :style="`width:${unitsNow.parked / unitsNow.total * 100}%`" :class="unitsNow.idle && 'ml-0.5'"></div>
+      </div>
+      <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-2xs text-fg-3">
+        <span class="inline-flex items-center gap-1"><span class="dot !h-1.5 !w-1.5 bg-good"></span>работают <b class="num text-fg-2" x-text="unitsNow.active"></b></span>
+        <span class="inline-flex items-center gap-1"><span class="dot !h-1.5 !w-1.5 bg-warn"></span>стоят <b class="num text-fg-2" x-text="unitsNow.idle"></b></span>
+        <span class="inline-flex items-center gap-1"><span class="dot !h-1.5 !w-1.5 bg-fg-3/60"></span>на стоянке <b class="num text-fg-2" x-text="unitsNow.parked"></b></span>
+      </div>
+      <ul class="mt-auto space-y-1.5 pt-3">
+        <template x-for="r in hoursRows.filter(r => r.planned_hours > 0).slice(0, 3)" :key="r.cls">
+          <li class="flex items-center gap-2 text-xs">
+            <span class="dot !h-2 !w-2" :style="'background:' + SV.palette.color(r.cls)"></span>
+            <span class="min-w-0 flex-1 truncate text-fg-2" x-text="r.name || SV.classNames[r.cls]"></span>
+            <span class="badge" :class="SV.toneBadge[hoursRow(r).tone]" x-text="hoursRow(r).label"></span>
+          </li>
+        </template>
+      </ul>
+    </section>
+
+    {# отклонения #}
+    <section class="card card-pad flex flex-col">
+      <div class="flex items-center justify-between"><p class="eyebrow">Открытые отклонения</p><button class="link text-xs" @click="select('deviations')">Все</button></div>
+      <div class="mt-2 flex items-end gap-5">
+        <template x-for="k in ['critical', 'warning', 'info']" :key="k">
+          <div>
+            <p class="num text-[28px] font-semibold leading-8" :class="devCounts[k] ? SV.toneText[SV.META.severity[k].tone] : 'text-fg-3'" x-text="devCounts[k]"></p>
+            <p class="text-2xs text-fg-3" x-text="SV.META.severity[k].label"></p>
+          </div>
+        </template>
+      </div>
+      <template x-if="topDevs[0]">
+        <button type="button" class="mt-auto flex items-start gap-2 rounded-lg border border-line bg-panel-2 p-2.5 text-left transition-colors hover:border-line-strong" @click="select('deviations')">
+          <span class="mt-0.5 shrink-0" :class="SV.toneText[sevMeta(topDevs[0]).tone]" x-html="$icon(sevMeta(topDevs[0]).icon)"></span>
+          <span class="min-w-0 text-xs"><span class="line-clamp-2 font-medium text-fg" x-text="topDevs[0].title"></span><span class="text-fg-3" x-text="SV.META.devType[topDevs[0].type] || ''"></span></span>
+        </button>
+      </template>
+      <p x-show="!topDevs.length" class="mt-auto text-sm text-good-fg">Отклонений нет — площадка работает по плану.</p>
+    </section>
+
+    {# камеры #}
+    <section class="card card-pad flex flex-col">
+      <div class="flex items-center justify-between"><p class="eyebrow">Камеры</p><button class="link text-xs" @click="select('cameras')">Все</button></div>
+      <div class="mt-3 grid flex-1 grid-cols-2 gap-2">
+        <template x-for="c in (ov.cameras || []).slice(0, 2)" :key="c.id">
+          <a :href="'/cameras/' + c.id" class="group relative block overflow-hidden rounded-lg border border-line bg-panel-3">
+            <img x-show="c.last_frame" :src="c.last_frame && c.last_frame.url" alt="" loading="lazy" class="aspect-[5/4] h-full w-full object-cover opacity-90 transition group-hover:opacity-100">
+            <span class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-4 text-[10px] font-medium leading-3 text-white">
+              <span class="block truncate" x-text="c.name"></span>
+              <span class="text-white/70" x-text="c.last_frame ? relNow(c.last_frame.captured_at) : 'нет кадров'"></span>
+            </span>
+          </a>
+        </template>
+        <p x-show="!(ov.cameras || []).length" class="col-span-2 self-center text-sm text-fg-3">Камер нет — добавьте камеру и загрузите кадры.</p>
+      </div>
+    </section>
+  </div>
+
+  {# Гант #}
+  <section class="card lg:col-span-12" aria-labelledby="gantt-h">
+    <div class="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-line px-4 py-3 sm:px-5">
+      <div class="mr-auto">
+        <h2 id="gantt-h" class="card-title">Этапы: план и факт</h2>
+        <p class="card-sub">Факт — по снимкам (модель Б) и ручным отметкам; коды — из перечня работ xlsx.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-3">
+        <span class="inline-flex items-center gap-1.5"><span class="hatch h-2.5 w-5 rounded-sm border border-line-strong"></span>план</span>
+        <span class="inline-flex items-center gap-1.5"><span class="h-2 w-5 rounded-sm bg-good"></span>завершён</span>
+        <span class="inline-flex items-center gap-1.5"><span class="h-2 w-5 rounded-sm bg-info"></span>идёт</span>
+        <span class="inline-flex items-center gap-1.5"><span class="hatch-bad h-2 w-5 rounded-sm"></span>просрочка</span>
+        <span class="inline-flex items-center gap-1.5"><span class="text-fg-2">{{ ic.icon("hand", "w-3 h-3") }}</span>вручную</span>
+        <span class="inline-flex items-center gap-1.5"><span class="h-3 w-px bg-fg"></span><span x-text="isArchive ? 'последний кадр' : 'сегодня'"></span></span>
+      </div>
+      <div class="seg">
+        <button type="button" :aria-pressed="ganttRange === 'all'" @click="ganttRange = 'all'">Весь план</button>
+        <button type="button" :aria-pressed="ganttRange === 'near'" @click="ganttRange = 'near'">±3 мес.</button>
+      </div>
+    </div>
+    <template x-if="gantt">
+      <div class="relative overflow-x-auto" x-ref="gantt" @mouseleave="hover = null">
+        <div class="min-w-[620px] sm:min-w-[760px]">
+          {# шкала месяцев #}
+          <div class="grid grid-cols-[150px_1fr] sm:grid-cols-[280px_1fr]">
+            <div class="border-b border-line px-3 py-2 text-2xs font-medium uppercase tracking-[0.05em] text-fg-3 sm:px-5">Этап</div>
+            <div class="relative h-8 border-b border-l border-line">
+              <template x-for="m in gantt.months" :key="m.left">
+                <span class="absolute top-0 h-full border-l border-line pl-1.5 pt-2 text-2xs capitalize text-fg-3" :style="`left:${m.left}%`" x-text="m.hidden ? '' : m.label"></span>
+              </template>
+              <template x-if="gantt.today != null"><span class="absolute top-1.5 z-[1] -translate-x-1/2 whitespace-nowrap rounded bg-fg px-1 text-[10px] font-semibold leading-4 text-bg" :style="`left:${gantt.today}%`" x-text="isArchive ? SV.fmt.date(todayIso) : 'сегодня'"></span></template>
+            </div>
+          </div>
+          {# строки #}
+          <template x-for="r in gantt.rows" :key="r.s.id">
+            <div class="group grid grid-cols-[150px_1fr] sm:grid-cols-[280px_1fr] hover:bg-panel-2" @mousemove="hoverRow(r, $event)">
+              <div class="flex min-w-0 items-center gap-2 border-b border-line px-3 py-2 sm:px-5">
+                <span class="num hidden w-4 shrink-0 text-2xs text-fg-3 sm:inline" x-text="r.s.id"></span>
+                <div class="min-w-0 flex-1">
+                  <p class="flex items-center gap-1.5 truncate text-sm" :class="r.s.status === 'not_started' ? 'text-fg-2' : 'font-medium text-fg'">
+                    <span class="truncate" x-text="r.s.name"></span>
+                    <span x-show="r.s.manual" class="shrink-0 text-fg-2" title="Готовность отмечена вручную — модель её не перезаписывает">{{ ic.icon("hand", "w-3.5 h-3.5") }}</span>
+                  </p>
+                  <p class="truncate text-2xs text-fg-3" x-text="(r.s.works || []).map(w => w.code).join(' ') || '—'"></p>
+                </div>
+                <span class="num hidden shrink-0 text-xs sm:inline" :class="r.s.status === 'done' ? 'text-good-fg' : r.s.status === 'active' ? 'text-fg' : 'text-fg-3'" x-text="r.s.status === 'not_started' ? '—' : SV.fmt.pct(r.s.progress)"></span>
+              </div>
+              <div class="relative h-12 border-b border-l border-line">
+                <template x-for="m in gantt.months" :key="m.left"><span class="absolute inset-y-0 border-l border-line/70" :style="`left:${m.left}%`"></span></template>
+                <template x-if="r.plan"><span class="absolute top-[11px] h-[26px] rounded-md border" :class="r.doneBefore ? 'border-good/40 bg-good/15' : 'hatch border-line-strong'" :style="`left:${r.plan.left}%;width:${r.plan.width}%`" :title="r.doneBefore ? 'Этап готов уже на первом кадре — даты факта неизвестны' : ''"></span></template>
+                <template x-if="r.lateStart"><span class="hatch-bad absolute top-[19px] h-[10px] rounded-sm opacity-70" :style="`left:${r.lateStart.left}%;width:${r.lateStart.width}%`"></span></template>
+                <template x-if="r.fact">
+                  <span class="absolute top-[17px] h-[14px] overflow-hidden rounded-[4px]" :class="[factClass(r.s), r.startedBefore && 'rounded-l-none [mask-image:linear-gradient(90deg,transparent,#000_14px)]']" :style="`left:${r.fact.left}%;width:${r.fact.width}%`" :title="r.startedBefore ? 'Этап уже шёл на первом кадре' : ''">
+                    <span x-show="r.s.status === 'active'" class="absolute inset-y-0 right-0 bg-black/25" :style="`width:${100 - Math.round((r.s.progress || 0) * 100)}%`"></span>
+                  </span>
+                </template>
+                <template x-if="r.overSeg"><span class="hatch-bad absolute top-[17px] h-[14px] rounded-[4px] ring-1 ring-bad/60" :style="`left:${r.overSeg.left}%;width:${r.overSeg.width}%`"></span></template>
+                <template x-if="r.doneBefore && !r.plan"><span class="absolute top-[15px] -translate-x-full whitespace-nowrap rounded bg-good/15 px-1.5 text-[10px] font-medium leading-[18px] text-good-fg" :style="`left:calc(${r.firstPos != null ? Math.max(r.firstPos, 18) : 18}% - 4px)`">{{ ic.icon("check", "w-2.5 h-2.5 inline -mt-px") }} готов до начала съёмки</span></template>
+                <template x-if="r.firstPos != null && (r.doneBefore || r.startedBefore)"><span class="absolute inset-y-2 w-px border-l border-dashed border-fg-3/60" :style="`left:${r.firstPos}%`"></span></template>
+                <template x-if="r.s.manual && r.fact"><span class="absolute top-[9px] -translate-x-1/2 rounded-full bg-panel p-0.5 text-fg ring-1 ring-line-strong" :style="`left:${r.fact.left + r.fact.width}%`">{{ ic.icon("hand", "w-3 h-3") }}</span></template>
+              </div>
+            </div>
+          </template>
+        </div>
+        <template x-if="gantt.today != null">
+          <div class="pointer-events-none absolute bottom-0 top-8 grid w-full min-w-[620px] sm:min-w-[760px] grid-cols-[150px_1fr] sm:grid-cols-[280px_1fr]">
+            <span></span><span class="relative"><span class="absolute inset-y-0 w-px bg-fg/80" :style="`left:${gantt.today}%`"></span></span>
+          </div>
+        </template>
+        {# подсказка по строке #}
+        <template x-if="hover">
+          <div class="pointer-events-none absolute z-10 w-[270px] rounded-xl border border-line-strong bg-panel p-3 text-xs shadow-pop" :style="`left:${hover.x}px;top:${hover.y}px`">
+            <p class="font-semibold text-fg" x-text="hover.r.s.name"></p>
+            <p class="mt-0.5 text-fg-3" x-text="worksText(hover.r.s) || 'коды работ не указаны'"></p>
+            <dl class="mt-2 grid grid-cols-[70px_1fr] gap-y-1">
+              <dt class="text-fg-3">План</dt><dd class="tnum" x-text="SV.fmt.date(hover.r.s.planned_start) + ' — ' + SV.fmt.date(hover.r.s.planned_end)"></dd>
+              <dt class="text-fg-3">Факт</dt><dd class="tnum" x-text="hover.r.s.actual_start ? SV.fmt.date(hover.r.s.actual_start) + ' — ' + (hover.r.s.actual_end ? SV.fmt.date(hover.r.s.actual_end) : 'идёт') : hover.r.startedBefore ? 'шёл уже на первом кадре' : hover.r.doneBefore ? 'готов до начала съёмки' : 'не начат'"></dd>
+              <dt class="text-fg-3">Статус</dt><dd><span x-text="stageMeta(hover.r.s).label + ' · ' + SV.fmt.pct(hover.r.s.progress)"></span><span x-show="hover.r.s.manual" class="text-fg-3"> · вручную</span></dd>
+            </dl>
+            <p x-show="stageOverdue(hover.r.s)" class="mt-2 font-medium text-bad-fg" x-text="'Просрочен на ' + SV.fmt.days(stageOverdue(hover.r.s))"></p>
+            <p x-show="stageLate(hover.r.s)" class="mt-2 font-medium text-bad-fg" x-text="'По плану начат ' + SV.fmt.days(stageLate(hover.r.s)) + ' назад, на снимках не видно'"></p>
+          </div>
+        </template>
+      </div>
+    </template>
+    <p x-show="!gantt" class="px-5 py-10 text-center text-sm text-fg-3">Плана ещё нет — загрузите график на вкладке «План».</p>
+  </section>
+
+  {# кривая готовности #}
+  <section class="card lg:col-span-8" aria-labelledby="curve-h">
+    <div class="flex flex-wrap items-start justify-between gap-2 px-4 pt-4 sm:px-5">
+      <div>
+        <h2 id="curve-h" class="card-title">Готовность объекта</h2>
+        <p class="card-sub">Доля выполненного по весам этапов: план против снимков.</p>
+      </div>
+      <div class="flex items-center gap-3 text-2xs text-fg-3">
+        <span class="inline-flex items-center gap-1.5"><span class="w-4 border-t-2 border-dashed border-fg-3"></span>план</span>
+        <span class="inline-flex items-center gap-1.5"><span class="w-4 border-t-2 border-info"></span>факт</span>
+        <span class="inline-flex items-center gap-1.5" x-show="forecastFinish"><span class="w-4 border-t-2 border-dotted border-info/70"></span>прогноз</span>
+      </div>
+    </div>
+    <div x-ref="curve" class="h-[260px] w-full px-2 pb-2 sm:h-[300px]" role="img" :aria-label="'Готовность по снимкам ' + SV.fmt.pct(report.actual_progress, 1) + ', по плану ' + SV.fmt.pct(report.expected_progress, 1)"></div>
+  </section>
+
+  {# главные отклонения #}
+  <section class="card flex flex-col lg:col-span-4" aria-labelledby="topdev-h">
+    <div class="flex items-center justify-between px-4 pt-4 sm:px-5">
+      <h2 id="topdev-h" class="card-title">Требует внимания</h2>
+      <button class="link text-xs" @click="select('deviations')">Лента</button>
+    </div>
+    <ul class="mt-2 flex-1 divide-y divide-line">
+      <template x-for="d in topDevs" :key="d.id">
+        <li>
+          <button type="button" class="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-panel-2 sm:px-5" @click="devFrames(d).length ? openEvidence(d, devFrames(d)[0].id) : select('deviations')">
+            <span class="mt-0.5 shrink-0" :class="SV.toneText[sevMeta(d).tone]" x-html="$icon(sevMeta(d).icon)"></span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-medium leading-5" x-text="d.title"></span>
+              <span class="mt-0.5 block text-2xs text-fg-3" x-text="[SV.META.devType[d.type], d.stage_name, d.zone_name ? 'зона «' + d.zone_name + '»' : null, d.last_seen_at ? relNow(d.last_seen_at) : null].filter(Boolean).join(' · ')"></span>
+            </span>
+            <template x-if="devFrames(d).length">
+              <img :src="thumb(devFrames(d)[0])" alt="" loading="lazy" class="h-11 w-14 shrink-0 rounded-md border border-line object-cover">
+            </template>
+          </button>
+        </li>
+      </template>
+    </ul>
+    <p x-show="!topDevs.length" class="flex-1 px-5 py-8 text-center text-sm text-fg-3">Открытых отклонений нет.</p>
+  </section>
+</div>

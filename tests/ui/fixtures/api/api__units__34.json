@@ -1,0 +1,282 @@
+{
+ "unit": {
+  "id": 34,
+  "uid": "u0003",
+  "site_id": 5,
+  "cls": "wheel_loader",
+  "name": "Фронтальный погрузчик",
+  "label": "Фронтальный погрузчик №2",
+  "status": "idle",
+  "first_seen": "2020-06-08T04:56:26+00:00",
+  "last_seen": "2020-06-09T13:19:03+00:00",
+  "last_moved": "2020-06-08T08:26:23+00:00",
+  "worked_hours": 3.12,
+  "cameras": [
+   "7"
+  ],
+  "plate": null,
+  "site_xy": null
+ },
+ "intervals": [
+  {
+   "id": 53,
+   "unit_id": 34,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "stage_id": 8,
+   "start": "2020-06-08T04:56:26+00:00",
+   "end": "2020-06-08T05:20:32+00:00",
+   "hours": 0.402,
+   "frame_ids": [
+    59,
+    71
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 54,
+   "unit_id": 34,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "stage_id": 8,
+   "start": "2020-06-08T05:20:32+00:00",
+   "end": "2020-06-08T06:04:05+00:00",
+   "hours": 0.726,
+   "frame_ids": [
+    71,
+    83
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 59,
+   "unit_id": 34,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "stage_id": 8,
+   "start": "2020-06-08T06:04:05+00:00",
+   "end": "2020-06-08T06:28:18+00:00",
+   "hours": 0.404,
+   "frame_ids": [
+    83,
+    89
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 63,
+   "unit_id": 34,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "stage_id": 8,
+   "start": "2020-06-08T06:28:18+00:00",
+   "end": "2020-06-08T06:53:58+00:00",
+   "hours": 0.428,
+   "frame_ids": [
+    89,
+    105
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 78,
+   "unit_id": 34,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "stage_id": 8,
+   "start": "2020-06-08T07:16:44+00:00",
+   "end": "2020-06-08T08:01:44+00:00",
+   "hours": 0.75,
+   "frame_ids": [
+    105,
+    133
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 94,
+   "unit_id": 34,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "stage_id": 8,
+   "start": "2020-06-08T08:01:44+00:00",
+   "end": "2020-06-08T08:26:23+00:00",
+   "hours": 0.411,
+   "frame_ids": [
+    133,
+    139
+   ],
+   "manual": false,
+   "note": ""
+  }
+ ],
+ "detections": [
+  {
+   "frame_id": 386,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T13:19:03+00:00",
+   "bbox": [
+    1041.705322265625,
+    544.36279296875,
+    82.571044921875,
+    55.70709228515625
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 20.56091274497352,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/131903_2dbfc43245_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/131903_2dbfc43245.jpg",
+   "annotated_url": "/api/frames/386/annotated.jpg"
+  },
+  {
+   "frame_id": 366,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T11:53:54+00:00",
+   "bbox": [
+    1057.8419189453125,
+    543.9421997070312,
+    91.02392578125,
+    50.85693359375
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/115354_db7c07c88b_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/115354_db7c07c88b.jpg",
+   "annotated_url": "/api/frames/366/annotated.jpg"
+  },
+  {
+   "frame_id": 139,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T08:26:23+00:00",
+   "bbox": [
+    377.2286071777344,
+    514.6140747070312,
+    161.01718139648438,
+    126.20654296875
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 230.46747071256877,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/082623_ae6890326e_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/082623_ae6890326e.jpg",
+   "annotated_url": "/api/frames/139/annotated.jpg"
+  },
+  {
+   "frame_id": 133,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T08:01:44+00:00",
+   "bbox": [
+    626.0191040039062,
+    550.7305908203125,
+    123.9892578125,
+    72.73223876953125
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 244.76865493746428,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/080144_9bb751daf4_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/080144_9bb751daf4.jpg",
+   "annotated_url": "/api/frames/133/annotated.jpg"
+  },
+  {
+   "frame_id": 105,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T06:53:58+00:00",
+   "bbox": [
+    367.37225341796875,
+    516.812744140625,
+    152.4840087890625,
+    113.69110107421875
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 34.68362983429331,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/065358_be6b6e925e_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/065358_be6b6e925e.jpg",
+   "annotated_url": "/api/frames/105/annotated.jpg"
+  },
+  {
+   "frame_id": 89,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T06:28:18+00:00",
+   "bbox": [
+    370.57562255859375,
+    532.0713500976562,
+    202.64971923828125,
+    127.0980224609375
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 108.36484370483407,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/062818_3f22d2f1a3_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/062818_3f22d2f1a3.jpg",
+   "annotated_url": "/api/frames/89/annotated.jpg"
+  },
+  {
+   "frame_id": 83,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T06:04:05+00:00",
+   "bbox": [
+    262.1031799316406,
+    522.1347045898438,
+    203.11517333984375,
+    136.55914306640625
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 16.765157737632176,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/060405_0291c9dc56_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/060405_0291c9dc56.jpg",
+   "annotated_url": "/api/frames/83/annotated.jpg"
+  },
+  {
+   "frame_id": 71,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T05:20:32+00:00",
+   "bbox": [
+    270.94891357421875,
+    519.7037963867188,
+    172.892822265625,
+    112.6195068359375
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 1.869893901084582,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/052032_95464d6998_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/052032_95464d6998.jpg",
+   "annotated_url": "/api/frames/71/annotated.jpg"
+  },
+  {
+   "frame_id": 59,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T04:56:26+00:00",
+   "bbox": [
+    267.461181640625,
+    518.0990600585938,
+    176.59130859375,
+    114.02691650390625
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/045626_2741f5c662_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/045626_2741f5c662.jpg",
+   "annotated_url": "/api/frames/59/annotated.jpg"
+  }
+ ]
+}

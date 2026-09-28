@@ -1,0 +1,173 @@
+[
+ {
+  "id": 36,
+  "key": "equipment_missing:2:all:20150320T2100",
+  "type": "equipment_missing",
+  "severity": "warning",
+  "title": "Нет техники этапа «Ограждение котлована, шпунт, сваи»",
+  "message": "Видели: 15 ч 55 мин рабочего времени (28 снимков, камера 1) на площадке нет ни одной единицы техники этапа; с начала наблюдений техники этапа не было. По плану ожидается: идёт этап «Ограждение котлована, шпунт, сваи» (21.03.2015–04.05.2015) — нужны буровая установка (не менее 1). Что проверить: не вывезли ли технику, не остановлены ли работы, видят ли камеры рабочую зону.",
+  "stage_id": 2,
+  "stage_name": "Ограждение котлована, шпунт, сваи",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   46,
+   47,
+   48
+  ],
+  "frames": [
+   {
+    "id": 46,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T11:38:56+00:00",
+    "url": "/media/frames/1/2015/04/21/113856_115a9b23b8_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/113856_115a9b23b8.jpg",
+    "annotated_url": "/api/frames/46/annotated.jpg"
+   },
+   {
+    "id": 47,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T12:03:35+00:00",
+    "url": "/media/frames/1/2015/04/21/120335_f62c37ef18_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/120335_f62c37ef18.jpg",
+    "annotated_url": "/api/frames/47/annotated.jpg"
+   },
+   {
+    "id": 48,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T12:24:36+00:00",
+    "url": "/media/frames/1/2015/04/21/122436_75f5ef38e6_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/122436_75f5ef38e6.jpg",
+    "annotated_url": "/api/frames/48/annotated.jpg"
+   }
+  ],
+  "unit_ids": [],
+  "started_at": "2015-04-20T12:29:07+00:00",
+  "last_seen_at": "2015-04-21T12:24:36+00:00",
+  "status": "open",
+  "data": {
+   "types": [
+    "drilling_rig"
+   ],
+   "absent_h": 15.92,
+   "window_h": 8.0
+  },
+  "note": ""
+ },
+ {
+  "id": 20,
+  "key": "equipment_missing:3:excavator:few",
+  "type": "equipment_missing",
+  "severity": "info",
+  "title": "Мало техники: экскаватор — 1 из 2",
+  "message": "Видели: за последние 2 ч рабочего времени экскаватор (или экскаватор-погрузчик): 1 ед. По плану ожидается: идёт этап «Земляные работы, котлован» (15.04.2015–29.05.2015) — не менее 2 ед. Что проверить: хватает ли техники на темп этапа.",
+  "stage_id": 3,
+  "stage_name": "Земляные работы, котлован",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   43,
+   45,
+   48
+  ],
+  "frames": [
+   {
+    "id": 43,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T10:32:58+00:00",
+    "url": "/media/frames/1/2015/04/21/103258_7f0b90b6c2_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/103258_7f0b90b6c2.jpg",
+    "annotated_url": "/api/frames/43/annotated.jpg"
+   },
+   {
+    "id": 45,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T11:18:17+00:00",
+    "url": "/media/frames/1/2015/04/21/111817_235837f6f0_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/111817_235837f6f0.jpg",
+    "annotated_url": "/api/frames/45/annotated.jpg"
+   },
+   {
+    "id": 48,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T12:24:36+00:00",
+    "url": "/media/frames/1/2015/04/21/122436_75f5ef38e6_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/122436_75f5ef38e6.jpg",
+    "annotated_url": "/api/frames/48/annotated.jpg"
+   }
+  ],
+  "unit_ids": [
+   "u0002"
+  ],
+  "started_at": "2015-04-20T10:29:07+00:00",
+  "last_seen_at": "2015-04-21T12:24:36+00:00",
+  "status": "open",
+  "data": {
+   "cls": "excavator",
+   "seen": 1,
+   "need": 2
+  },
+  "note": ""
+ },
+ {
+  "id": 21,
+  "key": "equipment_missing:3:dump_truck:few",
+  "type": "equipment_missing",
+  "severity": "info",
+  "title": "Мало техники: самосвал — 1 из 4",
+  "message": "Видели: за последние 2 ч рабочего времени самосвал: 1 ед. По плану ожидается: идёт этап «Земляные работы, котлован» (15.04.2015–29.05.2015) — не менее 4 ед. Что проверить: хватает ли техники на темп этапа.",
+  "stage_id": 3,
+  "stage_name": "Земляные работы, котлован",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   43,
+   45,
+   48
+  ],
+  "frames": [
+   {
+    "id": 43,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T10:32:58+00:00",
+    "url": "/media/frames/1/2015/04/21/103258_7f0b90b6c2_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/103258_7f0b90b6c2.jpg",
+    "annotated_url": "/api/frames/43/annotated.jpg"
+   },
+   {
+    "id": 45,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T11:18:17+00:00",
+    "url": "/media/frames/1/2015/04/21/111817_235837f6f0_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/111817_235837f6f0.jpg",
+    "annotated_url": "/api/frames/45/annotated.jpg"
+   },
+   {
+    "id": 48,
+    "camera_id": 1,
+    "captured_at": "2015-04-21T12:24:36+00:00",
+    "url": "/media/frames/1/2015/04/21/122436_75f5ef38e6_p.jpg",
+    "full_url": "/media/frames/1/2015/04/21/122436_75f5ef38e6.jpg",
+    "annotated_url": "/api/frames/48/annotated.jpg"
+   }
+  ],
+  "unit_ids": [
+   "u0001"
+  ],
+  "started_at": "2015-04-20T10:29:07+00:00",
+  "last_seen_at": "2015-04-21T12:24:36+00:00",
+  "status": "open",
+  "data": {
+   "cls": "dump_truck",
+   "seen": 1,
+   "need": 4
+  },
+  "note": ""
+ }
+]

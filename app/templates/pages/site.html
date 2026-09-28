@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% import "partials/icons.html" as ic %}
+{% block title %}Объект{% endblock %}
+{% block content %}
+<div x-data="sitePage({{ site_id|tojson }})" x-cloak>
+  {# ошибка загрузки объекта #}
+  <template x-if="error && !ov">
+    <div class="card empty mt-6">
+      <div class="empty-icon text-bad-fg">{{ ic.icon("alert-octagon") }}</div>
+      <div><p class="font-medium">Объект не загрузился</p><p class="mt-1 text-sm text-fg-3" x-text="error"></p></div>
+      <div class="flex gap-2"><a href="/" class="btn btn-ghost">К списку объектов</a><button class="btn btn-secondary" @click="load()">{{ ic.icon("refresh") }} Повторить</button></div>
+    </div>
+  </template>
+
+  {# скелет #}
+  <template x-if="loading && !ov">
+    <div>
+      <div class="skeleton h-3 w-40"></div>
+      <div class="skeleton mt-3 h-8 w-96 max-w-full"></div>
+      <div class="skeleton mt-6 h-10 w-full"></div>
+      <div class="mt-6 grid gap-4 lg:grid-cols-12">
+        <div class="skeleton h-80 lg:col-span-5"></div>
+        <div class="grid grid-cols-2 gap-4 lg:col-span-7"><div class="skeleton h-36"></div><div class="skeleton h-36"></div><div class="skeleton h-36"></div><div class="skeleton h-36"></div></div>
+      </div>
+    </div>
+  </template>
+
+  <template x-if="ov">
+    <div>
+      {# шапка объекта #}
+      <nav class="flex items-center gap-1.5 text-xs text-fg-3" aria-label="Навигация">
+        <a href="/" class="hover:text-fg">Объекты</a>{{ ic.icon("chevron-right", "w-3 h-3") }}<span class="truncate text-fg-2" x-text="ov.site.name"></span>
+      </nav>
+      <div class="mt-2 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h1 class="text-[24px] font-semibold leading-8 tracking-[-0.025em] sm:text-[26px]" x-text="ov.site.name"></h1>
+            <span class="badge !h-6 !px-2 !text-xs" :class="SV.toneBadge[vmeta.tone]"><span x-html="$icon(vmeta.icon, 'w-3.5 h-3.5')"></span><span x-text="vmeta.label + (report.verdict === 'behind' || report.verdict === 'ahead' ? ' · ' + SV.fmt.days(report.lag_days) : '')"></span></span>
+          </div>
+          <p class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg-3">
+            <span class="inline-flex items-center gap-1">{{ ic.icon("map-pin", "w-3.5 h-3.5") }}<span x-text="ov.site.address || 'адрес не указан'"></span></span>
+            <span x-show="ov.site.object_type" x-text="ov.site.object_type + (ov.site.floors_total ? ', ' + ov.site.floors_total + ' эт.' : '')"></span>
+            <span class="inline-flex items-center gap-1">{{ ic.icon("camera", "w-3.5 h-3.5") }}<span x-text="lastFrameAt ? (isArchive ? 'архив, последний кадр ' + SV.fmt.dateTime(lastFrameAt) : 'кадр ' + SV.fmt.rel(lastFrameAt)) : 'кадров нет'"></span></span>
+            <span x-show="pendingFrames" class="inline-flex items-center gap-1 text-info-fg"><span class="animate-spin">{{ ic.icon("loader", "w-3.5 h-3.5") }}</span><span x-text="'в анализе ' + pendingFrames + ' ' + SV.fmt.plural(pendingFrames, 'кадр', 'кадра', 'кадров')"></span></span>
+          </p>
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          <button type="button" class="btn btn-secondary" @click="reprocess()" :disabled="!!reprocessing" title="Пересчитать все кадры текущими провайдерами">
+            <span :class="reprocessing && 'animate-spin'">{{ ic.icon("refresh") }}</span>
+            <span x-text="reprocessing ? (reprocessing.total ? `Переанализ ${reprocessing.done}/${reprocessing.total}` : 'Переанализ…') : 'Переанализировать'"></span>
+          </button>
+          <a class="btn btn-primary" :href="ov.cameras && ov.cameras.length ? '/cameras/' + ov.cameras[0].id + '#upload' : '#cameras'" @click="!(ov.cameras && ov.cameras.length) && select('cameras')">{{ ic.icon("upload") }} Загрузить кадры</a>
+        </div>
+      </div>
+
+      {# вкладки #}
+      <div class="tabs mt-5" role="tablist" aria-label="Разделы объекта">
+        <button type="button" class="tab" role="tab" :aria-selected="tab === 'summary'" @click="select('summary')">{{ ic.icon("gauge", "w-4 h-4 hidden sm:block") }}Сводка</button>
+        <button type="button" class="tab" role="tab" :aria-selected="tab === 'equipment'" @click="select('equipment')">{{ ic.icon("truck", "w-4 h-4 hidden sm:block") }}Техника<span class="count" x-text="unitsNow.total"></span></button>
+        <button type="button" class="tab" role="tab" :aria-selected="tab === 'deviations'" @click="select('deviations')">{{ ic.icon("alert-triangle", "w-4 h-4 hidden sm:block") }}Отклонения<span class="count" :class="devCounts.critical ? '!bg-bad/15 !text-bad-fg' : ''" x-text="openDevs.length"></span></button>
+        <button type="button" class="tab" role="tab" :aria-selected="tab === 'cameras'" @click="select('cameras')">{{ ic.icon("camera", "w-4 h-4 hidden sm:block") }}Камеры<span class="count" x-text="(ov.cameras || []).length"></span></button>
+        <button type="button" class="tab" role="tab" :aria-selected="tab === 'plan'" @click="select('plan')">{{ ic.icon("calendar", "w-4 h-4 hidden sm:block") }}План</button>
+        <span class="ml-auto hidden items-center gap-1 pr-1 text-2xs text-fg-3 lg:flex"><span class="kbd">1</span>–<span class="kbd">5</span> вкладки</span>
+      </div>
+
+      <div class="pt-5">
+        <div x-show="tab === 'summary'">{% include "partials/site_summary.html" %}</div>
+        <div x-show="tab === 'equipment'">{% include "partials/site_equipment.html" %}</div>
+        <div x-show="tab === 'deviations'">{% include "partials/site_deviations.html" %}</div>
+        <div x-show="tab === 'cameras'">{% include "partials/site_cameras.html" %}</div>
+        <template x-if="tab === 'plan'"><div>{% include "partials/site_plan.html" %}</div></template>
+      </div>
+    </div>
+  </template>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/vendor/echarts.min.js?v={{ app_version|default('dev') }}" defer></script>
+<script src="/static/js/charts.js?v={{ app_version|default('dev') }}" defer></script>
+<script src="/static/js/site.js?v={{ app_version|default('dev') }}" defer></script>
+<script src="/static/js/site_plan.js?v={{ app_version|default('dev') }}" defer></script>
+{% endblock %}

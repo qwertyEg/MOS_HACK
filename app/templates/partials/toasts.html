@@ -1,0 +1,18 @@
+{#- Тосты: короткие подтверждения и ошибки. aria-live — чтобы экранный диктор их читал. -#}
+<div x-data class="pointer-events-none fixed inset-x-0 bottom-0 z-[70] flex flex-col items-center gap-2 p-4 sm:items-end sm:p-6" aria-live="polite">
+  <template x-for="t in $store.toasts.items" :key="t.id">
+    <div class="pointer-events-auto flex w-full max-w-[380px] items-start gap-2.5 rounded-xl border border-line bg-panel px-3.5 py-3 shadow-pop animate-fade-in"
+         role="status">
+      <span class="mt-0.5 shrink-0"
+            :class="{ 'text-bad-fg': t.kind === 'error', 'text-good-fg': t.kind === 'success', 'text-warn-fg': t.kind === 'warning', 'text-info-fg': t.kind === 'info' }"
+            x-html="$icon(t.kind === 'error' ? 'alert-octagon' : t.kind === 'success' ? 'check-circle' : t.kind === 'warning' ? 'alert-triangle' : 'info')"></span>
+      <p class="min-w-0 flex-1 text-sm text-fg" x-text="t.message"></p>
+      <template x-if="t.action">
+        <button type="button" class="btn btn-secondary btn-sm -my-0.5" @click="t.action.fn(); $store.toasts.dismiss(t.id)" x-text="t.action.label"></button>
+      </template>
+      <button type="button" class="-mr-1 -mt-0.5 rounded p-0.5 text-fg-3 hover:text-fg" @click="$store.toasts.dismiss(t.id)" aria-label="Закрыть">
+        <span x-html="$icon('x', 'w-3.5 h-3.5')"></span>
+      </button>
+    </div>
+  </template>
+</div>

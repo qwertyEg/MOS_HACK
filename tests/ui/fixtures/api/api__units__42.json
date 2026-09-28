@@ -1,0 +1,146 @@
+{
+ "unit": {
+  "id": 42,
+  "uid": "u0007",
+  "site_id": 5,
+  "cls": "concrete_mixer",
+  "name": "Автобетоносмеситель",
+  "label": "Автобетоносмеситель №1",
+  "status": "departed",
+  "first_seen": "2020-06-08T05:39:26+00:00",
+  "last_seen": "2020-06-08T14:32:17+00:00",
+  "last_moved": "2020-06-08T08:01:44+00:00",
+  "worked_hours": 1.16,
+  "cameras": [
+   "7"
+  ],
+  "plate": null,
+  "site_xy": null
+ },
+ "intervals": [
+  {
+   "id": 82,
+   "unit_id": 42,
+   "cls": "concrete_mixer",
+   "name": "Автобетоносмеситель",
+   "stage_id": 8,
+   "start": "2020-06-08T05:39:26+00:00",
+   "end": "2020-06-08T06:04:05+00:00",
+   "hours": 0.411,
+   "frame_ids": [
+    77,
+    83
+   ],
+   "manual": false,
+   "note": ""
+  },
+  {
+   "id": 83,
+   "unit_id": 42,
+   "cls": "concrete_mixer",
+   "name": "Автобетоносмеситель",
+   "stage_id": 8,
+   "start": "2020-06-08T07:16:44+00:00",
+   "end": "2020-06-08T08:01:44+00:00",
+   "hours": 0.75,
+   "frame_ids": [
+    83,
+    133
+   ],
+   "manual": false,
+   "note": ""
+  }
+ ],
+ "detections": [
+  {
+   "frame_id": 253,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T14:32:17+00:00",
+   "bbox": [
+    1204.4554443359375,
+    553.738037109375,
+    82.5205078125,
+    51.99072265625
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 87.11977346462719,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/143217_e77c1f0db5_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/143217_e77c1f0db5.jpg",
+   "annotated_url": "/api/frames/253/annotated.jpg"
+  },
+  {
+   "frame_id": 213,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T12:45:18+00:00",
+   "bbox": [
+    1262.693603515625,
+    547.6386108398438,
+    140.2835693359375,
+    64.43084716796875
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/124518_afa8b9f264_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/124518_afa8b9f264.jpg",
+   "annotated_url": "/api/frames/213/annotated.jpg"
+  },
+  {
+   "frame_id": 133,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T08:01:44+00:00",
+   "bbox": [
+    814.4509887695312,
+    548.7261962890625,
+    97.44659423828125,
+    66.753662109375
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 132.75918462271633,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/080144_9bb751daf4_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/080144_9bb751daf4.jpg",
+   "annotated_url": "/api/frames/133/annotated.jpg"
+  },
+  {
+   "frame_id": 83,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T06:04:05+00:00",
+   "bbox": [
+    679.33935546875,
+    565.059326171875,
+    104.8358154296875,
+    71.747314453125
+   ],
+   "activity": "working",
+   "moved": true,
+   "displacement_px": 128.71474165408267,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/060405_0291c9dc56_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/060405_0291c9dc56.jpg",
+   "annotated_url": "/api/frames/83/annotated.jpg"
+  },
+  {
+   "frame_id": 77,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T05:39:26+00:00",
+   "bbox": [
+    818.4910278320312,
+    555.0977172851562,
+    83.46331787109375,
+    67.060546875
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/053926_2dbe6b72ea_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/053926_2dbe6b72ea.jpg",
+   "annotated_url": "/api/frames/77/annotated.jpg"
+  }
+ ]
+}

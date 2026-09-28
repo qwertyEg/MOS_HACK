@@ -1,0 +1,21 @@
+[
+ {
+  "id": 7,
+  "site_id": 5,
+  "name": "Камера 1 · парковка",
+  "kind": "folder",
+  "interval_min": 15,
+  "ingest_key": "mock-ingest-key",
+  "ingest_url": "http://127.0.0.1:18100/api/ingest",
+  "homography": null,
+  "calib_points": null,
+  "calibrated": false,
+  "image_w": 1600,
+  "image_h": 900,
+  "last_frame_at": "2020-06-09T15:23:09+00:00",
+  "source_uri": "/root/mos_hack/dev/ui/datasets/demo/sites/parking_paving/cam_1",
+  "frames_total": 56,
+  "pending": 0,
+  "mask": null
+ }
+]

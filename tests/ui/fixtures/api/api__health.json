@@ -1,0 +1,34 @@
+{
+ "ok": true,
+ "version": "0.3.0",
+ "providers": {
+  "yolo": {
+   "ready": true,
+   "reason": "",
+   "role": "model_a"
+  },
+  "siglip": {
+   "ready": true,
+   "reason": "",
+   "role": "model_b"
+  },
+  "glm": {
+   "ready": false,
+   "reason": "нет ZAI_API_KEY в окружении (.env) — внешний API недоступен",
+   "role": "model_a+model_b",
+   "model_a": false,
+   "model_b": false
+  },
+  "local_vlm": {
+   "ready": false,
+   "reason": "локальная VLM не отвечает по адресу http://localhost:11434/v1: ConnectionError",
+   "role": "model_b"
+  }
+ },
+ "db": true,
+ "storage": true,
+ "queue": {
+  "running": true,
+  "pending": 0
+ }
+}

@@ -1,0 +1,207 @@
+{
+ "units": [
+  {
+   "id": 1,
+   "uid": "u0001",
+   "site_id": 1,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "label": "Самосвал №1",
+   "status": "active",
+   "first_seen": "2015-04-20T05:01:03+00:00",
+   "last_seen": "2015-04-21T12:24:36+00:00",
+   "last_moved": "2015-04-21T12:24:36+00:00",
+   "worked_hours": 4.84,
+   "cameras": [
+    "1"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 2,
+   "uid": "u0002",
+   "site_id": 1,
+   "cls": "excavator",
+   "name": "Экскаватор",
+   "label": "Экскаватор №1",
+   "status": "active",
+   "first_seen": "2015-04-20T05:01:03+00:00",
+   "last_seen": "2015-04-21T12:24:36+00:00",
+   "last_moved": "2015-04-21T12:24:36+00:00",
+   "worked_hours": 15.51,
+   "cameras": [
+    "1"
+   ],
+   "plate": null,
+   "site_xy": null
+  }
+ ],
+ "balances": [
+  {
+   "stage_id": 1,
+   "cls": "excavator",
+   "planned_hours": 175.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Экскаватор",
+   "stage_name": "Подготовка территории",
+   "remaining_hours": 175.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 1,
+   "cls": "dump_truck",
+   "planned_hours": 350.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Самосвал",
+   "stage_name": "Подготовка территории",
+   "remaining_hours": 350.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 1,
+   "cls": "bulldozer",
+   "planned_hours": 175.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Бульдозер",
+   "stage_name": "Подготовка территории",
+   "remaining_hours": 175.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 1,
+   "cls": "crane_manipulator",
+   "planned_hours": 175.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Кран-манипулятор",
+   "stage_name": "Подготовка территории",
+   "remaining_hours": 175.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 2,
+   "cls": "excavator",
+   "planned_hours": 266.0,
+   "worked_hours": 15.513333333333334,
+   "last_worked_at": "2015-04-21T12:24:36+00:00",
+   "name": "Экскаватор",
+   "stage_name": "Ограждение котлована, шпунт, сваи",
+   "remaining_hours": 250.49,
+   "done_ratio": 0.058
+  },
+  {
+   "stage_id": 2,
+   "cls": "concrete_mixer",
+   "planned_hours": 532.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Автобетоносмеситель",
+   "stage_name": "Ограждение котлована, шпунт, сваи",
+   "remaining_hours": 532.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 2,
+   "cls": "crawler_crane",
+   "planned_hours": 266.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Гусеничный кран",
+   "stage_name": "Ограждение котлована, шпунт, сваи",
+   "remaining_hours": 266.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 2,
+   "cls": "drilling_rig",
+   "planned_hours": 266.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Буровая установка",
+   "stage_name": "Ограждение котлована, шпунт, сваи",
+   "remaining_hours": 266.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 3,
+   "cls": "excavator",
+   "planned_hours": 546.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Экскаватор",
+   "stage_name": "Земляные работы, котлован",
+   "remaining_hours": 546.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 3,
+   "cls": "dump_truck",
+   "planned_hours": 1092.0,
+   "worked_hours": 4.836388888888888,
+   "last_worked_at": "2015-04-21T12:24:36+00:00",
+   "name": "Самосвал",
+   "stage_name": "Земляные работы, котлован",
+   "remaining_hours": 1087.16,
+   "done_ratio": 0.004
+  },
+  {
+   "stage_id": 3,
+   "cls": "bulldozer",
+   "planned_hours": 273.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Бульдозер",
+   "stage_name": "Земляные работы, котлован",
+   "remaining_hours": 273.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 4,
+   "cls": "concrete_mixer",
+   "planned_hours": 1344.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Автобетоносмеситель",
+   "stage_name": "Монолит подземной части",
+   "remaining_hours": 1344.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 4,
+   "cls": "truck",
+   "planned_hours": 448.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Грузовик (бортовой, длинномер, трал)",
+   "stage_name": "Монолит подземной части",
+   "remaining_hours": 448.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 4,
+   "cls": "tower_crane",
+   "planned_hours": 448.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Башенный кран",
+   "stage_name": "Монолит подземной части",
+   "remaining_hours": 448.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 4,
+   "cls": "concrete_pump",
+   "planned_hours": 448.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Автобетононасос",
+   "stage_name": "Монолит подземной части",
+   "remaining_hours": 448.0,
+   "done_ratio": 0.0
+  }
+ ]
+}

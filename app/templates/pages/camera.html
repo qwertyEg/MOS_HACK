@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% import "partials/icons.html" as ic %}
+{% block title %}Камера{% endblock %}
+{% block content %}
+<div x-data="cameraPage({{ camera_id|tojson }})" x-cloak>
+  <template x-if="error">
+    <div class="card empty mt-4">
+      <div class="empty-icon text-bad-fg">{{ ic.icon("alert-octagon") }}</div>
+      <div><p class="font-medium">Камера не загрузилась</p><p class="mt-1 text-sm text-fg-3" x-text="error"></p></div>
+      <button class="btn btn-secondary" @click="location.reload()">{{ ic.icon("refresh") }} Повторить</button>
+    </div>
+  </template>
+
+  <template x-if="!cam && !error">
+    <div><div class="skeleton h-3 w-56"></div><div class="skeleton mt-3 h-8 w-72"></div>
+      <div class="mt-6 grid gap-4 lg:grid-cols-12"><div class="skeleton aspect-[5/4] lg:col-span-8"></div><div class="skeleton h-[480px] lg:col-span-4"></div></div></div>
+  </template>
+
+  <template x-if="cam">
+    <div>
+      <nav class="flex items-center gap-1.5 text-xs text-fg-3" aria-label="Навигация">
+        <a href="/" class="hover:text-fg">Объекты</a>{{ ic.icon("chevron-right", "w-3 h-3") }}
+        <a :href="'/sites/' + cam.site_id + '#cameras'" class="hover:text-fg" x-text="($store.app.sites || []).find(s => s.id === cam.site_id)?.name || 'Объект'"></a>{{ ic.icon("chevron-right", "w-3 h-3") }}
+        <span class="text-fg-2" x-text="cam.name"></span>
+      </nav>
+      <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div class="min-w-0">
+          <h1 class="truncate text-[24px] font-semibold leading-8 tracking-[-0.025em]" x-text="cam.name"></h1>
+          <p class="mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-3">
+            <span class="badge badge-neutral" x-text="cam.kind === 'stream' ? 'поток' : cam.kind === 'video' ? 'видео' : cam.kind === 'folder' ? 'папка' : 'загрузка'"></span>
+            <span x-show="cam.interval_min" x-text="'снимок каждые ' + cam.interval_min + ' мин'"></span>
+            <span x-show="cam.frames_total" x-text="'· ' + cam.frames_total + ' ' + SV.fmt.plural(cam.frames_total || 0, 'кадр', 'кадра', 'кадров') + (frames && frames.length < cam.frames_total ? ' (на шкале последние ' + frames.length + ')' : '')"></span>
+            <span class="badge" :class="cam.calibrated ? 'badge-good' : 'badge-warn'" :title="cam.calibrated ? 'Кадр привязан к плану площадки — машины с соседних камер склеиваются' : 'Без калибровки камера считается независимой: одна машина на двух камерах может посчитаться дважды'" x-text="cam.calibrated ? 'откалибрована' + (reprojError != null ? ' · ' + SV.fmt.num(reprojError, 2) + ' м' : '') : 'не откалибрована'"></span>
+            <span x-show="cam.pending" class="badge badge-info"><span class="animate-spin">{{ ic.icon("loader", "w-3 h-3") }}</span><span x-text="'в анализе ' + cam.pending"></span></span>
+          </p>
+        </div>
+        <button type="button" class="btn btn-primary shrink-0" @click="setSide('upload')">{{ ic.icon("upload") }} Загрузить кадры</button>
+      </div>
+
+      <div class="mt-5 grid gap-4 lg:grid-cols-12">
+        {# плеер #}
+        <section class="card self-start overflow-hidden lg:sticky lg:top-[72px] lg:col-span-8">
+          <div class="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2 sm:px-4">
+            <div class="flex items-center gap-1">
+              <button type="button" class="btn btn-ghost btn-icon btn-sm" @click="step(-1)" :disabled="idx <= 0" aria-label="Предыдущий кадр (←)" title="Предыдущий кадр (←)">{{ ic.icon("chevron-left") }}</button>
+              <button type="button" class="btn btn-ghost btn-icon btn-sm" @click="step(1)" :disabled="!frames || idx >= frames.length - 1" aria-label="Следующий кадр (→)" title="Следующий кадр (→)">{{ ic.icon("chevron-right") }}</button>
+            </div>
+            <div class="min-w-0">
+              <p class="tnum text-sm font-medium" x-text="cur ? SV.fmt.dateTime(cur.captured_at) : 'кадров нет'"></p>
+              <p class="text-2xs text-fg-3" x-show="frames && frames.length" x-text="'кадр ' + (idx + 1) + ' из ' + (frames ? frames.length : 0)"></p>
+            </div>
+            <span x-show="loadingFrame" class="animate-spin text-fg-3">{{ ic.icon("loader", "w-3.5 h-3.5") }}</span>
+            <div class="ml-auto flex items-center gap-2">
+              <div class="seg" role="group" aria-label="Слои">
+                <button type="button" :aria-pressed="layers.boxes" @click="layers.boxes = !layers.boxes" title="Рамки техники (B)">{{ ic.icon("scan") }}<span class="hidden sm:inline">Рамки</span></button>
+                <button type="button" :aria-pressed="layers.mask" @click="toggleMask()" :class="!maskUrl && 'opacity-50'" title="Динамическая маска фона (M)">{{ ic.icon("layers") }}<span class="hidden sm:inline">Маска</span></button>
+                <button type="button" :aria-pressed="layers.zones" @click="layers.zones = !layers.zones" title="Зоны (Z)">{{ ic.icon("pentagon") }}<span class="hidden sm:inline">Зоны</span></button>
+              </div>
+              <a x-show="frame" :href="frame ? '/frames/' + frame.id : '#'" class="btn btn-ghost btn-icon btn-sm" title="Открыть кадр отдельно">{{ ic.icon("external") }}</a>
+            </div>
+          </div>
+
+          <template x-if="frames && !frames.length">
+            <div class="empty aspect-[5/4] bg-panel-2">
+              <div class="empty-icon">{{ ic.icon("image") }}</div>
+              <p class="font-medium">Кадров пока нет</p>
+              <p class="max-w-sm text-sm text-fg-3">Загрузите снимки, zip-архив или видео — или подключите камеру к /api/ingest.</p>
+              <button class="btn btn-primary" @click="setSide('upload')">{{ ic.icon("upload") }} Загрузить</button>
+            </div>
+          </template>
+
+          <div x-show="frame" class="relative">
+            <div class="viewer" :class="picking && 'is-picking'" x-init="measure($el)" @click="onViewerClick($event)">
+              <img x-ref="img" :src="frame ? frame.url : ''" :width="frame ? frame.width : 1280" :height="frame ? frame.height : 1024" alt="Кадр камеры" draggable="false">
+              <img x-show="layers.mask && maskUrl" class="viewer-layer mask-layer" :src="layers.mask && maskUrl ? maskUrl : ''" alt="">
+              <svg :view-box.camel="frame ? `0 0 ${frame.width} ${frame.height}` : '0 0 1280 1024'" preserveAspectRatio="none" x-html="svg"></svg>
+              <div class="viewer-layer pointer-events-none">
+                <template x-for="l in labels" :key="l.i"><span class="box-label transition-opacity" :class="highlight !== null && highlight !== l.i && 'opacity-40'" :style="l.style" x-text="l.text"></span></template>
+                <template x-for="z in zoneLabels" :key="z.id"><span class="absolute -translate-x-1/2 -translate-y-1/2 rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/90" :style="z.style" x-text="z.name"></span></template>
+                <template x-for="p in pointLabels" :key="p.i"><span class="absolute -translate-x-1/2 translate-y-2 rounded bg-warn px-1 text-[10px] font-bold leading-4 text-black" :style="p.style" x-text="p.i + 1"></span></template>
+              </div>
+              <template x-if="layers.mask && maskUrl && !draft && side !== 'calib'">
+                <span class="absolute left-3 top-3 rounded-md bg-black/65 px-2 py-1 text-[11px] leading-4 text-white/90" x-text="'Красным — статичный фон вне стройки (' + SV.fmt.pct(cam.mask.masked_ratio) + ' кадра): модель Б его не разбирает'"></span>
+              </template>
+              <template x-if="draft">
+                <span class="absolute left-3 top-3 rounded-md bg-info px-2 py-1 text-[11px] font-medium leading-4 text-white" x-text="draft.closed ? 'Зона замкнута — дайте ей имя справа' : 'Кликайте по кадру: вершины зоны. Замкнуть — клик по первой точке или Enter'"></span>
+              </template>
+              <template x-if="side === 'calib' && !draft">
+                <span class="absolute left-3 top-3 rounded-md bg-warn px-2 py-1 text-[11px] font-medium leading-4 text-black">Кликните точку на кадре — затем введите её координаты на плане</span>
+              </template>
+            </div>
+            <template x-if="frameError"><div class="absolute inset-0 grid place-items-center bg-black/60 text-sm text-white" x-text="'Кадр не загрузился: ' + frameError"></div></template>
+          </div>
+
+          {# шкала времени #}
+          <template x-if="frames && frames.length > 1">
+            <div class="border-t border-line px-3 pb-2 pt-3 sm:px-4">
+              <div class="relative mb-1 h-4 text-[10px] text-fg-3">
+                <template x-for="d in dayMarks" :key="d.day"><span class="absolute top-0 whitespace-nowrap border-l border-line-strong pl-1" :style="`left:${d.left}%`" x-text="d.label"></span></template>
+              </div>
+              <div class="scrub" x-ref="scrub" @pointerdown="scrubDown($event)" @pointermove="scrubbing && scrubAt($event)" @pointerup="scrubbing = false" @pointercancel="scrubbing = false"
+                   role="slider" tabindex="0" :aria-valuemin="1" :aria-valuemax="frames.length" :aria-valuenow="idx + 1" :aria-valuetext="cur ? SV.fmt.dateTime(cur.captured_at) : ''" aria-label="Шкала кадров">
+                <div class="absolute inset-x-0 bottom-[7px] h-px bg-line-strong"></div>
+                <template x-for="d in dayMarks" :key="'l' + d.day"><span class="absolute bottom-0 top-0 w-px bg-line-strong" :style="`left:${d.left}%`"></span></template>
+                <template x-for="(f, i) in frames" :key="f.id"><span class="scrub-tick" :class="tickClass(f)" :style="`left:${tickPos(f)}%;height:${tickHeight(f)}px`"></span></template>
+                <span class="scrub-head" :style="`left:${cur ? tickPos(cur) : 0}%`"></span>
+              </div>
+              <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-fg-3">
+                <span class="inline-flex items-center gap-1"><span class="h-2 w-1 rounded-sm bg-good"></span>техника на кадре</span>
+                <span class="inline-flex items-center gap-1"><span class="h-2 w-1 rounded-sm bg-fg-3"></span>техники нет</span>
+                <span class="inline-flex items-center gap-1"><span class="h-2 w-1 rounded-sm bg-fg-3/35"></span>ночь</span>
+                <span class="inline-flex items-center gap-1"><span class="h-2 w-1 rounded-sm bg-warn"></span>дождь / брак</span>
+                <span x-show="queued" class="inline-flex items-center gap-1"><span class="h-2 w-1 rounded-sm bg-info/40"></span><span x-text="'в очереди · ' + queued"></span></span>
+                <span class="ml-auto hidden items-center gap-1 sm:inline-flex"><span class="kbd">←</span><span class="kbd">→</span> листать · высота штриха — сколько техники</span>
+              </div>
+            </div>
+          </template>
+        </section>
+
+        {# боковая панель #}
+        <aside class="card flex flex-col lg:col-span-4">
+          <div class="tabs px-2" role="tablist" aria-label="Панель камеры">
+            <button type="button" class="tab !px-2.5" role="tab" :aria-selected="side === 'analysis'" @click="setSide('analysis')">Разбор</button>
+            <button type="button" class="tab !px-2.5" role="tab" :aria-selected="side === 'upload'" @click="setSide('upload')">Загрузка</button>
+            <button type="button" class="tab !px-2.5" role="tab" :aria-selected="side === 'calib'" @click="setSide('calib')">Калибровка</button>
+            <button type="button" class="tab !px-2.5" role="tab" :aria-selected="side === 'zones'" @click="setSide('zones')">Зоны<span class="count" x-text="zones.length"></span></button>
+          </div>
+          <div class="flex-1 p-4">
+            <div x-show="side === 'analysis'">
+              {% include "partials/frame_panel.html" %}
+              {# динамическая маска камеры #}
+              <div class="mt-5 rounded-lg border border-line p-3">
+                <div class="flex items-center justify-between gap-2">
+                  <p class="eyebrow">Динамическая маска</p>
+                  <button type="button" class="link text-2xs" x-show="cam.mask" @click="resetMask()">сбросить</button>
+                </div>
+                <template x-if="cam.mask">
+                  <div class="mt-2">
+                    <div class="flex items-baseline justify-between text-xs"><span class="text-fg-2">Закрыто статичного фона</span><span class="num font-medium" x-text="SV.fmt.pct(cam.mask.masked_ratio)"></span></div>
+                    <div class="bar-track mt-1.5 !h-1.5"><div class="bar-fill bg-bad/70" :style="`width:${Math.round((cam.mask.masked_ratio || 0) * 100)}%`"></div></div>
+                    <p class="mt-1.5 text-2xs text-fg-3" x-text="'Окон накопления: ' + (cam.mask.windows || 0) + (cam.mask.updated_at ? ' · обновлена ' + SV.fmt.dateTime(cam.mask.updated_at) : '') + '. Фон вне стройки гасится перед моделью Б; при подъёме здания маска расширяется сама.'"></p>
+                    <button type="button" class="btn btn-secondary btn-sm mt-2" @click="toggleMask()" x-text="layers.mask ? 'Скрыть слой маски' : 'Показать слой маски (M)'"></button>
+                  </div>
+                </template>
+                <p x-show="!cam.mask" class="mt-2 text-xs text-fg-3">Маска ещё не построена: она копится по серии дневных кадров и закрывает статичный фон вне площадки.</p>
+              </div>
+            </div>
+
+            {# загрузка #}
+            <div x-show="side === 'upload'" class="space-y-4">
+              <label class="dropzone cursor-pointer px-4 py-8" :class="over && 'is-over'" @dragover.prevent="over = true" @dragleave="over = false" @drop.prevent="over = false; addFiles($event.dataTransfer.files)">
+                <span class="empty-icon">{{ ic.icon("upload") }}</span>
+                <span class="text-sm font-medium">Перетащите файлы или выберите</span>
+                <span class="text-xs text-fg-3">Фото (дата из EXIF или имени файла), zip-архив, видео</span>
+                <input type="file" multiple accept="image/*,video/*,.zip" class="sr-only" @change="addFiles($event.target.files); $event.target.value = ''">
+              </label>
+              <template x-if="files.length">
+                <div class="rounded-lg border border-line">
+                  <div class="flex items-center justify-between border-b border-line px-3 py-2 text-xs"><span class="font-medium" x-text="files.length + ' ' + SV.fmt.plural(files.length, 'файл', 'файла', 'файлов') + ' · ' + fileSize(filesSize)"></span><button class="link" @click="files = []; upState = null">очистить</button></div>
+                  <ul class="max-h-40 divide-y divide-line overflow-y-auto text-xs">
+                    <template x-for="(f, i) in files" :key="i"><li class="flex items-center gap-2 px-3 py-1.5"><span class="text-fg-3" x-html="$icon(/^video/.test(f.type) ? 'play' : /zip/.test(f.name) ? 'box' : 'image', 'w-3.5 h-3.5')"></span><span class="min-w-0 flex-1 truncate" x-text="f.name"></span><span class="num text-fg-3" x-text="fileSize(f.size)"></span></li></template>
+                  </ul>
+                </div>
+              </template>
+              <div class="grid grid-cols-2 gap-3">
+                <div><label class="label" for="up-int">Интервал, мин</label><input id="up-int" type="number" min="1" max="1440" class="input" x-model.number="upOpts.interval_min"><p class="hint">шаг для файлов без времени</p></div>
+                <div><label class="label" for="up-start">Начало съёмки</label><input id="up-start" type="datetime-local" class="input" x-model="upOpts.start_at"><p class="hint">время площадки; для видео и фото без даты</p></div>
+              </div>
+              <template x-if="hasVideo">
+                <div class="grid grid-cols-2 gap-3 rounded-lg bg-panel-2 p-3">
+                  <div class="col-span-2"><span class="label">Видео</span>
+                    <div class="seg w-full"><button type="button" class="flex-1 justify-center" :aria-pressed="upOpts.video_mode === 'realtime'" @click="upOpts.video_mode = 'realtime'">Реальное время</button><button type="button" class="flex-1 justify-center" :aria-pressed="upOpts.video_mode === 'timelapse'" @click="upOpts.video_mode = 'timelapse'">Таймлапс</button></div>
+                    <p class="hint" x-text="upOpts.video_mode === 'timelapse' ? 'Каждый кадр видео — это «интервал» минут съёмки.' : 'Кадр берётся раз в «интервал» минут времени видео.'"></p></div>
+                  <div><label class="label" for="up-step">Шаг, с</label><input id="up-step" type="number" min="0.04" step="0.5" class="input" x-model="upOpts.step_s" placeholder="авто"></div>
+                </div>
+              </template>
+              <button type="button" class="btn btn-primary w-full" :disabled="!files.length || (upState && ['upload', 'job'].includes(upState.phase))" @click="upload()">{{ ic.icon("upload") }} Загрузить и разобрать</button>
+              <template x-if="upState">
+                <div class="rounded-lg border border-line p-3">
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="font-medium" x-text="upState.phase === 'upload' ? 'Отправка файлов' : upState.phase === 'job' ? (SV.META.job[upState.job.state] || 'Обработка') : upState.phase === 'done' ? 'Готово' : 'Ошибка'"></span>
+                    <span class="num text-fg-3" x-text="upState.phase === 'upload' ? Math.round(upState.p * 100) + '%' : upState.job && upState.job.total ? upState.job.done + ' / ' + upState.job.total : ''"></span>
+                  </div>
+                  <div class="bar-track mt-2"><div class="bar-fill transition-[width]" :class="upState.phase === 'error' ? 'bg-bad' : upState.phase === 'done' ? 'bg-good' : 'bg-info'"
+                       :style="`width:${upState.phase === 'upload' ? upState.p * 100 : upState.job && upState.job.total ? (upState.job.done / upState.job.total) * 100 : 5}%`"></div></div>
+                  <p class="mt-2 text-2xs text-fg-3" x-show="upState.phase === 'job'">Кадры сохраняются всегда; анализ идёт, когда готов выбранный провайдер.</p>
+                  <ul x-show="upState.job && upState.job.errors && upState.job.errors.length" class="mt-2 space-y-1 text-2xs text-warn-fg">
+                    <template x-for="e in (upState.job ? upState.job.errors : [])"><li class="flex gap-1.5"><span class="mt-px" x-html="$icon('alert-triangle', 'w-3 h-3')"></span><span x-text="e"></span></li></template>
+                  </ul>
+                </div>
+              </template>
+              {# поток с камеры: адрес приёмника и ключ, подключение simcam #}
+              <details class="group rounded-lg border border-line" :open="cam.kind === 'stream'">
+                <summary class="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium">
+                  {{ ic.icon("zap", "w-4 h-4 text-fg-3") }} Поток с камеры
+                  <span x-show="cam.kind === 'stream'" class="badge badge-info">подключена</span>
+                  <span class="ml-auto text-fg-3 transition-transform group-open:rotate-90">{{ ic.icon("chevron-right", "w-3.5 h-3.5") }}</span>
+                </summary>
+                <div class="space-y-3 border-t border-line p-3 text-xs text-fg-2">
+                  <p>Камера (или simcam) шлёт кадры на приёмник с заголовком <span class="num text-fg">X-Camera-Key</span>; кадр сохраняется сразу, анализ — в очереди.</p>
+                  <div>
+                    <span class="label">Приёмник</span>
+                    <div class="flex gap-1.5"><input class="input input-sm num flex-1" readonly :value="cam.ingest_url"><button type="button" class="btn btn-secondary btn-sm" @click="copy(cam.ingest_url)">{{ ic.icon("copy", "w-3.5 h-3.5") }}<span class="hidden xl:inline">Копировать</span></button></div>
+                  </div>
+                  <div>
+                    <span class="label">Ключ камеры (id <span class="num" x-text="cam.id"></span>)</span>
+                    <div class="flex gap-1.5"><input class="input input-sm num flex-1" readonly type="password" :value="cam.ingest_key" @focus="$event.target.type = 'text'" @blur="$event.target.type = 'password'"><button type="button" class="btn btn-secondary btn-sm" @click="copy(cam.ingest_key)">{{ ic.icon("copy", "w-3.5 h-3.5") }}<span class="hidden xl:inline">Копировать</span></button></div>
+                  </div>
+                  <div class="grid grid-cols-[1fr_88px] gap-2">
+                    <div><label class="label" for="st-uri">Адрес камеры (simcam)</label><input id="st-uri" class="input input-sm num" x-model="stream.uri" placeholder="http://10.0.0.5:8001"></div>
+                    <div><label class="label" for="st-int">Раз в, с</label><input id="st-int" type="number" min="0.1" step="1" class="input input-sm num" x-model="stream.interval" placeholder="авто"></div>
+                  </div>
+                  <div class="flex gap-2">
+                    <button type="button" class="btn btn-primary btn-sm" :disabled="!stream.uri.trim() || stream.busy" @click="connectStream()">{{ ic.icon("play", "w-3.5 h-3.5") }} Подключить</button>
+                    <button type="button" class="btn btn-ghost btn-sm" x-show="cam.kind === 'stream'" :disabled="stream.busy" @click="disconnectStream()">{{ ic.icon("pause", "w-3.5 h-3.5") }} Остановить</button>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            {# калибровка #}
+            <div x-show="side === 'calib'" class="space-y-4">
+              <div class="text-sm text-fg-2">
+                <p class="font-medium text-fg">Привязка к плану площадки</p>
+                <p class="mt-1 text-xs">Отметьте на кадре 4+ точки, координаты которых знаете на плане (углы плит, столбы забора, углы бытовок), и введите их в метрах. Тогда одна машина на двух камерах посчитается один раз.</p>
+              </div>
+              <div class="overflow-hidden rounded-lg border border-line">
+                <table class="w-full text-xs">
+                  <thead class="bg-panel-2 text-2xs uppercase tracking-[0.05em] text-fg-3"><tr><th class="px-2 py-1.5 text-left font-medium">#</th><th class="px-2 py-1.5 text-left font-medium">На кадре, px</th><th class="px-2 py-1.5 text-left font-medium">X, м</th><th class="px-2 py-1.5 text-left font-medium">Y, м</th><th></th></tr></thead>
+                  <tbody class="divide-y divide-line">
+                    <template x-for="(p, i) in calib.points" :key="i">
+                      <tr>
+                        <td class="px-2 py-1"><span class="grid h-4 w-4 place-items-center rounded bg-warn text-[10px] font-bold text-black" x-text="i + 1"></span></td>
+                        <td class="num px-2 py-1 text-fg-2" x-text="p[0] + ', ' + p[1]"></td>
+                        <td class="px-1 py-1"><input class="input input-sm num w-16" inputmode="decimal" x-model="calib.site[i][0]" :aria-label="'X точки ' + (i + 1)"></td>
+                        <td class="px-1 py-1"><input class="input input-sm num w-16" inputmode="decimal" x-model="calib.site[i][1]" :aria-label="'Y точки ' + (i + 1)"></td>
+                        <td class="px-1 py-1 text-right"><button type="button" class="btn btn-ghost btn-icon btn-sm" @click="removePoint(i)" :aria-label="'Удалить точку ' + (i + 1)">{{ ic.icon("x", "w-3.5 h-3.5") }}</button></td>
+                      </tr>
+                    </template>
+                    <tr x-show="!calib.points.length"><td colspan="5" class="px-3 py-4 text-center text-fg-3">Кликните по кадру слева, чтобы поставить первую точку</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="flex gap-2">
+                <button type="button" class="btn btn-ghost btn-sm" @click="clearCalib()" :disabled="!calib.points.length">Очистить точки</button>
+                <button type="button" class="btn btn-ghost btn-sm" x-show="cam.calibrated" @click="resetCalib()" title="Убрать гомографию: камера снова считается независимой">Снять калибровку</button>
+                <button type="button" class="btn btn-primary btn-sm ml-auto" @click="saveCalib()" :disabled="!calibReady || calib.busy" x-text="calib.points.length < 4 ? 'Нужно ещё ' + (4 - calib.points.length) + ' ' + SV.fmt.plural(4 - calib.points.length, 'точка', 'точки', 'точек') : 'Рассчитать гомографию'"></button>
+              </div>
+              <template x-if="calib.result || reprojError != null">
+                <div class="rounded-lg bg-panel-2 p-3 text-xs" x-data="{ get e() { return calib.result ? calib.result.reproj_error : reprojError } }">
+                  <p class="flex items-center justify-between"><span class="text-fg-2">Ошибка репроекции</span><span class="num text-sm font-semibold" :class="SV.toneText[errVerdict(e).tone]" x-text="SV.fmt.num(e, 2) + ' м'"></span></p>
+                  <p class="mt-1 text-fg-3" x-text="errVerdict(e).text"></p>
+                </div>
+              </template>
+            </div>
+
+            {# зоны #}
+            <div x-show="side === 'zones'" class="space-y-4">
+              <p class="text-xs text-fg-2">Зоны нужны правилам: «техника вне зоны», «экскаватор в котловане без самосвалов», отклонение с указанием зоны.</p>
+              <ul class="divide-y divide-line overflow-hidden rounded-lg border border-line">
+                <template x-for="z in zones" :key="z.id">
+                  <li class="flex items-center gap-2.5 px-3 py-2">
+                    <span class="h-3 w-3 rounded-sm border" :class="z.kind === 'parking' ? 'border-fg-3 bg-fg-3/30' : z.kind === 'restricted' ? 'border-bad bg-bad/30' : 'border-info bg-info/30'"></span>
+                    <div class="min-w-0 flex-1"><p class="truncate text-sm" x-text="z.name"></p><p class="text-2xs text-fg-3" x-text="(SV.META.zoneKind[z.kind] || z.kind) + ' · ' + (z.polygon || []).length + ' точек'"></p></div>
+                    <button type="button" class="btn btn-ghost btn-icon btn-sm" @click="deleteZone(z)" :aria-label="'Удалить зону ' + z.name">{{ ic.icon("trash") }}</button>
+                  </li>
+                </template>
+                <li x-show="!zones.length" class="px-3 py-4 text-center text-xs text-fg-3">Зон нет</li>
+              </ul>
+              <template x-if="!draft"><button type="button" class="btn btn-secondary w-full" @click="startZone()">{{ ic.icon("pentagon") }} Нарисовать зону</button></template>
+              <template x-if="draft">
+                <div class="space-y-3 rounded-lg border border-info/40 bg-info/5 p-3">
+                  <p class="text-xs text-fg-2" x-text="draft.points.length + ' ' + SV.fmt.plural(draft.points.length, 'точка', 'точки', 'точек') + (draft.closed ? ' · замкнута' : ' · Backspace — убрать последнюю, Esc — отмена')"></p>
+                  <div><label class="label" for="zn">Название</label><input id="zn" class="input input-sm" x-model="draft.name" placeholder="Котлован"></div>
+                  <div><label class="label" for="zk">Тип</label>
+                    <select id="zk" class="input input-sm" x-model="draft.kind"><option value="work">Рабочая</option><option value="parking">Стоянка техники</option><option value="storage">Склад</option><option value="restricted">Запретная</option></select></div>
+                  <div class="flex gap-2"><button type="button" class="btn btn-ghost btn-sm" @click="draft = null">Отмена</button>
+                    <button type="button" class="btn btn-primary btn-sm ml-auto" :disabled="draft.points.length < 3" @click="saveZone()">Сохранить зону</button></div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </template>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/viewer.js?v={{ app_version|default('dev') }}" defer></script>
+<script src="/static/js/camera.js?v={{ app_version|default('dev') }}" defer></script>
+{% endblock %}

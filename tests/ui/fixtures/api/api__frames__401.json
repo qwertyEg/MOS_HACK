@@ -1,0 +1,121 @@
+{
+ "id": 401,
+ "camera_id": 7,
+ "captured_at": "2020-06-09T14:59:20+00:00",
+ "url": "/media/frames/7/2020/06/09/145920_96296ea50f_p.jpg",
+ "full_url": "/media/frames/7/2020/06/09/145920_96296ea50f.jpg",
+ "annotated_url": "/api/frames/401/annotated.jpg",
+ "width": 1600,
+ "height": 900,
+ "is_night": false,
+ "weather": "clear",
+ "quality_ok": true,
+ "reject_reason": "",
+ "stage_used": false,
+ "processed_a": true,
+ "processed_b": true,
+ "status": "done",
+ "note": "",
+ "detections_count": 3,
+ "ts_source": "имя файла",
+ "site_id": 5,
+ "camera_name": "Камера 1 · парковка",
+ "quality": {
+  "quality_ok": true,
+  "is_night": false,
+  "weather": "clear",
+  "reject_reason": "",
+  "blur": 407.76,
+  "brightness": 140.12
+ },
+ "detections": [
+  {
+   "class": "dump_truck",
+   "bbox": [
+    910.2,
+    552.0,
+    250.0,
+    89.1
+   ],
+   "conf": 0.748,
+   "zone_id": null,
+   "moved_since_prev": true,
+   "displacement_px": 43.2,
+   "bbox_shape_delta": 2.805,
+   "track_id": "7-t24",
+   "unit_id": "u0006",
+   "activity": "working",
+   "name": "Самосвал",
+   "source": "yolo",
+   "appearance_delta": 0.164,
+   "id": 914,
+   "provider": "yolo",
+   "unit_row_id": 41,
+   "site_xy": null
+  },
+  {
+   "class": "wheel_loader",
+   "bbox": [
+    644.3,
+    546.7,
+    72.0,
+    98.6
+   ],
+   "conf": 0.259,
+   "zone_id": null,
+   "moved_since_prev": true,
+   "displacement_px": 188.6,
+   "bbox_shape_delta": 0.623,
+   "track_id": "7-t19",
+   "unit_id": "u0004",
+   "activity": "working",
+   "name": "Фронтальный погрузчик",
+   "source": "yolo",
+   "appearance_delta": 0.178,
+   "id": 915,
+   "provider": "yolo",
+   "unit_row_id": 35,
+   "site_xy": null
+  },
+  {
+   "class": "roller",
+   "bbox": [
+    644.0,
+    560.0,
+    70.8,
+    85.5
+   ],
+   "conf": 0.254,
+   "zone_id": null,
+   "moved_since_prev": true,
+   "displacement_px": 19.1,
+   "bbox_shape_delta": 0.214,
+   "track_id": "7-t27",
+   "unit_id": "u0009",
+   "activity": "working",
+   "name": "Каток",
+   "source": "yolo",
+   "appearance_delta": 0.259,
+   "id": 916,
+   "provider": "yolo",
+   "unit_row_id": 97,
+   "site_xy": null
+  }
+ ],
+ "counts": {
+  "dump_truck": 1,
+  "wheel_loader": 1,
+  "roller": 1
+ },
+ "checklist": null,
+ "observations": [],
+ "meta": {
+  "source_file": "parking_paving_cam_1_2020_06_09_17_59_20.jpg",
+  "ts_source": "имя файла",
+  "mask_done": true
+ },
+ "sha256": "96296ea50f420c0ebb449427d1e38c09a90b74d8ac786df9047811e427c48bc5",
+ "job_id": "b0de26658d7a44b3aff2a64ac83fc18f",
+ "prev_id": 399,
+ "next_id": 407
+}

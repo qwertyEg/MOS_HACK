@@ -1,0 +1,59 @@
+{
+ "unit": {
+  "id": 101,
+  "uid": "u0010",
+  "site_id": 5,
+  "cls": "mobile_crane",
+  "name": "Автокран",
+  "label": "Автокран №2",
+  "status": "departed",
+  "first_seen": "2020-06-08T13:33:45+00:00",
+  "last_seen": "2020-06-09T10:24:18+00:00",
+  "last_moved": null,
+  "worked_hours": 0.0,
+  "cameras": [
+   "7"
+  ],
+  "plate": null,
+  "site_xy": null
+ },
+ "intervals": [],
+ "detections": [
+  {
+   "frame_id": 346,
+   "camera_id": 7,
+   "captured_at": "2020-06-09T10:24:18+00:00",
+   "bbox": [
+    558.6123046875,
+    0.7868194580078125,
+    219.31591796875,
+    638.2991333007812
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/09/102418_019e2b68d1_p.jpg",
+   "full_url": "/media/frames/7/2020/06/09/102418_019e2b68d1.jpg",
+   "annotated_url": "/api/frames/346/annotated.jpg"
+  },
+  {
+   "frame_id": 231,
+   "camera_id": 7,
+   "captured_at": "2020-06-08T13:33:45+00:00",
+   "bbox": [
+    543.830322265625,
+    0.0,
+    72.2562255859375,
+    659.1592407226562
+   ],
+   "activity": "unknown",
+   "moved": false,
+   "displacement_px": 0.0,
+   "zone_id": null,
+   "url": "/media/frames/7/2020/06/08/133345_7f0fd2ca10_p.jpg",
+   "full_url": "/media/frames/7/2020/06/08/133345_7f0fd2ca10.jpg",
+   "annotated_url": "/api/frames/231/annotated.jpg"
+  }
+ ]
+}

@@ -1,0 +1,71 @@
+{
+ "id": 342,
+ "camera_id": 7,
+ "captured_at": "2020-06-09T10:04:41+00:00",
+ "url": "/media/frames/7/2020/06/09/100441_d4bb11877a_p.jpg",
+ "full_url": "/media/frames/7/2020/06/09/100441_d4bb11877a.jpg",
+ "annotated_url": "/api/frames/342/annotated.jpg",
+ "width": 1600,
+ "height": 900,
+ "is_night": false,
+ "weather": "clear",
+ "quality_ok": true,
+ "reject_reason": "",
+ "stage_used": false,
+ "processed_a": true,
+ "processed_b": true,
+ "status": "done",
+ "note": "",
+ "detections_count": 1,
+ "ts_source": "имя файла",
+ "site_id": 5,
+ "camera_name": "Камера 1 · парковка",
+ "quality": {
+  "quality_ok": true,
+  "is_night": false,
+  "weather": "clear",
+  "reject_reason": "",
+  "blur": 431.56,
+  "brightness": 140.63
+ },
+ "detections": [
+  {
+   "class": "wheel_loader",
+   "bbox": [
+    569.9,
+    543.4,
+    147.7,
+    95.6
+   ],
+   "conf": 0.632,
+   "zone_id": null,
+   "moved_since_prev": true,
+   "displacement_px": 4.5,
+   "bbox_shape_delta": 0.133,
+   "track_id": "7-t19",
+   "unit_id": "u0004",
+   "activity": "working",
+   "name": "Фронтальный погрузчик",
+   "source": "yolo",
+   "appearance_delta": 0.152,
+   "id": 840,
+   "provider": "yolo",
+   "unit_row_id": 35,
+   "site_xy": null
+  }
+ ],
+ "counts": {
+  "wheel_loader": 1
+ },
+ "checklist": null,
+ "observations": [],
+ "meta": {
+  "source_file": "parking_paving_cam_1_2020_06_09_13_04_41.jpg",
+  "ts_source": "имя файла",
+  "mask_done": true
+ },
+ "sha256": "d4bb11877a6e05b7f435b2d643310cb3fb47feed8c1a79fdfa22db536a878c94",
+ "job_id": "b0de26658d7a44b3aff2a64ac83fc18f",
+ "prev_id": 336,
+ "next_id": 346
+}

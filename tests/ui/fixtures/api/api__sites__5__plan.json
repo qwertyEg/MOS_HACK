@@ -1,0 +1,60 @@
+[
+ {
+  "stage_id": 7,
+  "name": "Фасад и остекление",
+  "work_codes": [
+   "12.4.11.",
+   "12.4.33.",
+   "12.4.36.",
+   "12.4.37.",
+   "12.4.38.",
+   "12.4.41."
+  ],
+  "planned_start": "2019-12-15",
+  "planned_end": "2020-06-01",
+  "equipment": {
+   "facade_hoist": 2,
+   "aerial_platform": 1,
+   "crane_manipulator": 1
+  },
+  "planned_hours": {
+   "facade_hoist": 2030.0,
+   "aerial_platform": 1015.0,
+   "crane_manipulator": 1015.0
+  },
+  "hours_manual": false,
+  "id": 20,
+  "source": "demo"
+ },
+ {
+  "stage_id": 8,
+  "name": "Наружные сети и благоустройство",
+  "work_codes": [
+   "12.5.1.",
+   "12.7.1.",
+   "12.7.2.",
+   "12.7.3.",
+   "12.7.4.",
+   "12.7.5."
+  ],
+  "planned_start": "2020-04-13",
+  "planned_end": "2020-07-11",
+  "equipment": {
+   "excavator": 1,
+   "dump_truck": 2,
+   "roller": 1,
+   "asphalt_paver": 1,
+   "wheel_loader": 1
+  },
+  "planned_hours": {
+   "excavator": 546.0,
+   "dump_truck": 1092.0,
+   "roller": 546.0,
+   "asphalt_paver": 546.0,
+   "wheel_loader": 546.0
+  },
+  "hours_manual": false,
+  "id": 21,
+  "source": "demo"
+ }
+]

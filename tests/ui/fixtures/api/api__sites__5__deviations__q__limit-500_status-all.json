@@ -1,0 +1,515 @@
+[
+ {
+  "id": 18,
+  "key": "equipment_idle:8:excavator:20200608T0431",
+  "type": "equipment_idle",
+  "severity": "critical",
+  "title": "Простой: экскаватор стоит 26 ч",
+  "message": "Видели: Каток №1, Фронтальный погрузчик №1, Фронтальный погрузчик №2, Фронтальный погрузчик №3 на площадке, но не работает 26 ч рабочего времени (работы с момента появления на площадке не было); «полоска» моточасов не уменьшается: по этапу отработано 0 из 2184 ч, осталось 2184 ч. По плану ожидается: идёт этап «Наружные сети и благоустройство» (13.04.2020–11.07.2020) — экскаватор должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 8,
+  "stage_name": "Наружные сети и благоустройство",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [],
+  "frames": [],
+  "unit_ids": [
+   "u0001",
+   "u0002",
+   "u0003",
+   "u0004"
+  ],
+  "started_at": "2020-06-08T04:31:00+00:00",
+  "last_seen_at": "2020-06-09T15:23:09+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "excavator",
+   "idle_h": 26.87,
+   "planned_hours": 2184.0,
+   "worked_hours": 0.0,
+   "resolved_at": "2020-06-09T15:23:09+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 32,
+  "key": "equipment_idle:8:dump_truck:20200608T0539",
+  "type": "equipment_idle",
+  "severity": "critical",
+  "title": "Простой: самосвал стоит 25 ч",
+  "message": "Видели: Самосвал №1 на площадке, но не работает 25 ч рабочего времени (работы с момента появления на площадке не было); «полоска» моточасов не уменьшается: по этапу отработано 0 из 1092 ч, осталось 1092 ч. По плану ожидается: идёт этап «Наружные сети и благоустройство» (13.04.2020–11.07.2020) — самосвал должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 8,
+  "stage_name": "Наружные сети и благоустройство",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [],
+  "frames": [],
+  "unit_ids": [
+   "u0006"
+  ],
+  "started_at": "2020-06-08T05:39:26+00:00",
+  "last_seen_at": "2020-06-09T15:23:09+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "dump_truck",
+   "idle_h": 25.73,
+   "planned_hours": 1092.0,
+   "worked_hours": 0.0,
+   "resolved_at": "2020-06-09T15:23:09+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 50,
+  "key": "stage_late_start:7",
+  "type": "stage_late_start",
+  "severity": "critical",
+  "title": "Этап «Фасад и остекление» не начат: опоздание 177 дней",
+  "message": "Видели: на снимках нет признаков этапа «Фасад и остекление» (последний снимок 09.06.2020). По плану ожидается: начало 15.12.2019 — 177 дней назад. Что проверить: готов ли фронт (предыдущий этап), есть ли техника и бригада; если этап идёт вне поля зрения камер — отметьте его вручную.",
+  "stage_id": 7,
+  "stage_name": "Фасад и остекление",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   342,
+   346,
+   350
+  ],
+  "frames": [
+   {
+    "id": 342,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T10:04:41+00:00",
+    "url": "/media/frames/7/2020/06/09/100441_d4bb11877a_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/100441_d4bb11877a.jpg",
+    "annotated_url": "/api/frames/342/annotated.jpg"
+   },
+   {
+    "id": 346,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T10:24:18+00:00",
+    "url": "/media/frames/7/2020/06/09/102418_019e2b68d1_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/102418_019e2b68d1.jpg",
+    "annotated_url": "/api/frames/346/annotated.jpg"
+   },
+   {
+    "id": 350,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T10:48:26+00:00",
+    "url": "/media/frames/7/2020/06/09/104826_695c580347_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/104826_695c580347.jpg",
+    "annotated_url": "/api/frames/350/annotated.jpg"
+   }
+  ],
+  "unit_ids": [],
+  "started_at": "2020-06-09T15:23:09+00:00",
+  "last_seen_at": "2020-06-09T15:23:09+00:00",
+  "status": "resolved",
+  "data": {
+   "days": 177,
+   "planned_start": "2019-12-15",
+   "resolved_at": "2020-06-09T15:23:09+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 51,
+  "key": "stage_late_start:8",
+  "type": "stage_late_start",
+  "severity": "critical",
+  "title": "Этап «Наружные сети и благоустройство» не начат: опоздание 57 дней",
+  "message": "Видели: на снимках нет признаков этапа «Наружные сети и благоустройство» (последний снимок 09.06.2020). По плану ожидается: начало 13.04.2020 — 57 дней назад. Что проверить: готов ли фронт (предыдущий этап), есть ли техника и бригада; если этап идёт вне поля зрения камер — отметьте его вручную.",
+  "stage_id": 8,
+  "stage_name": "Наружные сети и благоустройство",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   342,
+   346,
+   350
+  ],
+  "frames": [
+   {
+    "id": 342,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T10:04:41+00:00",
+    "url": "/media/frames/7/2020/06/09/100441_d4bb11877a_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/100441_d4bb11877a.jpg",
+    "annotated_url": "/api/frames/342/annotated.jpg"
+   },
+   {
+    "id": 346,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T10:24:18+00:00",
+    "url": "/media/frames/7/2020/06/09/102418_019e2b68d1_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/102418_019e2b68d1.jpg",
+    "annotated_url": "/api/frames/346/annotated.jpg"
+   },
+   {
+    "id": 350,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T10:48:26+00:00",
+    "url": "/media/frames/7/2020/06/09/104826_695c580347_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/104826_695c580347.jpg",
+    "annotated_url": "/api/frames/350/annotated.jpg"
+   }
+  ],
+  "unit_ids": [],
+  "started_at": "2020-06-09T15:23:09+00:00",
+  "last_seen_at": "2020-06-09T15:23:09+00:00",
+  "status": "resolved",
+  "data": {
+   "days": 57,
+   "planned_start": "2020-04-13",
+   "resolved_at": "2020-06-09T15:23:09+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 47,
+  "key": "camera_issue:7:silent",
+  "type": "camera_issue",
+  "severity": "warning",
+  "title": "Камера 7 молчит 2 ч 24 мин",
+  "message": "Видели: последний снимок с камеры 7 — 09.06 15:59, после этого кадров нет 2 ч 24 мин. Ожидается: снимок каждые 20–30 минут. Пока камера молчит, отклонения по технике в её зоне не выявляются. Что проверить: питание, сеть, ключ приёма камеры.",
+  "stage_id": null,
+  "stage_name": null,
+  "camera_id": 7,
+  "camera_name": "Камера 1 · парковка",
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   381
+  ],
+  "frames": [
+   {
+    "id": 381,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T12:59:15+00:00",
+    "url": "/media/frames/7/2020/06/09/125915_8d834a3968_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/125915_8d834a3968.jpg",
+    "annotated_url": "/api/frames/381/annotated.jpg"
+   }
+  ],
+  "unit_ids": [],
+  "started_at": "2020-06-09T04:32:48+00:00",
+  "last_seen_at": "2020-06-09T15:23:09+00:00",
+  "status": "resolved",
+  "data": {
+   "silent_h": 2.4,
+   "resolved_at": "2020-06-09T15:23:09+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 52,
+  "key": "stage_overdue:7",
+  "type": "stage_overdue",
+  "severity": "warning",
+  "title": "Этап «Фасад и остекление» не завершён в срок: просрочка 8 дней",
+  "message": "Видели: этап не начат (последний снимок 09.06.2020). По плану ожидается: окончание 01.06.2020 — 8 дней назад. Что проверить: причины задержки (техника, простои, объём), сдвиг следующих этапов; если этап завершён — отметьте это вручную.",
+  "stage_id": 7,
+  "stage_name": "Фасад и остекление",
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   342,
+   346,
+   350
+  ],
+  "frames": [
+   {
+    "id": 342,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T10:04:41+00:00",
+    "url": "/media/frames/7/2020/06/09/100441_d4bb11877a_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/100441_d4bb11877a.jpg",
+    "annotated_url": "/api/frames/342/annotated.jpg"
+   },
+   {
+    "id": 346,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T10:24:18+00:00",
+    "url": "/media/frames/7/2020/06/09/102418_019e2b68d1_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/102418_019e2b68d1.jpg",
+    "annotated_url": "/api/frames/346/annotated.jpg"
+   },
+   {
+    "id": 350,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T10:48:26+00:00",
+    "url": "/media/frames/7/2020/06/09/104826_695c580347_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/104826_695c580347.jpg",
+    "annotated_url": "/api/frames/350/annotated.jpg"
+   }
+  ],
+  "unit_ids": [],
+  "started_at": "2020-06-09T15:23:09+00:00",
+  "last_seen_at": "2020-06-09T15:23:09+00:00",
+  "status": "resolved",
+  "data": {
+   "days": 8,
+   "planned_end": "2020-06-01",
+   "resolved_at": "2020-06-09T15:23:09+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 53,
+  "key": "equipment_idle:8:dump_truck:20200609T0845",
+  "type": "equipment_idle",
+  "severity": "warning",
+  "title": "Простой: самосвал стоит 4 ч 14 мин",
+  "message": "Видели: Самосвал №1 на площадке, но не работает 4 ч 14 мин рабочего времени (последняя работа — 09.06 11:45); «полоска» моточасов не уменьшается: по этапу отработано 4 из 1092 ч, осталось 1088 ч. По плану ожидается: идёт этап «Наружные сети и благоустройство» (13.04.2020–11.07.2020) — самосвал должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 8,
+  "stage_name": "Наружные сети и благоустройство",
+  "camera_id": 7,
+  "camera_name": "Камера 1 · парковка",
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   276,
+   300,
+   381
+  ],
+  "frames": [
+   {
+    "id": 276,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T05:27:04+00:00",
+    "url": "/media/frames/7/2020/06/09/052704_111edc27a2_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/052704_111edc27a2.jpg",
+    "annotated_url": "/api/frames/276/annotated.jpg"
+   },
+   {
+    "id": 300,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T07:07:13+00:00",
+    "url": "/media/frames/7/2020/06/09/070713_edcf5004b2_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/070713_edcf5004b2.jpg",
+    "annotated_url": "/api/frames/300/annotated.jpg"
+   },
+   {
+    "id": 381,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T12:59:15+00:00",
+    "url": "/media/frames/7/2020/06/09/125915_8d834a3968_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/125915_8d834a3968.jpg",
+    "annotated_url": "/api/frames/381/annotated.jpg"
+   }
+  ],
+  "unit_ids": [
+   "u0006"
+  ],
+  "started_at": "2020-06-09T08:45:16+00:00",
+  "last_seen_at": "2020-06-09T12:59:15+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "dump_truck",
+   "idle_h": 4.23,
+   "planned_hours": 1092.0,
+   "worked_hours": 4.397222222222222,
+   "resolved_at": "2020-06-09T15:23:09+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 45,
+  "key": "equipment_idle:8:dump_truck:20200608T0952",
+  "type": "equipment_idle",
+  "severity": "warning",
+  "title": "Простой: самосвал стоит 13 ч 15 мин",
+  "message": "Видели: Самосвал №1 на площадке, но не работает 13 ч 15 мин рабочего времени (последняя работа — 08.06 12:52); «полоска» моточасов не уменьшается: по этапу отработано 2 из 1092 ч, осталось 1090 ч. По плану ожидается: идёт этап «Наружные сети и благоустройство» (13.04.2020–11.07.2020) — самосвал должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 8,
+  "stage_name": "Наружные сети и благоустройство",
+  "camera_id": 7,
+  "camera_name": "Камера 1 · парковка",
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   273,
+   285,
+   300
+  ],
+  "frames": [
+   {
+    "id": 273,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T05:02:31+00:00",
+    "url": "/media/frames/7/2020/06/09/050231_cc8869988c_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/050231_cc8869988c.jpg",
+    "annotated_url": "/api/frames/273/annotated.jpg"
+   },
+   {
+    "id": 285,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T05:52:37+00:00",
+    "url": "/media/frames/7/2020/06/09/055237_a97acb0dff_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/055237_a97acb0dff.jpg",
+    "annotated_url": "/api/frames/285/annotated.jpg"
+   },
+   {
+    "id": 300,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T07:07:13+00:00",
+    "url": "/media/frames/7/2020/06/09/070713_edcf5004b2_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/070713_edcf5004b2.jpg",
+    "annotated_url": "/api/frames/300/annotated.jpg"
+   }
+  ],
+  "unit_ids": [
+   "u0006"
+  ],
+  "started_at": "2020-06-08T09:52:20+00:00",
+  "last_seen_at": "2020-06-09T07:07:13+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "dump_truck",
+   "idle_h": 13.25,
+   "planned_hours": 1092.0,
+   "worked_hours": 2.3144444444444443,
+   "resolved_at": "2020-06-09T15:23:09+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 48,
+  "key": "equipment_idle:8:excavator:20200608T1512",
+  "type": "equipment_idle",
+  "severity": "warning",
+  "title": "Простой: экскаватор стоит 5 ч 20 мин",
+  "message": "Видели: Каток №1, Фронтальный погрузчик №4 на площадке, но не работает 5 ч 20 мин рабочего времени (последняя работа — 08.06 18:12); «полоска» моточасов не уменьшается: по этапу отработано 10 из 2184 ч, осталось 2174 ч. По плану ожидается: идёт этап «Наружные сети и благоустройство» (13.04.2020–11.07.2020) — экскаватор должен работать. Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику.",
+  "stage_id": 8,
+  "stage_name": "Наружные сети и благоустройство",
+  "camera_id": 7,
+  "camera_name": "Камера 1 · парковка",
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   270
+  ],
+  "frames": [
+   {
+    "id": 270,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T04:32:48+00:00",
+    "url": "/media/frames/7/2020/06/09/043248_bdc03190ec_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/043248_bdc03190ec.jpg",
+    "annotated_url": "/api/frames/270/annotated.jpg"
+   }
+  ],
+  "unit_ids": [
+   "u0001",
+   "u0008"
+  ],
+  "started_at": "2020-06-08T15:12:28+00:00",
+  "last_seen_at": "2020-06-09T04:32:48+00:00",
+  "status": "resolved",
+  "data": {
+   "cls": "excavator",
+   "idle_h": 5.34,
+   "planned_hours": 2184.0,
+   "worked_hours": 9.593611111111112,
+   "resolved_at": "2020-06-09T15:23:09+00:00",
+   "auto_resolved": true
+  },
+  "note": ""
+ },
+ {
+  "id": 33,
+  "key": "needs_review:outliers",
+  "type": "needs_review",
+  "severity": "info",
+  "title": "8 кадров противоречат хронологии этапов",
+  "message": "Видели: на этих кадрах этап «откатывается» назад или перескакивает вперёд — вероятно, в кадр попала соседняя стройка или случайное перекрытие; в расчёт готовности они не вошли. Ожидается: этапы идут только вперёд и не перескакивают через один. Что сделать: проверьте кадры; если это реальный скачок — отметьте этап вручную.",
+  "stage_id": null,
+  "stage_name": null,
+  "camera_id": null,
+  "camera_name": null,
+  "zone_id": null,
+  "zone_name": null,
+  "frame_ids": [
+   201,
+   270,
+   285,
+   300,
+   336,
+   396
+  ],
+  "frames": [
+   {
+    "id": 201,
+    "camera_id": 7,
+    "captured_at": "2020-06-08T11:45:03+00:00",
+    "url": "/media/frames/7/2020/06/08/114503_7b031ea92d_p.jpg",
+    "full_url": "/media/frames/7/2020/06/08/114503_7b031ea92d.jpg",
+    "annotated_url": "/api/frames/201/annotated.jpg"
+   },
+   {
+    "id": 270,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T04:32:48+00:00",
+    "url": "/media/frames/7/2020/06/09/043248_bdc03190ec_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/043248_bdc03190ec.jpg",
+    "annotated_url": "/api/frames/270/annotated.jpg"
+   },
+   {
+    "id": 285,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T05:52:37+00:00",
+    "url": "/media/frames/7/2020/06/09/055237_a97acb0dff_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/055237_a97acb0dff.jpg",
+    "annotated_url": "/api/frames/285/annotated.jpg"
+   },
+   {
+    "id": 300,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T07:07:13+00:00",
+    "url": "/media/frames/7/2020/06/09/070713_edcf5004b2_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/070713_edcf5004b2.jpg",
+    "annotated_url": "/api/frames/300/annotated.jpg"
+   },
+   {
+    "id": 336,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T09:44:55+00:00",
+    "url": "/media/frames/7/2020/06/09/094455_dad30c9a96_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/094455_dad30c9a96.jpg",
+    "annotated_url": "/api/frames/336/annotated.jpg"
+   },
+   {
+    "id": 396,
+    "camera_id": 7,
+    "captured_at": "2020-06-09T14:10:56+00:00",
+    "url": "/media/frames/7/2020/06/09/141056_e12fed6c7b_p.jpg",
+    "full_url": "/media/frames/7/2020/06/09/141056_e12fed6c7b.jpg",
+    "annotated_url": "/api/frames/396/annotated.jpg"
+   }
+  ],
+  "unit_ids": [],
+  "started_at": "2020-06-09T15:23:09+00:00",
+  "last_seen_at": "2020-06-09T15:23:09+00:00",
+  "status": "open",
+  "data": {
+   "count": 8
+  },
+  "note": ""
+ }
+]

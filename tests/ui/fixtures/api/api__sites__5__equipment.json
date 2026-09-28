@@ -1,0 +1,321 @@
+{
+ "units": [
+  {
+   "id": 42,
+   "uid": "u0007",
+   "site_id": 5,
+   "cls": "concrete_mixer",
+   "name": "Автобетоносмеситель",
+   "label": "Автобетоносмеситель №1",
+   "status": "departed",
+   "first_seen": "2020-06-08T05:39:26+00:00",
+   "last_seen": "2020-06-08T14:32:17+00:00",
+   "last_moved": "2020-06-08T08:01:44+00:00",
+   "worked_hours": 1.16,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 41,
+   "uid": "u0006",
+   "site_id": 5,
+   "cls": "dump_truck",
+   "name": "Самосвал",
+   "label": "Самосвал №1",
+   "status": "active",
+   "first_seen": "2020-06-08T05:39:26+00:00",
+   "last_seen": "2020-06-09T15:23:09+00:00",
+   "last_moved": "2020-06-09T15:23:09+00:00",
+   "worked_hours": 6.3,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 36,
+   "uid": "u0005",
+   "site_id": 5,
+   "cls": "mobile_crane",
+   "name": "Автокран",
+   "label": "Автокран №1",
+   "status": "departed",
+   "first_seen": "2020-06-08T04:56:26+00:00",
+   "last_seen": "2020-06-09T11:13:43+00:00",
+   "last_moved": null,
+   "worked_hours": 0.0,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 101,
+   "uid": "u0010",
+   "site_id": 5,
+   "cls": "mobile_crane",
+   "name": "Автокран",
+   "label": "Автокран №2",
+   "status": "departed",
+   "first_seen": "2020-06-08T13:33:45+00:00",
+   "last_seen": "2020-06-09T10:24:18+00:00",
+   "last_moved": null,
+   "worked_hours": 0.0,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 24,
+   "uid": "u0001",
+   "site_id": 5,
+   "cls": "roller",
+   "name": "Каток",
+   "label": "Каток №1",
+   "status": "departed",
+   "first_seen": "2020-06-08T04:31:00+00:00",
+   "last_seen": "2020-06-09T07:07:13+00:00",
+   "last_moved": "2020-06-09T07:07:13+00:00",
+   "worked_hours": 4.83,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 97,
+   "uid": "u0009",
+   "site_id": 5,
+   "cls": "roller",
+   "name": "Каток",
+   "label": "Каток №2",
+   "status": "idle",
+   "first_seen": "2020-06-08T12:45:18+00:00",
+   "last_seen": "2020-06-09T14:59:20+00:00",
+   "last_moved": null,
+   "worked_hours": 0.0,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 148,
+   "uid": "u0012",
+   "site_id": 5,
+   "cls": "roller",
+   "name": "Каток",
+   "label": "Каток №3",
+   "status": "idle",
+   "first_seen": "2020-06-09T14:10:56+00:00",
+   "last_seen": "2020-06-09T14:10:56+00:00",
+   "last_moved": null,
+   "worked_hours": 0.0,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 25,
+   "uid": "u0002",
+   "site_id": 5,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "label": "Фронтальный погрузчик №1",
+   "status": "departed",
+   "first_seen": "2020-06-08T04:31:00+00:00",
+   "last_seen": "2020-06-08T04:56:26+00:00",
+   "last_moved": null,
+   "worked_hours": 0.0,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 34,
+   "uid": "u0003",
+   "site_id": 5,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "label": "Фронтальный погрузчик №2",
+   "status": "idle",
+   "first_seen": "2020-06-08T04:56:26+00:00",
+   "last_seen": "2020-06-09T13:19:03+00:00",
+   "last_moved": "2020-06-08T08:26:23+00:00",
+   "worked_hours": 3.12,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 35,
+   "uid": "u0004",
+   "site_id": 5,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "label": "Фронтальный погрузчик №3",
+   "status": "active",
+   "first_seen": "2020-06-08T04:56:26+00:00",
+   "last_seen": "2020-06-09T14:59:20+00:00",
+   "last_moved": "2020-06-09T14:59:20+00:00",
+   "worked_hours": 7.78,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 62,
+   "uid": "u0008",
+   "site_id": 5,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "label": "Фронтальный погрузчик №4",
+   "status": "idle",
+   "first_seen": "2020-06-08T08:01:44+00:00",
+   "last_seen": "2020-06-09T14:10:56+00:00",
+   "last_moved": "2020-06-09T09:15:52+00:00",
+   "worked_hours": 3.7,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  },
+  {
+   "id": 146,
+   "uid": "u0011",
+   "site_id": 5,
+   "cls": "wheel_loader",
+   "name": "Фронтальный погрузчик",
+   "label": "Фронтальный погрузчик №5",
+   "status": "idle",
+   "first_seen": "2020-06-09T13:44:50+00:00",
+   "last_seen": "2020-06-09T13:44:50+00:00",
+   "last_moved": null,
+   "worked_hours": 0.0,
+   "cameras": [
+    "7"
+   ],
+   "plate": null,
+   "site_xy": null
+  }
+ ],
+ "balances": [
+  {
+   "stage_id": 7,
+   "cls": "crane_manipulator",
+   "planned_hours": 1015.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Кран-манипулятор",
+   "stage_name": "Фасад и остекление",
+   "remaining_hours": 1015.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 7,
+   "cls": "aerial_platform",
+   "planned_hours": 1015.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Автовышка / подъёмник",
+   "stage_name": "Фасад и остекление",
+   "remaining_hours": 1015.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 7,
+   "cls": "facade_hoist",
+   "planned_hours": 2030.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Строительный подъёмник / фасадная люлька",
+   "stage_name": "Фасад и остекление",
+   "remaining_hours": 2030.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 8,
+   "cls": "excavator",
+   "planned_hours": 546.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Экскаватор",
+   "stage_name": "Наружные сети и благоустройство",
+   "remaining_hours": 546.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 8,
+   "cls": "dump_truck",
+   "planned_hours": 1092.0,
+   "worked_hours": 6.303888888888888,
+   "last_worked_at": "2020-06-09T15:23:09+00:00",
+   "name": "Самосвал",
+   "stage_name": "Наружные сети и благоустройство",
+   "remaining_hours": 1085.7,
+   "done_ratio": 0.006
+  },
+  {
+   "stage_id": 8,
+   "cls": "roller",
+   "planned_hours": 546.0,
+   "worked_hours": 4.83,
+   "last_worked_at": "2020-06-09T07:07:13+00:00",
+   "name": "Каток",
+   "stage_name": "Наружные сети и благоустройство",
+   "remaining_hours": 541.17,
+   "done_ratio": 0.009
+  },
+  {
+   "stage_id": 8,
+   "cls": "concrete_mixer",
+   "planned_hours": 0.0,
+   "worked_hours": 1.1608333333333332,
+   "last_worked_at": "2020-06-08T08:01:44+00:00",
+   "name": "Автобетоносмеситель",
+   "stage_name": "Наружные сети и благоустройство",
+   "remaining_hours": 0.0,
+   "done_ratio": 0.0
+  },
+  {
+   "stage_id": 8,
+   "cls": "wheel_loader",
+   "planned_hours": 546.0,
+   "worked_hours": 14.600833333333334,
+   "last_worked_at": "2020-06-09T14:59:20+00:00",
+   "name": "Фронтальный погрузчик",
+   "stage_name": "Наружные сети и благоустройство",
+   "remaining_hours": 531.4,
+   "done_ratio": 0.027
+  },
+  {
+   "stage_id": 8,
+   "cls": "asphalt_paver",
+   "planned_hours": 546.0,
+   "worked_hours": 0.0,
+   "last_worked_at": null,
+   "name": "Асфальтоукладчик",
+   "stage_name": "Наружные сети и благоустройство",
+   "remaining_hours": 546.0,
+   "done_ratio": 0.0
+  }
+ ]
+}

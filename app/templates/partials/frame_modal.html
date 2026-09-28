@@ -1,0 +1,48 @@
+{#- Модалка снимка-доказательства: кадр с рамками, листание снимков отклонения стрелками. -#}
+<div x-data="svFrameModal" @keydown.window="if (isOpen) { if ($event.key === 'Escape') close(); if ($event.key === 'ArrowLeft') step(-1); if ($event.key === 'ArrowRight') step(1); if ($event.key === 'b' || $event.key === 'и') showBoxes = !showBoxes }">
+  <div x-cloak x-show="isOpen" x-transition.opacity.duration.150ms class="fixed inset-0 z-[75] flex items-center justify-center bg-black/75 p-2 sm:p-6" @click.self="close()">
+    <div class="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-pop" role="dialog" aria-modal="true" aria-labelledby="fm-title" x-trap.noscroll="isOpen">
+      <div class="flex items-center gap-2 border-b border-line px-4 py-3">
+        <div class="min-w-0 flex-1">
+          <p id="fm-title" class="truncate text-sm font-semibold" x-text="title"></p>
+          <p class="truncate text-xs text-fg-3" x-show="frame">
+            <span x-text="frame && frame.camera_name"></span> · <span x-text="frame && SV.fmt.dateTime(frame.captured_at)"></span>
+            <template x-if="ids.length > 1"><span> · снимок <span class="num" x-text="idx + 1"></span> из <span class="num" x-text="ids.length"></span></span></template>
+          </p>
+        </div>
+        <div class="seg hidden sm:inline-flex"><button type="button" :aria-pressed="showBoxes" @click="showBoxes = !showBoxes"><span x-html="$icon('scan')"></span>Рамки <span class="kbd !h-4">B</span></button></div>
+        <a class="btn btn-secondary btn-sm" :href="frame ? '/frames/' + frame.id : '#'" x-show="frame">Разбор кадра <span x-html="$icon('arrow-right', 'w-3.5 h-3.5')"></span></a>
+        <button type="button" class="btn btn-ghost btn-icon btn-sm" @click="close()" aria-label="Закрыть"><span x-html="$icon('x')"></span></button>
+      </div>
+      <div class="relative min-h-[240px] flex-1 overflow-auto bg-[#050506]">
+        <template x-if="loading && !frame"><div class="skeleton aspect-[5/4] w-full rounded-none"></div></template>
+        <template x-if="error">
+          <div class="empty text-fg-2"><div class="empty-icon" x-html="$icon('image')"></div><p class="text-sm" x-text="'Снимок не загрузился: ' + error"></p><button class="btn btn-secondary btn-sm" @click="load()">Повторить</button></div>
+        </template>
+        <template x-if="frame">
+          <div class="viewer mx-auto" x-init="measure($el)" :style="`max-width: min(100%, calc((100vh - 170px) * ${(frame.width || 4) / (frame.height || 3)}))`">
+            <img :src="frame.url" :alt="'Кадр ' + (frame.camera_name || '')" :width="frame.width" :height="frame.height">
+            <svg :view-box.camel="`0 0 ${frame.width} ${frame.height}`" preserveAspectRatio="none" x-html="svg"></svg>
+            <div class="viewer-layer pointer-events-none">
+              <template x-for="l in labels" :key="l.i"><span class="box-label" :style="l.style" x-text="l.text"></span></template>
+            </div>
+          </div>
+        </template>
+        <template x-if="ids.length > 1">
+          <div>
+            <button type="button" class="absolute left-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white backdrop-blur hover:bg-black/75" @click="step(-1)" aria-label="Предыдущий снимок"><span x-html="$icon('chevron-left')"></span></button>
+            <button type="button" class="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white backdrop-blur hover:bg-black/75" @click="step(1)" aria-label="Следующий снимок"><span x-html="$icon('chevron-right')"></span></button>
+          </div>
+        </template>
+      </div>
+      <template x-if="frame && frame.detections && frame.detections.length">
+        <div class="flex flex-wrap items-center gap-1.5 border-t border-line px-4 py-2.5">
+          <span class="mr-1 text-xs text-fg-3">На снимке:</span>
+          <template x-for="(d, i) in frame.detections" :key="i">
+            <span class="badge badge-neutral"><span class="dot !h-1.5 !w-1.5" :style="'background:' + SV.palette.color(d.class || d.cls)"></span><span x-text="(SV.unitName(d.unit_id) || d.name || SV.classNames[d.class || d.cls]) + (SV.META.activity[d.activity] ? ' · ' + SV.META.activity[d.activity] : '')"></span></span>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>

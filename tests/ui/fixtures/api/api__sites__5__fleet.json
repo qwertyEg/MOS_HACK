@@ -1,0 +1,34 @@
+[
+ {
+  "cls": "aerial_platform",
+  "count": 1
+ },
+ {
+  "cls": "asphalt_paver",
+  "count": 1
+ },
+ {
+  "cls": "crane_manipulator",
+  "count": 1
+ },
+ {
+  "cls": "dump_truck",
+  "count": 2
+ },
+ {
+  "cls": "excavator",
+  "count": 1
+ },
+ {
+  "cls": "facade_hoist",
+  "count": 2
+ },
+ {
+  "cls": "roller",
+  "count": 1
+ },
+ {
+  "cls": "wheel_loader",
+  "count": 1
+ }
+]

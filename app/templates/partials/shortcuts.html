@@ -1,0 +1,20 @@
+{#- Шпаргалка по клавишам («?»). -#}
+<div x-data="svShortcuts" @sv-shortcuts.window="open = true" @keydown.escape.window="open = false">
+  <div x-cloak x-show="open" x-transition.opacity class="fixed inset-0 z-[80] grid place-items-center bg-black/60 p-4" @click.self="open = false">
+    <div class="card w-full max-w-md p-5 shadow-pop" role="dialog" aria-modal="true" aria-labelledby="sc-title" x-trap.noscroll="open">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 id="sc-title" class="text-base font-semibold">Клавиши</h2>
+        <button class="btn btn-ghost btn-icon btn-sm" @click="open = false" aria-label="Закрыть"><span x-html="$icon('x')"></span></button>
+      </div>
+      <dl class="grid grid-cols-[1fr_auto] gap-x-6 gap-y-2.5 text-sm">
+        <dt class="text-fg-2">Переключить объект</dt><dd><span class="kbd">/</span></dd>
+        <dt class="text-fg-2">Вкладки объекта</dt><dd class="flex gap-1"><span class="kbd">1</span><span class="kbd">…</span><span class="kbd">5</span></dd>
+        <dt class="text-fg-2">Предыдущий / следующий кадр</dt><dd class="flex gap-1"><span class="kbd">←</span><span class="kbd">→</span></dd>
+        <dt class="text-fg-2">Слои: рамки / маска / зоны</dt><dd class="flex gap-1"><span class="kbd">B</span><span class="kbd">M</span><span class="kbd">Z</span></dd>
+        <dt class="text-fg-2">Сменить тему</dt><dd><span class="kbd">T</span></dd>
+        <dt class="text-fg-2">Закрыть окно</dt><dd><span class="kbd">Esc</span></dd>
+        <dt class="text-fg-2">Эта подсказка</dt><dd><span class="kbd">?</span></dd>
+      </dl>
+    </div>
+  </div>
+</div>
