@@ -74,8 +74,12 @@ class VlmDetector:
 
     def __init__(self, client=None, model: str | None = None, provider: str = "zai",
                  max_side: int = 1280, max_tokens: int = 2000, classes: list[str] | None = None,
-                 config: EquipmentConfig | None = None):
+                 config: EquipmentConfig | None = None, coords: str = "auto"):
         self._client = client
+        # "auto" — 0..1000 (как просим в промпте), доли или пиксели распознаются по
+        # значениям; "pixels" / "norm1000" — жёстко, для VLM с известной привычкой
+        # (Qwen2.5-VL отвечает в пикселях присланного кадра).
+        self.coords = coords
         self._model = model
         self._provider_key = provider
         self.provider = Provider.EXTERNAL if provider == "zai" else Provider.LOCAL
@@ -85,6 +89,11 @@ class VlmDetector:
         self.classes = [k for k in (classes or list(taxonomy.equipment())) if k in taxonomy.equipment()]
         self.config = config or EquipmentConfig()
         self.last_report: dict[str, Any] = {}
+
+    @property
+    def supported_classes(self) -> list[str]:
+        """Ключи словаря, которые перечислены модели в промпте (для /api/settings)."""
+        return list(self.classes)
 
     @property
     def model_id(self) -> str:
@@ -121,8 +130,11 @@ class VlmDetector:
             raise VLMError(f"{self._title()}: {_human(e)}") from e
 
         data = _reply_data(reply)
+        # Модель видела уменьшенную копию кадра: пиксели в её ответе — пиксели копии.
+        k = min(1.0, self.max_side / max(h, w))
+        sent = (max(1, int(w * k)), max(1, int(h * k)))
         try:
-            dets, dropped = parse_objects(data, w, h, source=self.model_id)
+            dets, dropped = parse_objects(data, w, h, source=self.model_id, sent_size=sent, coords=self.coords)
         except VLMError as e:
             raise VLMError(f"{self._title()}: {e}") from e
         except Exception as e:  # noqa: BLE001
@@ -164,8 +176,13 @@ def _reply_data(reply) -> dict:
         raise VLMError(f"модель не вернула JSON: {e}; начало ответа: {str(text)[:200]!r}") from e
 
 
-def parse_objects(data: Any, width: int, height: int, source: str = "glm") -> tuple[list[Detection], list[str]]:
-    """JSON ответа → детекции в пикселях XYWH + список причин отброса."""
+def parse_objects(data: Any, width: int, height: int, source: str = "glm",
+                  sent_size: tuple[int, int] | None = None, coords: str = "auto"
+                  ) -> tuple[list[Detection], list[str]]:
+    """JSON ответа → детекции в пикселях XYWH исходного кадра + список причин отброса.
+
+    sent_size — размер копии кадра, которую видела модель (для ответов в пикселях).
+    """
     if not isinstance(data, dict):
         raise VLMError(f"ответ модели — не JSON-объект, а {type(data).__name__}")
     objs = next((data[k] for k in _LIST_KEYS if k in data), None)
@@ -194,7 +211,8 @@ def parse_objects(data: Any, width: int, height: int, source: str = "glm") -> tu
     if objs and broken == len(objs):
         raise VLMError("модель вернула объекты без рамок — разобрать нечего")
 
-    scale = _coordinate_scale([b for _, b, _ in boxes_raw], width, height)
+    sw, sh = sent_size or (width, height)
+    scale = _coordinate_scale([b for _, b, _ in boxes_raw], sw, sh, coords)
     out = []
     for key, (x1, y1, x2, y2), raw in boxes_raw:
         sx, sy = scale
@@ -234,9 +252,17 @@ def _bbox(v: Any) -> tuple[float, float, float, float] | None:
     return nums if all(math.isfinite(x) for x in nums) else None
 
 
-def _coordinate_scale(bxs: list[tuple[float, ...]], width: int, height: int) -> tuple[float, float]:
-    """Множители к шкале 0..1000. GLM отвечает в 0..1000, но другие VLM — в долях или пикселях."""
-    if not bxs:
+def _coordinate_scale(bxs: list[tuple[float, ...]], width: int, height: int,
+                      coords: str = "auto") -> tuple[float, float]:
+    """Множители к шкале 0..1000. GLM отвечает в 0..1000, но другие VLM — в долях или пикселях.
+
+    width/height — размер кадра, который видела модель. В режиме "auto" пиксели
+    узнаются только по значениям больше 1000: меньше — неотличимы от 0..1000,
+    а 0..1000 мы и просим в промпте.
+    """
+    if coords == "pixels" and width and height:
+        return 1000.0 / width, 1000.0 / height
+    if coords == "norm1000" or not bxs:
         return 1.0, 1.0
     top = max(max(b) for b in bxs)
     if top <= 1.0 + 1e-6:

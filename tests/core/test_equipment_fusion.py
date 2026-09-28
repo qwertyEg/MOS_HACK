@@ -207,3 +207,40 @@ def test_departed_and_parked_units_count_separately():
     units = eng.units()
     assert units[0].status == UnitStatus.IDLE
     assert count_by_class(units, statuses=(UnitStatus.ACTIVE,)) == {}
+
+
+def test_duplicate_born_in_the_other_camera_is_merged_into_old_unit():
+    """Камера A сняла первой, через 20 мин после последнего кадра B (вне окна склейки), и
+    завела дубль работающей машины; кадр B того же момента склеивает дубль в старую единицу."""
+    eng = EquipmentEngine()
+    for k, x in enumerate((10, 14, 18)):                  # едет — ACTIVE, «стоит там же» не подставишь
+        ub = see(eng, "B", GB, 25 * k, [("excavator", (x, 10), None)], k=k)
+    assert ub.units[0].status == UnitStatus.ACTIVE
+    old = ub.detections[0].unit_id
+    ua = see(eng, "A", GA, 70, [("excavator", (18.5, 10), None)], k=10)
+    dup = ua.detections[0].unit_id
+    assert dup != old
+    ub = see(eng, "B", GB, 72, [("excavator", (18.6, 10), None)], k=11)
+    assert ub.merged == {dup: old}
+    assert [u.unit_id for u in ub.units] == [old]
+    ua = see(eng, "A", GA, 95, [("excavator", (18.6, 10), None)], k=12)
+    assert ua.detections[0].unit_id == old, "трек камеры A теперь ведёт старую единицу"
+
+
+def test_camera_calibrated_later_its_old_duplicate_merges_after_confirmation():
+    """Камеру B откалибровали через два часа: до этого её машина — отдельная единица.
+    После калибровки обе давние единицы стоят в одной точке плана — со второго кадра подряд склеиваем."""
+    eng = EquipmentEngine()
+    box_b = to_image(GB, (20, 12))
+    for k in range(5):
+        see(eng, "A", GA, 30 * k, [("bulldozer", (20, 12), None)], k=k)
+        eng.process(frame("B", 30 * k + 2, 10 + k), None, [S.det("bulldozer", box_b)], None, [], [])
+    assert count_by_class(eng.units()) == {"bulldozer": 2}, "некалиброванная камера — независима"
+    first = see(eng, "A", GA, 150, [("bulldozer", (20, 12), None)], k=5)
+    u1 = see(eng, "B", GB, 152, [("bulldozer", (20, 12), None)], k=15)
+    assert u1.merged == {} and count_by_class(u1.units) == {"bulldozer": 2}, "одного кадра мало"
+    see(eng, "A", GA, 180, [("bulldozer", (20, 12), None)], k=6)
+    u2 = see(eng, "B", GB, 182, [("bulldozer", (20, 12), None)], k=16)
+    keep = first.detections[0].unit_id
+    assert list(u2.merged.values()) == [keep]
+    assert count_by_class(u2.units) == {"bulldozer": 1}

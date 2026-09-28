@@ -87,7 +87,8 @@ def project(H: Sequence[Sequence[float]] | None, point: tuple[float, float],
     if H is None:
         return None
     x, y = point
-    if image_size and frame_size and tuple(image_size) != tuple(frame_size):
+    if (image_size and frame_size and min(frame_size) > 0 and min(image_size) > 0
+            and tuple(image_size) != tuple(frame_size)):
         x *= image_size[0] / frame_size[0]
         y *= image_size[1] / frame_size[1]
     m = np.asarray(H, dtype=np.float64)
@@ -105,11 +106,19 @@ _LOOKALIKE = str.maketrans("АВЕКМНОРСТУХ", "ABEKMHOPCTYX")
 
 
 def normalize_plate(text: str | None) -> str | None:
-    """«а 123 вс 77» и «A123BC77» — один номер: кириллица → латиница-двойник, без пробелов."""
+    """«а 123 вс 77» и «A123BC77» — один номер: кириллица → латиница-двойник, без пробелов.
+
+    Номер — ключ безусловной склейки, поэтому мусор («нет», «н/д», «UNKNOWN»)
+    номером не считается: в любом российском номере (и автомобильном, и
+    тракторном 1234 АВ 77) есть хотя бы три цифры и буква.
+    """
     if not text:
         return None
     s = re.sub(r"[^0-9A-ZА-ЯЁ]", "", str(text).upper()).translate(_LOOKALIKE)
-    return s if len(s) >= 4 else None
+    digits = sum(ch.isdigit() for ch in s)
+    if not 5 <= len(s) <= 10 or digits < 3 or digits == len(s):
+        return None
+    return s
 
 
 # --------------------------------------------------------------------------

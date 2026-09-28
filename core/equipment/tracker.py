@@ -69,6 +69,10 @@ class Track:
     move_streak: int = 0
     pending: list = field(default_factory=list)
     conflicts: int = 0                                 # подряд расхождений с единицей по плану
+    coloc: tuple[str, int] | None = None               # (чужая единица, кадров подряд в одной точке плана)
+    # Рамка до последнего сдвига, если тот сдвиг ничем, кроме геометрии, не
+    # подтверждён: вернулась туда же на следующем кадре — это сбой детектора.
+    jump_from: boxes.Box | None = None
 
     def vote(self, cls: str, weight: float, window: int) -> None:
         self.votes.append((cls, float(weight)))
@@ -287,9 +291,17 @@ class CameraTracker:
         app = (appearance.appearance_delta(tr.patch, gray, shift, cfg.appearance_min_std)
                if judged and can_compare else None)
 
-        moved = False
+        moved = flicker = False
         if judged:
-            disp_moved = disp > max(cfg.move_px_min, cfg.move_diag_frac * boxes.diag(pb))
+            # Смещение рамки подтверждаем тем, что старое место изменилось: уехавшая
+            # машина оставляет за собой другую картинку, а рамка, «прыгнувшая» на
+            # один кадр над неподвижной машиной (сбой детектора), — нет. Такой сбой
+            # дал бы ДВА сдвига подряд (туда и обратно) и прошёл бы confirm_moves.
+            # Сравнить нельзя (нет картинки, дождь, однотонный ночной кроп) —
+            # верим смещению, как в исходной методике.
+            disp_ok = (not cfg.move_needs_appearance or app is None
+                       or app >= cfg.appearance_confirm_thr)
+            disp_moved = disp > max(cfg.move_px_min, cfg.move_diag_frac * boxes.diag(pb)) and disp_ok
             if not cfg.shape_needs_appearance or gray is None:
                 # Картинки нет совсем (переразбор по сохранённым рамкам) — как в
                 # методике: изменение формы рамки само по себе.
@@ -301,7 +313,20 @@ class CameraTracker:
                 shape_ok = app is not None and app >= cfg.appearance_confirm_thr
             shape_moved = shape > cfg.shape_delta_thr and shape_ok
             app_moved = app is not None and app > cfg.appearance_thr
+            geometry_only = disp_moved and not shape_moved and not app_moved and app is None
+            if geometry_only and tr.jump_from is not None:
+                # Без картинки «прыжок» рамки туда и обратно (A → B → A) дал бы
+                # два сдвига подряд и прошёл бы confirm_moves. Вернулась на прежнее
+                # место через один кадр, и содержимым это не подтвердить — сбой.
+                jf = tr.jump_from
+                back = math.dist(boxes.center(jf), boxes.center(d.bbox))
+                if back <= max(cfg.move_px_min, cfg.move_diag_frac * boxes.diag(jf)):
+                    disp_moved = geometry_only = False
+                    flicker = True
+            tr.jump_from = pb if geometry_only else None
             moved = disp_moved or shape_moved or app_moved
+        else:
+            tr.jump_from = None
 
         out = dataclasses.replace(
             d, track_id=tr.track_id, moved_since_prev=moved,
@@ -312,6 +337,8 @@ class CameraTracker:
             extra=dict(d.extra))
         if gap > dt.timedelta(minutes=cfg.max_gap_min):
             out.extra["gap_min"] = round(gap.total_seconds() / 60)
+        if flicker:
+            out.extra["box_flicker"] = True
 
         prev_seen, prev_frame = tr.last_seen, tr.last_frame_id
         self._absorb(tr, d, hist, frame, gray)

@@ -31,6 +31,13 @@ class EquipmentConfig:
     pair_iou: float = 0.85                      # пары, стоящие вплотную (насос + миксер), гасим только при почти полном совпадении
     pair_exempt: tuple[tuple[str, str], ...] = (("concrete_pump", "concrete_mixer"),)
 
+    # ---------------- уточнение подтипа грузовиков по кропу (refine.py) ----------------
+    refine_min_prob: float = 0.5                # новый подтип не ниже этой вероятности (softmax по 6 подтипам)
+    refine_margin: float = 0.2                  # … и выше вероятности класса детектора на столько
+    refine_margin_known: float = 0.8            # переход в класс, который детектор умеет сам, — почти никогда
+    refine_min_side_px: float = 32.0            # кроп мельче — подтип не разобрать, оставляем класс детектора
+    refine_pad_frac: float = 0.06               # поля вокруг рамки (стрела, кузов на краю рамки)
+
     # ---------------- трекер одной камеры (tracker.py) ----------------
     match_max_cost: float = 1.8                 # сумма (1−IoU) + расстояние/диагональ + штраф класса
     match_max_center_diag: float = 1.5          # дальше полутора диагоналей — точно не тот же трек
@@ -44,6 +51,7 @@ class EquipmentConfig:
     move_diag_frac: float = 0.15                # … или доля диагонали рамки
     shape_delta_thr: float = 0.15               # |Δw/w| + |Δh/h| — работа стрелой при неподвижном центре
     shape_needs_appearance: bool = True         # форму рамки подтверждаем содержимым (детектор «дышит» рамкой)
+    move_needs_appearance: bool = True          # смещение тоже: рамка «прыгнула» на кадр и вернулась — не работа
     appearance_thr: float = 0.02                # доля площади рамки, где структура изменилась сверх фона (поза ковша)
     appearance_confirm_thr: float = 0.008       # минимальное изменение, чтобы поверить изменению формы рамки
     appearance_min_std: float = 3.0             # однотонный кроп (ночь, засвет) — сравнивать нечего
@@ -63,6 +71,7 @@ class EquipmentConfig:
     appearance_min_similarity: float = 0.5      # сходство цветовых гистограмм для спорных случаев
     appearance_weight: float = 0.5              # вклад внешности в порядок склейки
     merge_young_min: float = 60.0               # дубль, родившийся в «серой зоне», склеиваем, пока он молодой
+    merge_confirm: int = 2                      # две давние единицы разных камер в одной точке столько кадров подряд — склеиваем
     split_radius_m: float = 12.0                # трек ушёл от своей единицы дальше — отделяем
     split_after: int = 2                        # … после стольких подряд расхождений
 
@@ -97,15 +106,27 @@ class EquipmentConfig:
         out["pair_exempt"] = [list(p) for p in self.pair_exempt]
         return out
 
+    # Значения, на которые делят или по которым считают серии: ноль из формы
+    # настроек сломал бы обработку каждого кадра, а не одну метрику.
+    _POSITIVE = ("merge_radius_m", "merge_window_min", "max_gap_min", "max_credit_gap_min", "departed_after_h",
+                 "parked_after_h", "shift_hours", "split_radius_m", "match_max_cost", "match_max_center_diag")
+    _AT_LEAST_ONE = ("confirm_moves", "split_after", "vote_window", "merge_gray_factor", "merge_confirm")
+
     def validate(self) -> None:
         for f in dataclasses.fields(self):
             v = getattr(self, f.name)
             if isinstance(v, (int, float)) and not isinstance(v, bool) and v < 0:
                 raise ValueError(f"EquipmentConfig.{f.name} не может быть отрицательным: {v}")
+        for name in self._POSITIVE:
+            if getattr(self, name) <= 0:
+                raise ValueError(f"EquipmentConfig.{name} должен быть больше нуля")
+        for name in self._AT_LEAST_ONE:
+            if getattr(self, name) < 1:
+                raise ValueError(f"EquipmentConfig.{name} должен быть не меньше 1")
+        if not 0 <= self.refine_min_prob <= 1:
+            raise ValueError("EquipmentConfig.refine_min_prob — вероятность, от 0 до 1")
         if not 0 < self.utilization <= 1:
             raise ValueError("EquipmentConfig.utilization должен быть в (0, 1]")
-        if self.confirm_moves < 1:
-            raise ValueError("EquipmentConfig.confirm_moves ≥ 1")
         if any(d not in range(7) for d in self.workdays):
             raise ValueError("EquipmentConfig.workdays — дни недели 0..6 (0 — понедельник)")
 

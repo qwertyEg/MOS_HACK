@@ -5,10 +5,18 @@ import json
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from core.contracts import Detector, FrameInfo, Provider
 from core.equipment import detect_yolo, get_detector, synthetic as S
 from core.equipment.detect_yolo import YoloDetector, enhance_low_light, is_dark, load_class_map
+
+
+@pytest.fixture(autouse=True)
+def _no_refine(monkeypatch):
+    """Здесь проверяется только сеть YOLO; уточнение подтипов (SigLIP) — в test_equipment_refine.py.
+    Без этого на машине с transformers тест грузил бы настоящую модель."""
+    monkeypatch.setenv("EQUIPMENT_REFINE", "0")
 
 
 class FakeModel:
@@ -175,9 +183,10 @@ def test_supported_classes_without_loading_model(tmp_path):
     weights.write_bytes(b"x")
     cj = classes_file(tmp_path, {"names": {"0": "Excavator", "1": "Worker", "2": "Tipper"}})
     assert YoloDetector(weights=weights, classes_json=cj).supported_classes == ["excavator", "dump_truck"]
-    # без своих весов — всё, что знает словарь YOLO-World
+    # без своих весов — всё, что знает словарь YOLO-World (в другом каталоге: рядом с
+    # отсутствующим файлом наши веса нашлись бы и были бы взяты вместо него)
     from core import taxonomy
-    assert YoloDetector(weights=tmp_path / "none.pt").supported_classes == list(taxonomy.equipment())
+    assert YoloDetector(weights=tmp_path / "empty" / "none.pt").supported_classes == list(taxonomy.equipment())
 
 
 def test_world_vocabulary_maps_back_to_keys():

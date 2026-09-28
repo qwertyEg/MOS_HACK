@@ -42,6 +42,8 @@ from .tracker import CameraTracker, TrackStep
 
 log = logging.getLogger(__name__)
 
+_RESTORED = "__restored__"      # «мнение» о зоне отстоя, поднятое из БД после рестарта
+
 
 @dataclass
 class EquipmentUpdate:
@@ -73,7 +75,9 @@ class _Unit:
     hist: np.ndarray | None = None
     history: deque = field(default_factory=lambda: deque(maxlen=500))   # (время, камера, site_xy)
     credited: hours_mod.IntervalSet = field(default_factory=hours_mod.IntervalSet)
-    in_parking: bool = False
+    # Камера → стоит ли единица в зоне отстоя по её мнению. Только камеры с
+    # размеченными зонами: камера без зон не должна «выпускать» машину со стоянки.
+    parking: dict[str, bool] = field(default_factory=dict)
 
 
 class EquipmentEngine:
@@ -108,6 +112,11 @@ class EquipmentEngine:
                     u.votes.append((st.cls, 1.0))
                 if not st.label:
                     st.label = _label(st.cls, u.ordinal)
+                # PARKED раньше срока парковки — значит, стояла в зоне отстоя; зоны в
+                # UnitState нет, поэтому помним это до первого кадра камеры с зонами.
+                still = st.last_seen - (st.last_moved or st.first_seen)
+                if st.status == UnitStatus.PARKED and still < dt.timedelta(hours=self.cfg.parked_after_h):
+                    u.parking[_RESTORED] = True
                 self._units[st.unit_id] = u
                 if st.plate:
                     self._plates[st.plate] = st.unit_id
@@ -124,7 +133,7 @@ class EquipmentEngine:
 
     def units(self) -> list[UnitState]:
         with self._lock:
-            return [_snapshot(u.state) for _, u in sorted(self._units.items())]
+            return self._snapshot_all()
 
     def process(self, frame: FrameInfo, image_bgr: np.ndarray | None, detections: list[Detection],
                 geometry: CameraGeometry | None, zones: list[Zone],
@@ -153,16 +162,24 @@ class EquipmentEngine:
         calib_size = geometry.image_size if geometry is not None else None
         cam_zones = [z for z in zones if z.camera_id is not None and str(z.camera_id) == cam]
         site_zones = [z for z in zones if z.camera_id is None]
-        zone_kind: dict[int, str] = {}
+        # Мнение о зоне отстоя: None — у камеры нет зон, судить не может.
+        parking: dict[int, bool | None] = {}
         for k, s in enumerate(steps):
             d = s.detection
             xy = fusion.project(H, d.foot, calib_size, (width, height))
             d.site_xy = (round(xy[0], 2), round(xy[1], 2)) if xy else None
             d.zone_id, kind = _zone_for(d, cam_zones, site_zones)
-            zone_kind[k] = kind
-            plate = fusion.normalize_plate(d.extra.get("plate"))
-            if plate:
-                d.extra["plate"] = plate
+            has_opinion = bool(cam_zones) or (bool(site_zones) and d.site_xy is not None)
+            parking[k] = (kind == "parking") if has_opinion else None
+            if "plate" in d.extra:
+                # Номер — ключ безусловной склейки: нераспознанный («нет», «н/д»)
+                # номером не считаем, сырой текст оставляем для отладки.
+                raw = d.extra.pop("plate")
+                plate = fusion.normalize_plate(raw)
+                if plate:
+                    d.extra["plate"] = plate
+                elif raw:
+                    d.extra["plate_raw"] = str(raw)
         if H is None and steps and not out_of_order:
             notes.append("камера не откалибрована: её техника не склеивается с другими камерами")
 
@@ -178,12 +195,12 @@ class EquipmentEngine:
         intervals: list[ActivityInterval] = []
         for k, s in enumerate(steps):
             u = self._units[s.track.unit_id]
-            self._observe(u, s, cam, t, zone_kind[k])
+            self._observe(u, s, cam, t, parking[k])
             intervals += self._credit(u, s, frame, plan)
 
         now = max(self._cam_last.values())
         for u in self._units.values():
-            u.state.status = compute_status(u.state, now, self._cam_last, cfg, u.in_parking)
+            u.state.status = compute_status(u.state, now, self._cam_last, cfg, any(u.parking.values()))
 
         out = []
         for s in steps:
@@ -208,7 +225,12 @@ class EquipmentEngine:
         for s in steps:                                  # след прошлых склеек
             s.track.unit_id = self._resolve(s.track.unit_id)
 
-        mine = {tr.unit_id for tr in self._cams[cam].tracks.values() if tr.unit_id}
+        # Единицы, которые эта камера видит сейчас (в окне склейки). Трек, который
+        # камера давно не видит, живёт до max_gap, но рамки на этом кадре не даёт —
+        # иначе его единица навсегда выпадала бы из склейки с этой камерой.
+        window = dt.timedelta(minutes=cfg.merge_window_min)
+        mine = {tr.unit_id for tr in self._cams[cam].tracks.values()
+                if tr.unit_id and abs(tr.last_seen - t) <= window}
         obs: list[fusion.Observation] = []
         for k, s in enumerate(steps):
             obs.append(fusion.Observation(frozenset({cam}), t, s.track.label or s.detection.cls,
@@ -237,6 +259,8 @@ class EquipmentEngine:
                 (obs[i] for i in group_of[k] if isinstance(obs[i].key, str)),
                 key=lambda o: _dist(o.site_xy, d.site_xy))]
             candidates = [c for c in candidates if c in self._units and c != tr.unit_id]
+            if not candidates or (tr.coloc and tr.coloc[0] != candidates[0]):
+                tr.coloc = None                          # серия «в одной точке» прервалась
             plate = d.extra.get("plate")
             plate_uid = self._resolve(self._plates.get(plate)) if plate else None
 
@@ -247,6 +271,22 @@ class EquipmentEngine:
                               or self._revive(cls, cam, d.site_xy, t) or self._new_unit(cls, t))
             elif candidates and self._young_single(tr.unit_id, t):
                 self._switch(tr, candidates[0], t, merged)              # дубль с границы зон камер
+            elif (candidates and candidates[0] not in taken and self._young_single(candidates[0], t)
+                  and self._disjoint(tr.unit_id, candidates[0], t)):
+                # Обратный случай: дубль родился в ДРУГОЙ камере минуту назад (она
+                # снимала первой и не нашла нашу единицу в окне склейки), а наш
+                # трек старый. Склеиваем дубль в нашу единицу.
+                merged[candidates[0]] = tr.unit_id
+                self._merge(candidates[0], tr.unit_id)
+            elif candidates and self._colocated(tr, candidates[0], t):
+                # Две давние единицы разных камер устойчиво стоят в одной точке
+                # плана (камеру откалибровали позже, треки перепутались на
+                # пересечении) — это одна машина. Оставляем старшую.
+                keep, drop = sorted((tr.unit_id, candidates[0]),
+                                    key=lambda u: (self._units[u].state.first_seen, u))
+                merged[drop] = keep
+                self._merge(drop, keep)
+                tr.unit_id = keep
             elif self._drifted(tr, d, t, cam):
                 log.info("трек %s отделён от единицы %s: разошлись на плане", tr.track_id, tr.unit_id)
                 tr.unit_id = self._revive(cls, cam, d.site_xy, t, exclude=tr.unit_id) or self._new_unit(cls, t)
@@ -291,6 +331,29 @@ class EquipmentEngine:
             return False
         owners = sum(1 for tk in self._cams.values() for tr in tk.tracks.values() if tr.unit_id == uid)
         return owners <= 1
+
+    def _owners(self, uid: str, t: dt.datetime) -> set[str]:
+        """Камеры, чьи треки вели эту единицу в окне склейки вокруг t. Трек, который
+        камера давно не видит (он живёт до max_gap), двух рамок одного кадра не даёт."""
+        window = dt.timedelta(minutes=self.cfg.merge_window_min)
+        return {tk.camera_id for tk in self._cams.values() for tr in tk.tracks.values()
+                if tr.unit_id == uid and abs(tr.last_seen - t) <= window}
+
+    def _disjoint(self, a: str, b: str, t: dt.datetime) -> bool:
+        """Единицы ведут разные камеры: склейка не поставит две рамки одной камеры в одну машину."""
+        return not (self._owners(a, t) & self._owners(b, t))
+
+    def _colocated(self, tr, cand: str, t: dt.datetime) -> bool:
+        """Трек и чужая единица ближе радиуса склейки `merge_confirm` кадров подряд (и камеры разные)."""
+        if not self._disjoint(tr.unit_id, cand, t):
+            tr.coloc = None
+            return False
+        n = tr.coloc[1] + 1 if tr.coloc and tr.coloc[0] == cand else 1
+        tr.coloc = (cand, n)
+        if n >= self.cfg.merge_confirm:
+            tr.coloc = None
+            return True
+        return False
 
     def _drifted(self, tr, d: Detection, t: dt.datetime, cam: str) -> bool:
         """Трек устойчиво расходится с остальными камерами своей единицы — ошибочная склейка."""
@@ -357,11 +420,16 @@ class EquipmentEngine:
         if a.state.last_moved and (b.state.last_moved is None or a.state.last_moved > b.state.last_moved):
             b.state.last_moved = a.state.last_moved
         b.state.cameras |= a.state.cameras
+        # Часы дубля переносим без пересечения с уже засчитанным у b (обе камеры
+        # видели одну и ту же работу); часы дубля до рестарта движка — как есть.
+        own = sum((e - s).total_seconds() / 3600 for s, e in a.credited)
+        b.state.worked_hours += max(0.0, a.state.worked_hours - own)
         for s, e in a.credited:
-            if s.year > 1:   # нижняя граница после рестарта — не интервал работы
-                b.state.worked_hours += sum((pe - ps).total_seconds() / 3600 for ps, pe in b.credited.add(s, e))
+            b.state.worked_hours += sum((pe - ps).total_seconds() / 3600 for ps, pe in b.credited.add(s, e))
         b.votes.extend(a.votes)
         b.history.extend(a.history)
+        for cam, flag in a.parking.items():
+            b.parking.setdefault(cam, flag)
         self._merged[src] = dst
         for tk in self._cams.values():
             for tr in tk.tracks.values():
@@ -375,13 +443,14 @@ class EquipmentEngine:
             uid = self._merged[uid]
         return uid
 
-    def _observe(self, u: _Unit, s: TrackStep, cam: str, t: dt.datetime, zone_kind: str | None) -> None:
+    def _observe(self, u: _Unit, s: TrackStep, cam: str, t: dt.datetime, in_parking: bool | None) -> None:
         st, d = u.state, s.detection
         st.last_seen = max(st.last_seen, t)
         st.first_seen = min(st.first_seen, t)
         st.cameras.add(cam)
-        if d.moved_since_prev:
-            st.last_moved = t if st.last_moved is None else max(st.last_moved, t)
+        # last_moved здесь не трогаем: его ставит _credit, когда работа
+        # подтверждена серией интервалов, — чтобы статус ACTIVE и полоска
+        # моточасов не противоречили друг другу.
         u.votes.append((d.cls, d.conf))
         for alt_cls, alt_conf in d.extra.get("alt", []):
             u.votes.append((alt_cls, 0.5 * float(alt_conf)))
@@ -395,7 +464,9 @@ class EquipmentEngine:
         if plate and not st.plate:
             st.plate = plate
             self._plates[plate] = st.unit_id
-        u.in_parking = zone_kind == "parking"
+        if in_parking is not None:
+            u.parking.pop(_RESTORED, None)
+            u.parking[cam] = in_parking
         self._relabel(u)
 
     def _relabel(self, u: _Unit) -> None:
@@ -428,10 +499,11 @@ class EquipmentEngine:
                            [f for f in (s.prev_frame_id, frame.frame_id) if f is not None]))
         if tr.move_streak < cfg.confirm_moves:
             return []
+        t = frame.captured_at
+        u.state.last_moved = t if u.state.last_moved is None else max(u.state.last_moved, t)
         out = []
-        cap = dt.timedelta(minutes=cfg.max_credit_gap_min)
         for start, end, fids in tr.pending:
-            for ps, pe in u.credited.add(max(start, end - cap), end):
+            for ps, pe in u.credited.add(*hours_mod.credit_window(start, end, cfg.max_credit_gap_min)):
                 h = (pe - ps).total_seconds() / 3600
                 day = hours_mod.local_date(ps + (pe - ps) / 2, cfg.timezone)
                 out.append(ActivityInterval(unit_id=u.state.unit_id, cls=u.state.cls, start=ps, end=pe,
@@ -470,10 +542,14 @@ def _dist(a, b) -> float:
 
 def _zone_for(d: Detection, cam_zones: list[Zone], site_zones: list[Zone]) -> tuple[int | None, str | None]:
     """Зона по точке контакта с землёй; при вложенных зонах — самая маленькая (самая конкретная).
-    Зоны без камеры заданы на плане площадки (метры) — для них берём site_xy."""
+
+    Зоны камеры (пиксели кадра) важнее зон плана площадки (метры, для них
+    берём site_xy): их рисовали прямо на этом ракурсе, и площади в px² и м²
+    между собой не сравнимы.
+    """
     hits = [z for z in cam_zones if _inside(d.foot, z.polygon)]
-    if d.site_xy is not None:
-        hits += [z for z in site_zones if _inside(d.site_xy, z.polygon)]
+    if not hits and d.site_xy is not None:
+        hits = [z for z in site_zones if _inside(d.site_xy, z.polygon)]
     if not hits:
         return None, None
     z = min(hits, key=lambda z: abs(_area(z.polygon)))

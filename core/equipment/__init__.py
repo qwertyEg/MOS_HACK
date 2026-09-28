@@ -8,6 +8,8 @@ PARKED / DEPARTED и списывает моточасы из плановых (
 
 Точки входа для веб-слоя (docs/ARCHITECTURE.md §5):
     get_detector("yolo" | "glm" | "local_vlm", **kw) → Detector
+        (у детектора есть supported_classes — ключи словаря, которые он умеет;
+        YOLO уточняет подтип грузовиков по кропу SigLIP, см. refine.py)
     EquipmentEngine(config).process(frame, image, detections, geometry, zones, plan) → EquipmentUpdate
     hours.planned_hours(...), hours.balances(...)
     fusion.homography_from_points(image_pts, site_pts)

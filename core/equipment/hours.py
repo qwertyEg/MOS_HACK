@@ -54,12 +54,16 @@ def local_date(t: dt.datetime, tz: str | dt.tzinfo = DEFAULT_TZ) -> dt.date:
     return t.astimezone(zone).date()
 
 
+def credit_window(start: dt.datetime, end: dt.datetime, max_gap_min: float = 45.0) -> tuple[dt.datetime, dt.datetime]:
+    """Какой отрезок засчитать за интервал между кадрами с движением: последние
+    не более max_gap_min минут перед кадром, на котором движение увидели."""
+    return max(start, end - dt.timedelta(minutes=max_gap_min)), end
+
+
 def credit_hours(start: dt.datetime, end: dt.datetime, max_gap_min: float = 45.0) -> float:
     """Сколько часов засчитать за интервал между кадрами, на котором машина двигалась."""
-    seconds = (end - start).total_seconds()
-    if seconds <= 0:
-        return 0.0
-    return min(seconds, max_gap_min * 60.0) / 3600.0
+    s, e = credit_window(start, end, max_gap_min)
+    return max(0.0, (e - s).total_seconds()) / 3600.0
 
 
 def workdays_in(start: dt.date, end: dt.date, workdays: Iterable[int] = (0, 1, 2, 3, 4, 5)) -> int:
@@ -168,11 +172,11 @@ def balances(plan: list[PlanItem], intervals: list[ActivityInterval], *,
 
     worked: dict[tuple[int | None, str], float] = defaultdict(float)
     last: dict[tuple[int | None, str], dt.datetime] = {}
-    for iv in intervals:
+    for iv, h in _without_overlaps(intervals):
         mid = iv.start + (iv.end - iv.start) / 2
         stage = stage_for(plan, iv.cls, local_date(mid, tz)) if plan else iv.stage_id
         key = (stage, iv.cls)
-        worked[key] += iv.hours
+        worked[key] += h
         if key not in last or iv.end > last[key]:
             last[key] = iv.end
 
@@ -182,6 +186,27 @@ def balances(plan: list[PlanItem], intervals: list[ActivityInterval], *,
     return [HoursBalance(stage_id=k[0], cls=k[1], planned_hours=round(planned.get(k, 0.0), 2),
                          worked_hours=worked.get(k, 0.0), last_worked_at=last.get(k))
             for k in keys]
+
+
+def _without_overlaps(intervals: list[ActivityInterval]):
+    """(интервал, часы без перекрытия с другими интервалами той же единицы).
+
+    Движок сам не пишет перекрывающихся интервалов, но в журнале они могут
+    появиться: склейка дубля (веб-слой переписывает unit_id старых строк на
+    новый), повторная обработка кадров. Полоска не должна считать одно и то
+    же время дважды.
+    """
+    by_unit: dict[str, list[ActivityInterval]] = defaultdict(list)
+    for iv in intervals:
+        by_unit[iv.unit_id].append(iv)
+    for ivs in by_unit.values():
+        covered: dt.datetime | None = None
+        for iv in sorted(ivs, key=lambda i: (i.start, i.end)):
+            span = (iv.end - iv.start).total_seconds()
+            start = iv.start if covered is None else max(iv.start, covered)
+            fresh = max(0.0, (iv.end - start).total_seconds())
+            yield iv, (iv.hours * fresh / span if span > 0 else 0.0)
+            covered = iv.end if covered is None else max(covered, iv.end)
 
 
 # --------------------------------------------------------------------------
@@ -201,18 +226,19 @@ class IntervalSet:
 
     def __init__(self, floor: dt.datetime | None = None):
         self._iv: list[tuple[dt.datetime, dt.datetime]] = []
-        if floor is not None:
-            # После рестарта: всё до floor уже засчитано в прошлой жизни движка.
-            # Нижняя граница — в UTC: datetime.min со смещением +3 ч при
-            # сравнении переполняется.
-            lo = dt.datetime.min.replace(tzinfo=dt.timezone.utc if floor.tzinfo else None)
-            self._iv.append((lo, floor))
+        # После рестарта всё до floor уже засчитано в прошлой жизни движка.
+        # Храним отдельно, а не отрезком (−∞, floor]: иначе к нему прилипали бы
+        # новые настоящие интервалы и терялись при переносе (склейка единиц).
+        self.floor = floor
 
     def __iter__(self):
+        """Засчитанные этим движком отрезки (без границы рестарта)."""
         return iter(list(self._iv))
 
     def add(self, start: dt.datetime, end: dt.datetime) -> list[tuple[dt.datetime, dt.datetime]]:
         """Добавить отрезок; вернуть его куски, которых раньше не было."""
+        if self.floor is not None:
+            start = max(start, self.floor)
         if end <= start:
             return []
         fresh, cur = [], start

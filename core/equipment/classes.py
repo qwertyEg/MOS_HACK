@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from core import taxonomy
 
@@ -94,6 +95,7 @@ def canonical_class(name: str | None, extra: dict[str, str | None] | None = None
     return None
 
 
+@lru_cache(maxsize=1)
 def _ru_names() -> dict[str, str]:
     out = {_norm(k): v for k, v in taxonomy.RU_ALIASES.items()}
     for key, e in taxonomy.equipment().items():
