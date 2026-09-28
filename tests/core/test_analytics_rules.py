@@ -8,7 +8,7 @@ from core.analytics import rules
 from core.analytics import scenarios as sc
 from core.analytics.context import MSK
 from core.contracts import (
-    ActivityInterval, DeviationType as DT, HoursBalance, Severity, UnitStatus,
+    Activity, ActivityInterval, DeviationType as DT, HoursBalance, Severity, UnitStatus,
 )
 
 NOW = dt.datetime(2026, 9, 28, 15, 0, tzinfo=MSK)
@@ -318,6 +318,17 @@ def test_idle_message_shows_time_bar_and_negative_cases():
     ctx.units[0].last_moved = fresh
     ctx.intervals[0] = ActivityInterval("C1", "tower_crane", fresh - dt.timedelta(hours=1), fresh, 1.0, 5, [1])
     ctx.balances[0] = HoursBalance(5, "tower_crane", 1500.0, 401.0, fresh)
+    assert not of_type(rules.evaluate(ctx), DT.EQUIPMENT_IDLE)
+
+
+def test_idle_needs_frames_where_standing_was_actually_seen():
+    """Камера снимает раз в сутки: активность ни на одном кадре не оценена (UNKNOWN) — «простой
+    N ч» был бы выдумкой: работы просто не видно. Отклонения нет."""
+    ctx = case_idle()
+    ctx.recent = [(f, [dataclasses.replace(d, activity=Activity.UNKNOWN, moved_since_prev=False) for d in dets])
+                  for f, dets in ctx.recent]
+    ctx = sc.context(NOW, plan_items=ctx.plan, tl=ctx.timeline, units=ctx.units, recent=ctx.recent,
+                     intervals=ctx.intervals, balances=ctx.balances)
     assert not of_type(rules.evaluate(ctx), DT.EQUIPMENT_IDLE)
 
 

@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from core.analytics import fmt
 from core.analytics.context import AnalyticsContext, Obs, count_units
 from core.contracts import (
-    DeviationRecord, DeviationType as DT, Severity, StageStatus, UnitStatus,
+    Activity, DeviationRecord, DeviationType as DT, Severity, StageStatus, UnitStatus,
 )
 from core.plan import norms
 
@@ -457,7 +457,16 @@ def equipment_idle(ctx: AnalyticsContext) -> list[DeviationRecord]:
             # Простой отсчитываем от последней работы, но не раньше начала этапа и не раньше,
             # чем техника появилась на площадке: стоять на площадке до своего появления она не могла.
             ref = max(t for t in (last_worked, stage_start, min(u.first_seen for u in units)) if t)
-            idle_h = ctx.working_hours(ref, end)
+            unit_ids = [u.unit_id for u in units]
+            obs = [o for o in ctx.observations if o.unit in set(unit_ids)]
+            # Простой — то, что ВИДЕЛИ: кадры, сравненные с прошлым без разрыва (активность
+            # оценена). У камеры, снимающей раз в сутки, активность не оценивается вовсе, и
+            # «стоит 3909 ч» (архив Канберры) значило бы «работы не видно», а не простой.
+            judged = [o.t for o in obs if o.det.activity in (Activity.IDLE, Activity.WORKING)]
+            if not judged:
+                continue
+            seen_until = min(end, max(judged))
+            idle_h = ctx.working_hours(ref, seen_until) if seen_until > ref else 0.0
             if idle_h + 1e-6 < cfg.idle_alert_h:
                 continue
             sev = Severity.CRITICAL if idle_h >= cfg.idle_critical_h else Severity.WARNING
@@ -467,8 +476,6 @@ def equipment_idle(ctx: AnalyticsContext) -> list[DeviationRecord]:
                    if planned > 0 else "плановых моточасов по этому типу нет")
             since = (f"последняя работа — {fmt.moment(ctx.local(last_worked))}" if last_worked
                      else "работы с момента появления на площадке не было")
-            unit_ids = [u.unit_id for u in units]
-            obs = [o for o in ctx.observations if o.unit in set(unit_ids)]
             labels = ", ".join(ctx.unit_label(u.unit_id, u.cls) for u in units[:4])
             out.append(DeviationRecord(
                 key=f"equipment_idle:{s}:{t}:{_stamp(ref)}",
@@ -479,7 +486,7 @@ def equipment_idle(ctx: AnalyticsContext) -> list[DeviationRecord]:
                          f"По плану ожидается: {_plan_text(ctx, s)} — {fmt.eq(t)} должен работать. "
                          "Что проверить: поломка, нет фронта работ или материалов, простой оплачивается подрядчику."),
                 stage_id=s, camera_id=_main_camera(obs), frame_ids=_spread([o.frame.frame_id for o in obs][-9:], 3),
-                unit_ids=unit_ids, started_at=ref, last_seen_at=end,
+                unit_ids=unit_ids, started_at=ref, last_seen_at=seen_until,
                 data={"cls": t, "idle_h": round(idle_h, 2), "planned_hours": planned, "worked_hours": done},
             ))
     return out
