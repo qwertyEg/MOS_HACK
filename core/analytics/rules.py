@@ -718,14 +718,22 @@ def schedule(ctx: AnalyticsContext) -> list[DeviationRecord]:
             # пройденные до начала плана этапы (план начинается с котлована) — не аномалия
             if st.status == StageStatus.DONE and s < first_planned:
                 continue
+            evidence = list(dict.fromkeys(st.evidence_frame_ids[:1] + st.evidence_frame_ids[-1:]))
+            # «Пройден» без единого кадра с признаками — этап закрыт по хронологии: фронт
+            # перешагнул его (на участке под частный дом после расчистки сразу котлован,
+            # шпунта нет). Это не работа вне плана, а пропущенный планом этап — молчим.
+            if st.status == StageStatus.DONE and not evidence and not st.manual:
+                continue
+            going = st.status == StageStatus.ACTIVE
             out.append(DeviationRecord(
                 key=f"stage_out_of_plan:{s}", type=DT.STAGE_OUT_OF_PLAN, severity=Severity.INFO,
-                title=f"Этап {fmt.stage(s)} идёт, но его нет в плане",
-                message=(f"Видели: этап {fmt.stage(s)} {'идёт' if st.status == StageStatus.ACTIVE else 'завершён'}"
+                title=f"Этап {fmt.stage(s)} {'идёт' if going else 'пройден'}, но его нет в плане",
+                message=(f"Видели: этап {fmt.stage(s)} {'идёт' if going else 'завершён'}"
                          f"{' с ' + fmt.date(st.actual_start) if st.actual_start else ''}. "
                          "По плану ожидается: этап не запланирован. "
                          "Что проверить: добавьте этап в план с датами или, если распознано ошибочно, отметьте вручную."),
-                stage_id=s, frame_ids=list(dict.fromkeys(st.evidence_frame_ids[:1] + st.evidence_frame_ids[-1:])),
+                # без кадров с признаками этапа — последние годные снимки: отклонение без снимка не объяснить
+                stage_id=s, frame_ids=evidence or last_frames,
                 data={"status": st.status.value},
             ))
     return out

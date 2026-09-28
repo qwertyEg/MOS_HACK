@@ -397,6 +397,24 @@ def test_schedule_negatives():
     assert not of_type(rules.evaluate(before), DT.STAGE_OUT_OF_PLAN)
 
 
+def test_out_of_plan_skips_stage_closed_by_chronology_and_always_has_a_shot():
+    """План 1 и 3 (частный дом: шпунта нет). Фронт перешагнул этап 2 — «пройден» без кадров
+    с его признаками: это не работа вне плана. Этап вне плана, который идёт, но кадров-доказательств
+    у него нет, — показываем последние снимки: отклонение без снимка не объяснить."""
+    recent = series(1, NOW - dt.timedelta(hours=2), 6)
+    skipped = sc.context(NOW, plan_items=sc.plan({1: (TODAY - 9 * DAY, TODAY - 5 * DAY),
+                                                  3: (TODAY - 2 * DAY, TODAY + 9 * DAY)}),
+                         tl=sc.timeline({1: ("done", 1.0), 2: ("done", 1.0), 3: ("active", 0.5, TODAY - DAY, None, [7])},
+                                        front=3, daily_front=[(TODAY - DAY, 3), (TODAY, 3)]), recent=recent)
+    assert not of_type(rules.evaluate(skipped), DT.STAGE_OUT_OF_PLAN)
+    going = sc.context(NOW, plan_items=sc.plan({8: (TODAY - 5 * DAY, TODAY + 5 * DAY)}),
+                       tl=sc.timeline({1: ("active", 0.8, TODAY - DAY)}, front=1,
+                                      daily_front=[(TODAY - DAY, 1), (TODAY, 1)]), recent=recent)
+    (oop,) = of_type(rules.evaluate(going), DT.STAGE_OUT_OF_PLAN)
+    assert oop.stage_id == 1 and "идёт" in oop.title and oop.frame_ids
+    assert_explained(oop)
+
+
 def test_late_start_escalates():
     tl = sc.timeline({3: ("active", 0.9, TODAY - 60 * DAY)}, front=3, daily_front=[(TODAY, 3)])
     ctx = sc.context(NOW, plan_items=sc.plan({4: (TODAY - 20 * DAY, TODAY + 60 * DAY)}), tl=tl)
