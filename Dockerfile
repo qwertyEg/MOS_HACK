@@ -11,9 +11,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     HF_HOME=/app/models/hf
 
-# libgl/libglib — для opencv (ultralytics тянет не-headless сборку), curl — для healthcheck
+# libgl/libglib — для opencv (ultralytics тянет не-headless сборку), curl — для healthcheck;
+# fonts-dejavu-core — кириллица в подписях рамок annotated.jpg (без шрифта — транслит)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libgl1 libglib2.0-0 curl \
+        libgl1 libglib2.0-0 curl fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

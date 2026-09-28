@@ -9,6 +9,6 @@
 torch>=2.4,<3
 torchvision>=0.19
 ultralytics>=8.3,<9
-transformers>=4.45,<5
+transformers>=4.49,<6        # SigLIP2 — с 4.49; 5.x поддержан (get_*_features возвращает объект)
 sentencepiece>=0.2         # токенайзер SigLIP
 safetensors>=0.4

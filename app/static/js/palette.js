@@ -3,7 +3,8 @@
  * core/equipment/draw.py (там — BGR для OpenCV), чтобы рамки на кадре с
  * сервера (/api/frames/{id}/annotated.jpg) и рамки SVG-оверлея в браузере
  * совпадали по цвету. Ключи — из reference/checklist.json (21 класс);
- * tests/ui/test_palette.py сверяет их со справочником.
+ * tests/ui/test_ui_static.py сверяет их со справочником, а
+ * tests/core/test_equipment_draw.py — с таблицей draw.py.
  *
  * Восемь обязательных по ТЗ классов занимают восемь слотов проверенной
  * категориальной палитры (порядок слотов — механизм различимости при

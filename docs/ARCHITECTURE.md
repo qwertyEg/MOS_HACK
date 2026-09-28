@@ -60,15 +60,16 @@ app/                      веб-сервис FastAPI (основа — карк
   services/               оркестрация: очередь обработки, конвейер кадра, настройки провайдеров, адаптеры БД ↔ core
   routers/                pages.py (HTML-оболочки), api_*.py (JSON), ingest.py (/api/ingest для камер)
   templates/ static/      UI (Jinja-оболочки + Alpine.js + fetch к JSON API; ECharts; Tailwind)
-models/                   веса (в git не кладём; tools/fetch_models.py скачивает)
+models/                   веса (в git не кладём; откуда взять — models/README.md)
 reference/                checklist.json, work_map.csv, works_catalog.xlsx, work_types*.csv (Денис), legacy_dev/
 simcam/                   имитатор камеры (Денис)
 tools/                    сбор датасета, обучение, оценка, импорт папки/видео, засев демо
 tests/core/ tests/app/    pytest; без сети и GPU (внешние вызовы — фейки/кассеты)
-docs/                     ARCHITECTURE.md, methodology.md, limitations.md, camera_guidelines.md
-api-solution/             НАСЛЕДИЕ: исходники Никиты до переноса в core/. Удаляется интегратором после порта.
-app/pipeline/             НАСЛЕДИЕ: конвейер Дениса. Переносится в core/stage и app/services, затем удаляется.
+docs/                     ARCHITECTURE.md, methodology.md, TZ_case07.md
 ```
+
+Наследие веток (`api-solution/` Никиты, `app/pipeline/` Дениса) перенесено в `core/` и `app/services/`
+и удалено интегратором; исходники — в истории git (слияния `23a646d`, `a6a758d`).
 
 Владение каталогами при параллельной работе (чужие каталоги не трогать):
 
