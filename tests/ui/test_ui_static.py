@@ -53,3 +53,16 @@ def test_page_templates_render(page):
 def test_css_built():
     css = (ROOT / "app/static/css/app.css").read_text(encoding="utf-8")
     assert len(css) > 20000 and "--bg" in css
+
+
+def test_alpine_expressions_are_not_bare_statements():
+    """Alpine вычисляет x-init/@событие как выражение: голый `try {…}` в нём — SyntaxError
+    («Unexpected token 'try'» на странице входа после правки «запоминать логин»)."""
+    bad = []
+    for path in (ROOT / "app/templates").rglob("*.html"):
+        html = path.read_text(encoding="utf-8")
+        for m in re.finditer(r'(?:x-init|x-effect|@[\w.:-]+|x-on:[\w.:-]+)="([^"]*)"', html):
+            expr = m.group(1)
+            if re.search(r"(^|;)\s*(try|for|while|switch)\b", expr):
+                bad.append(f"{path.name}: {expr[:80]}")
+    assert not bad, bad
