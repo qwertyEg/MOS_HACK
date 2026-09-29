@@ -44,6 +44,7 @@ DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
         "yes_thr": 0.8,               # пороги SigLIP-чек-листа (k = 35) — калибровка core/stage/checklist_clip.py
         "no_thr": 0.46,
         "unsure_review_ratio": 0.5,   # доля «не уверен» выше — кадр в needs_review
+        "equipment_weight": 1.0,      # вес техники модели А в определении этапа (core/stage/fusion.py); 0 — только чек-лист
     },
     "equipment": {},                  # заполняется из core.equipment.EquipmentConfig().to_dict()
     "analytics": {

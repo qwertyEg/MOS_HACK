@@ -95,15 +95,18 @@ document.addEventListener("alpine:init", () => {
        Подэтап и коды работ — из справочника /api/catalog. */
     get stage() {
       const st = this.result && this.result.stage;
-      if (!st || st.front == null) return null;
-      const id = st.front;
+      /* Этап — как на площадке: чек-лист модели Б вместе с техникой на снимке (stage.fused). */
+      const fu = st && st.fused && st.fused.front != null ? st.fused : null;
+      const id = fu ? fu.front : st && st.front;
+      if (id == null) return null;
       const cat = ((Alpine.store("app").catalog || {}).stages || []).find((x) => x.id === id) || {};
       const subs = Object.entries(st.substages || {}).filter(([k, v]) => k.startsWith(id + ".") && v === "active").map(([k]) => k);
       const sub = (cat.substages || []).find((x) => x.id === subs[0]) || null;
       const works = (cat.works || []).filter((w) => w.code && (!sub || w.substage_id === sub.id)).slice(0, 3);
       const lk = st.stage_likelihood || {};
       return { id, name: st.name || cat.name, substage: sub, works, confidence: lk[id] ?? lk[String(id)] ?? null,
-        progress: (st.progress || {})[id] ?? (st.progress || {})[String(id)] ?? null, expected: cat.equipment_expected || [], forbidden: cat.equipment_forbidden || [] };
+        progress: (st.progress || {})[id] ?? (st.progress || {})[String(id)] ?? null, expected: cat.equipment_expected || [], forbidden: cat.equipment_forbidden || [],
+        basis: fu ? fu.text : "" };
     },
     /* Правило «этап → техника» на одном снимке: чего из ожидаемого нет, что запрещено. */
     get rules() {

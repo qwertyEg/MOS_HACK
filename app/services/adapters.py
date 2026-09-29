@@ -287,6 +287,59 @@ def last_detections_by_camera(s: Session, site_id: int, preferred: str | None
     return out
 
 
+def _work_zones(s: Session, site_id: int) -> tuple[set[int], set[int]]:
+    """(id рабочих зон, камеры, на которых они размечены)."""
+    zones = s.execute(select(m.Zone.id, m.Zone.camera_id).where(m.Zone.site_id == site_id,
+                                                                m.Zone.kind == "work")).all()
+    return {zid for zid, _ in zones}, {cid for _, cid in zones if cid is not None}
+
+
+def work_zone_units(s: Session, site_id: int) -> set[str] | None:
+    """Единицы техники, которые большую часть кадров были в рабочей зоне (или на камере без разметки
+    зон), — uid. None — зон на площадке нет, фильтровать нечем. Башенный кран соседней очереди на
+    горизонте работает (стрела поворачивается), но этап этой площадки не выдаёт. Большинство, а не
+    «хоть раз»: рамка длинной стрелы иногда опускается точкой опоры в зону (замер «Сити-Зен», 8 оч.)."""
+    work_zones, zoned_cams = _work_zones(s, site_id)
+    if not zoned_cams:
+        return None
+    rows = s.execute(select(m.Detection.unit_id, m.Detection.zone_id, m.Frame.camera_id)
+                     .join(m.Frame, m.Frame.id == m.Detection.frame_id)
+                     .join(m.Camera, m.Camera.id == m.Frame.camera_id)
+                     .where(m.Camera.site_id == site_id, m.Detection.unit_id.is_not(None))).all()
+    votes: dict[int, list[int]] = defaultdict(lambda: [0, 0])
+    for uid, zid, cam in rows:
+        votes[uid][cam not in zoned_cams or zid in work_zones] += 1
+    ok = {uid for uid, (out_, in_) in votes.items() if in_ > out_}
+    return set(unit_uids(s, ok).values())
+
+
+def sightings(s: Session, site_id: int, preferred: str | None, min_conf: float = 0.5
+              ) -> list[tuple[int, dt.datetime, str, float, str]]:
+    """Рамки техники площадки → (кадр, время, тип, уверенность, активность): довод «этап ← техника»
+    (core.stage.fusion.Sighting). Только лёгкие колонки — у давно снимающей площадки рамок много.
+
+    Провайдер на кадре один (как в detections_by_frame). На камерах с рабочими зонами берём
+    только рамки внутри них: техника соседней стройки за забором этап не выдаёт.
+    """
+    work_zones, zoned_cams = _work_zones(s, site_id)
+    rows = s.execute(
+        select(m.Detection.id, m.Detection.frame_id, m.Frame.captured_at, m.Frame.camera_id, m.Detection.cls,
+               m.Detection.conf, m.Detection.activity, m.Detection.zone_id, m.Detection.provider)
+        .join(m.Frame, m.Frame.id == m.Detection.frame_id).join(m.Camera, m.Camera.id == m.Frame.camera_id)
+        .where(m.Camera.site_id == site_id, m.Detection.conf >= min_conf)).all()
+    by_frame: dict[int, dict[str, list]] = defaultdict(lambda: defaultdict(list))
+    for r in rows:
+        by_frame[r.frame_id][r.provider].append(r)
+    out = []
+    for fid, by_provider in by_frame.items():
+        use = preferred if preferred in by_provider else max(by_provider, key=lambda p: max(x.id for x in by_provider[p]))
+        for r in by_provider[use]:
+            if r.camera_id in zoned_cams and r.zone_id not in work_zones:
+                continue
+            out.append((fid, r.captured_at, r.cls, float(r.conf), r.activity or "unknown"))
+    return out
+
+
 # --------------------------------------------------------------------------
 # модель Б
 # --------------------------------------------------------------------------

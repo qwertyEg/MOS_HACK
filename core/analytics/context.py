@@ -60,6 +60,7 @@ class AnalyticsConfig:
     schedule_critical_days: float = 14.0
     pace_window_days: int = 28            # окно «свежего» темпа для прогноза
     min_pace_days: int = 7                # короче — прогноз не даём
+    stale_fact_days: float = 21.0         # этап по снимкам не обновлялся дольше — вердикт на дату последнего состояния
     # данные
     needs_review_warn: int = 5
     camera_silent_h: float = 2.0          # кадр раз в 20–30 мин: 2 ч тишины — 4–6 пропусков подряд

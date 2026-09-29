@@ -229,6 +229,7 @@ def overview(s: Session, site: Site) -> dict[str, Any]:
             "forecast_finish": rep.get("forecast_finish"),
             "explanation": rep.get("explanation") or [],
             "current_stage": current, "current_stage_name": taxonomy.stage_name(current) if current else None,
+            "stage_basis": rep.get("stage_basis") or {},   # почему этап такой: чек-лист + техника
             "needs_review": rep.get("needs_review") or [], "now": rep.get("now"),
             "computed_at": iso(site.report_at), "errors": rep.get("errors") or [],
         },

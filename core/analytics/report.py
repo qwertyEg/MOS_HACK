@@ -55,7 +55,8 @@ def build(ctx: AnalyticsContext, planfact: PlanFact | None = None) -> SiteReport
 
 
 def _verdict_phrase(ctx: AnalyticsContext, pf: PlanFact) -> str:
-    today = fmt.date(ctx.today)
+    as_of = getattr(pf, "fact_as_of", None)
+    today = fmt.date(as_of or ctx.today)
     exp, act = fmt.pct(pf.expected_progress), fmt.pct(pf.actual_progress)
     tol = int(ctx.cfg.schedule_tolerance_days)
     scope = (f" (считаются только этапы из плана: {', '.join(map(str, pf.planned_stages))})"
@@ -85,7 +86,13 @@ def _verdict_phrase(ctx: AnalyticsContext, pf: PlanFact) -> str:
         head = f"Опережение графика ≈ {fmt.days(lag)}"
     else:
         head = f"Стройка идёт по графику (отклонение {lag:+.0f} дн. в пределах допуска ±{tol} дн.)"
-    return f"{head}: по плану на {today} должно быть готово {exp}, по снимкам — {act}{scope}."
+    since = getattr(pf, "observed_since", None)
+    base = (f" Съёмка идёт с {fmt.date(since)}: готовность этапа, начатого раньше, по нескольким дням снимков "
+            "не измерить — за базу взят план на эту дату, вердикт — по тому, какой этап идёт." if since else "")
+    if as_of:
+        base += (f" Позже {today} годных для определения этапа снимков нет ({(ctx.today - as_of).days} дн.) — "
+                 "сравнение с планом на эту дату; проверьте камеры или отметьте этап вручную.")
+    return f"{head}: по плану на {today} должно быть готово {exp}, по снимкам — {act}{scope}.{base}"
 
 
 def _plan_phrase(ctx: AnalyticsContext) -> str | None:
@@ -120,7 +127,14 @@ def _fact_phrase(ctx: AnalyticsContext) -> str | None:
         parts.append(f"По снимкам текущий этап — {fmt.stage(cur)}{prog}{manual}")
     if done:
         parts.append(f"завершено этапов: {len(done)} из {len(taxonomy.stages())}")
-    return (", ".join(parts) + ".") if parts else None
+    if not parts:
+        return None
+    # Почему этап такой — чек-лист модели Б и техника модели А (ТЗ: «этап → техника»). Для ручной
+    # отметки основание модели не показываем: этап назначил человек.
+    basis = getattr(tl, "basis", None) or {}
+    st = tl.states.get(cur) if cur is not None else None
+    why = basis.get("text") if basis.get("stage") == cur and not (st and st.manual) else None
+    return ", ".join(parts) + "." + (f" {why}" if why else "")
 
 
 def _forecast_phrase(pf: PlanFact) -> str | None:

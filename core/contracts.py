@@ -291,6 +291,9 @@ class StageTimeline:
     daily_front: list[tuple[dt.date, int]]        # день → фронт после сглаживания
     needs_review: list[int | str] = field(default_factory=list)  # кадры с долей «не уверен» выше порога
     rejected_outliers: list[int | str] = field(default_factory=list)  # кадры, противоречащие хронологии
+    # Почему текущий этап такой: признаки чек-листа и техника модели А (core/stage/fusion.py).
+    # {"text": фраза для UI, "decided_by": checklist | equipment | both, "equipment": [...], "signs": [...]}
+    basis: dict[str, Any] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------

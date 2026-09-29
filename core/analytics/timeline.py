@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import math
 from dataclasses import dataclass, field
@@ -45,6 +46,10 @@ class PlanFact:
     planned_stages: list[int] = field(default_factory=list)
     stages: list[dict] = field(default_factory=list)
     forecast_note: str = ""
+    # Короткая съёмка: этап, начатый до первого кадра, взят по плану на эту дату (см. _baseline_states)
+    observed_since: dt.date | None = None
+    # Этап по снимкам давно не обновлялся: вердикт и прогноз — на эту дату (последнее известное состояние)
+    fact_as_of: dt.date | None = None
 
 
 def _spans(plan: list[PlanItem]) -> dict[int, tuple[dt.date, dt.date]]:
@@ -138,6 +143,32 @@ def _first_fact_day(tl: StageTimeline, ids) -> dt.date | None:
     return min(days) if days else None
 
 
+def _baseline_states(tl: StageTimeline, spans: dict[int, tuple[dt.date, dt.date]], today: dt.date,
+                     cfg: AnalyticsConfig) -> tuple[dict[int, StageState], dt.date | None]:
+    """Короткая съёмка (< min_pace_days): готовность этапа, начатого ДО первого кадра, — плановая
+    на дату первого кадра, а не по подэтапам за день-два снимков. → (состояния, дата начала съёмки).
+
+    Почему: за 1–2 дня внутри этапа прогресс не измерить. По признакам подэтапов выходит то 0 %
+    (уровень готовности не подтверждён вторым днём), то 70 % (виден экскаватор — «разработка
+    грунта» засчитана), и отставание становится артефактом — ровно число дней от планового
+    начала этапа до первого кадра («Сборный каркас»: 10,0 дн., «Две камеры»: 10,0 дн.). Нейтральная
+    база — «к началу съёмки этап шёл по плану»; отставание и опережение остаются видны по составу
+    этапов (идёт не тот этап, что по плану: расчистка вместо котлована) и по росту после первого кадра.
+    Длинная история и ручные отметки не трогаются.
+    """
+    first = min((d for d, _ in tl.daily_front), default=None)
+    if first is None or (today - first).days >= cfg.min_pace_days:
+        return tl.states, None
+    out, used = dict(tl.states), False
+    for s, st in tl.states.items():
+        if st.status != StageStatus.ACTIVE or st.actual_start is not None or st.manual or s not in spans:
+            continue
+        # этап ещё идёт — не «готов», даже если по плану уже должен был закончиться
+        out[s] = dataclasses.replace(st, progress=min(_frac(first, *spans[s]), 0.95))
+        used = True
+    return out, (first if used else None)
+
+
 def _count_active(active: set[dt.date], a: dt.date, b: dt.date) -> int:
     """Активных дней в (a, b]."""
     return sum(1 for d in active if a < d <= b)
@@ -154,7 +185,8 @@ def plan_vs_fact(plan: list[PlanItem], stage_timeline: StageTimeline, today: dt.
     """
     cfg = config if isinstance(config, AnalyticsConfig) else AnalyticsConfig.from_dict(config)
     spans = _spans(plan)
-    curve = _Curve(spans, stage_timeline.states, today)
+    states, observed_since = _baseline_states(stage_timeline, spans, today, cfg)
+    curve = _Curve(spans, states, today)
     actual = curve.actual(today)
     has_data = _has_data(stage_timeline)
     stages = _stage_rows(spans, stage_timeline, today)
@@ -178,6 +210,18 @@ def plan_vs_fact(plan: list[PlanItem], stage_timeline: StageTimeline, today: dt.
                       forecast_note="нет данных модели Б — прогноз невозможен")
         pf.series = _series(curve, stage_timeline, today, planned_finish, None)
         return pf
+
+    # Этап по снимкам давно не обновлялся (кадры закрыты сеткой, модель Б не отвечает, камера молчит):
+    # сравниваем с планом на дату последнего известного состояния, а не «ноль прогресса до сегодня» —
+    # иначе каждый день без годных снимков прибавляет день «отставания» без единого наблюдения.
+    # Готовый объект сравнивается по дате окончания — ему «последнее состояние» не нужно.
+    last_fact = max((d for d, _ in stage_timeline.daily_front), default=None)
+    fact_as_of = (last_fact if last_fact and actual < 1 - _EPS and (today - last_fact).days > cfg.stale_fact_days
+                  else None)
+    if fact_as_of is not None:
+        today = fact_as_of
+        curve = _Curve(spans, states, today)
+        actual, expected = curve.actual(today), curve.expected(today)
 
     actual_finish = None
     if actual >= 1 - _EPS:
@@ -204,7 +248,7 @@ def plan_vs_fact(plan: list[PlanItem], stage_timeline: StageTimeline, today: dt.
         planned_finish=planned_finish, actual_finish=actual_finish,
         delay_days=(forecast - planned_finish).days if forecast else None,
         pace_ratio=round(ratio, 2) if ratio else None, partial_plan=partial, planned_stages=sorted(spans),
-        stages=stages, forecast_note=note,
+        stages=stages, forecast_note=note, observed_since=observed_since, fact_as_of=fact_as_of,
     )
 
 

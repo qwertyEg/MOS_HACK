@@ -44,6 +44,12 @@
    < этапа до неё; «не начат» — фронт ниже этапа на всём отрезке).
 7. **needs_review** — кадры, где доля «не уверен» выше порога (0.5): много
    «затрудняюсь» → предупреждение «проверьте вручную».
+8. **Техника (модель А)** — второе слагаемое эмиссии дня (core/stage/fusion.py): какая техника
+   работает или стоит в эти сутки и что это значит по нормам «этап → техника» (каток —
+   благоустройство, копёр — сваи, башенный кран с бетоном — монолит). Вес `equipment_weight`
+   (0 — только чек-лист). Выбросы ищутся по хронологии одного чек-листа: иначе техника,
+   удержав путь, объявила бы выбросами все кадры модели Б и лишила её голоса. Этап без
+   ответов модели Б по одной технике не назначается. Почему этап такой — `StageTimeline.basis`.
 """
 from __future__ import annotations
 
@@ -56,7 +62,8 @@ import numpy as np
 
 from core import taxonomy
 from core.contracts import StageObservation, StageState, StageStatus, StageTimeline
-from core.stage import scoring
+from core.stage import fusion, scoring
+from core.stage.fusion import EquipmentDay, EquipmentEvidence, FusionConfig
 from core.stage.scoring import ScoringConfig, Votes
 
 
@@ -75,7 +82,9 @@ class SequenceConfig:
     outlier_ahead: int = 1              # опережает на столько, а путь не пришёл за lookahead — выброс
     outlier_lookahead_days: int = 14
     tz_offset_hours: float = 3.0        # границы суток — по Москве (UTC+3, без перехода на летнее)
+    equipment_weight: float = 1.0       # вес довода техники (модель А) в эмиссии; 0 — только чек-лист
     scoring: dict = field(default_factory=dict)
+    fusion: dict = field(default_factory=dict)   # тонкие параметры FusionConfig (вероятности норм, силы доводов)
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any] | None) -> "SequenceConfig":
@@ -208,10 +217,23 @@ def _allowed(days: list[dt.date], order: tuple[int, ...],
 # --------------------------------------------------------------------------
 
 
+def _equipment_days(equipment: EquipmentEvidence | Mapping[dt.date, EquipmentDay] | None,
+                    cfg: SequenceConfig, fcfg: FusionConfig) -> dict[dt.date, EquipmentDay]:
+    if equipment is None or fcfg.equipment_weight <= 0:
+        return {}
+    if isinstance(equipment, EquipmentEvidence):
+        return fusion.days(equipment, cfg.tz_offset_hours, fcfg)
+    return {d: v for d, v in dict(equipment).items() if isinstance(v, EquipmentDay)}
+
+
 def infer(observations: list[StageObservation], manual: dict[int, StageState] | None = None,
-          config: dict | None = None) -> StageTimeline:
+          config: dict | None = None,
+          equipment: EquipmentEvidence | Mapping[dt.date, EquipmentDay] | None = None) -> StageTimeline:
+    """equipment — техника площадки от модели А (журнал моточасов и рамки) или уже разложенная
+    по суткам; None — этап только по чек-листу, как до слияния моделей."""
     cfg = config if isinstance(config, SequenceConfig) else SequenceConfig.from_dict(config)
     scfg = ScoringConfig.from_dict(cfg.scoring)
+    fcfg = FusionConfig.from_dict({**cfg.fusion, "equipment_weight": cfg.equipment_weight})
     m = scoring.model()
     order = m.order
     n = len(order)
@@ -225,15 +247,22 @@ def infer(observations: list[StageObservation], manual: dict[int, StageState] | 
     frame_day = [local_day(o.captured_at, cfg.tz_offset_hours) for o in used]
     frame_votes = [scoring.answers_to_votes(o.result.answers) for o in used]
     frame_front = [scoring.evaluate_votes(v, scfg).front for v in frame_votes]
-    days = sorted(set(frame_day))
-    day_index = {d: i for i, d in enumerate(days)}
+    obs_days = sorted(set(frame_day))
 
-    if not days:
+    if not obs_days:
         return _timeline_without_observations(manual, needs_review)
+
+    # Сутки с техникой, но без ответов модели Б (ночь, дождь), тоже двигают путь — но только внутри
+    # отрезка наблюдений модели Б: за его пределами техника экстраполировала бы этап в одиночку.
+    eq_days = {d: v for d, v in _equipment_days(equipment, cfg, fcfg).items() if obs_days[0] <= d <= obs_days[-1]}
+    days = sorted(set(obs_days) | set(eq_days))
+    day_index = {d: i for i, d in enumerate(days)}
 
     allowed = _allowed(days, order, manual)
     log_trans = [np.zeros((n, n))] + [_log_transition(n, (days[t] - days[t - 1]).days, cfg.stage_days)
                                       for t in range(1, len(days))]
+    eq_em = np.array([fusion.emission(eq_days.get(d), order, fcfg) for d in days]) if eq_days \
+        else np.zeros((len(days), n))
 
     def day_votes(include: list[bool]) -> list[Votes]:
         out: list[Votes] = [{} for _ in days]
@@ -242,14 +271,15 @@ def infer(observations: list[StageObservation], manual: dict[int, StageState] | 
                 scoring.add_votes(out[day_index[frame_day[i]]], v)
         return out
 
-    def run(include: list[bool]) -> tuple[list[int], np.ndarray, list[Votes]]:
+    def run(include: list[bool], with_equipment: bool) -> tuple[list[int], np.ndarray, np.ndarray, list[Votes]]:
         dv = day_votes(include)
-        em = np.stack([_emission(v, order, cfg, scfg) for v in dv])
-        return _viterbi(em, allowed, log_trans), em, dv
+        em_b = np.stack([_emission(v, order, cfg, scfg) for v in dv])
+        em = em_b + eq_em if with_equipment else em_b
+        return _viterbi(em, allowed, log_trans), em, em_b, dv
 
-    # Первый проход — по всем кадрам; по нему ищем выбросы.
+    # Первый проход — по всем кадрам и только по чек-листу; по нему ищем выбросы.
     include = [True] * len(used)
-    path_i, _, _ = run(include)
+    path_i, _, _, _ = run(include, False)
     path = [order[i] for i in path_i]
     outliers: list[int] = []
     for i, ff in enumerate(frame_front):
@@ -267,11 +297,13 @@ def infer(observations: list[StageObservation], manual: dict[int, StageState] | 
     for i in outliers:
         include[i] = False
 
-    # Второй проход — без выбросов: окончательный путь.
-    path_i, em, dv = run(include)
-    if not em.any():
+    # Второй проход — без выбросов: окончательный путь по чек-листу и технике вместе.
+    # Путь одного чек-листа нужен объяснению: «техника решила» или «техника подтвердила».
+    path_bi, _, _, _ = run(include, False)
+    path_i, em, em_b, dv = run(include, True)
+    if not em_b.any():
         # Ни одного решённого ответа (всё «не уверен» или сбои): этап не определён,
-        # а не «подготовка территории» по равенству шансов.
+        # а не «подготовка территории» по равенству шансов. Одна техника этап не назначает.
         return _timeline_without_observations(manual, needs_review)
     path = [order[i] for i in path_i]
     marginal = _last_marginal(em, allowed, log_trans)
@@ -280,6 +312,9 @@ def infer(observations: list[StageObservation], manual: dict[int, StageState] | 
     progress, done_day = _progress(latched, days, path, order, cfg, scfg)
     states = _states(days, path, progress, done_day, marginal, order, used, frame_day, frame_front,
                      include, day_index)
+    _add_equipment_evidence(states, days, path, eq_days)
+    basis = _basis(days, path, [order[i] for i in path_bi], dv, eq_days, used, frame_day, frame_front,
+                   include, order, fcfg)
 
     for sid, st in manual.items():
         if sid in states:
@@ -299,7 +334,70 @@ def infer(observations: list[StageObservation], manual: dict[int, StageState] | 
         daily_front=list(zip(days, path)),
         needs_review=needs_review,
         rejected_outliers=[used[i].frame_id for i in outliers],
+        basis=basis,
     )
+
+
+def _add_equipment_evidence(states: dict[int, StageState], days: list[dt.date], path: list[int],
+                            eq_days: Mapping[dt.date, EquipmentDay]) -> None:
+    """Снимки-доказательства этапа — и кадры с его техникой: этап, который выдала техника
+    (благоустройство по катку), иначе остался бы без снимка, а отклонения требуют снимок."""
+    if not eq_days:
+        return
+    for s, st in states.items():
+        if st.status is StageStatus.NOT_STARTED or len(st.evidence_frame_ids) >= 5:
+            continue
+        extra: list = []
+        for d, f in zip(reversed(days), reversed(path)):
+            if f != s or d not in eq_days:
+                continue
+            day = eq_days[d]
+            for cls in sorted(day.frames, key=lambda k: -day.working_h.get(k, 0.0)):
+                if fusion.category(s, cls) != "expected":
+                    continue
+                extra.extend(x for x in day.frames[cls][:2] if x not in extra and x not in st.evidence_frame_ids)
+            if len(extra) >= 5:
+                break
+        st.evidence_frame_ids = (list(st.evidence_frame_ids) + extra)[:5]
+
+
+def _basis(days, path, path_b, dv, eq_days, used, frame_day, frame_front, include, order,
+           fcfg: FusionConfig) -> dict:
+    """Почему фронт такой: признаки чек-листа и техника последних дней на текущем этапе.
+
+    → {"stage", "text", "decided_by": checklist | equipment | both, "checklist_stage", "equipment_stages",
+       "equipment": [...], "signs": [...]}. Окно — последние `basis_days` суток на текущем этапе.
+    """
+    final = path[-1]
+    # Окно — последние дни на текущем этапе, где было что видеть (решённые кадры модели Б или
+    # техника): сетка перед объективом в последние недели не должна обнулять объяснение.
+    decided_days = {frame_day[i] for i in range(len(used)) if include[i] and frame_front[i] is not None}
+    on_stage = [i for i in range(len(days)) if path[i] == final]
+    informative = [i for i in on_stage if days[i] in decided_days or days[i] in eq_days]
+    window = (informative or on_stage)[-max(1, int(fcfg.basis_days)):]
+    # чек-лист: этап по хронологии одного чек-листа (None — ни на одном кадре чек-лист этап не выдал)
+    # и признаки текущего этапа, видимые в окне
+    checklist_stage = path_b[-1] if decided_days else None
+    votes: Votes = {}
+    for i in window:
+        scoring.add_votes(votes, dv[i])
+    m = scoring.model()
+    own = list(m.must[final]) + sorted(m.distinct[final] - set(m.must[final]))
+    signs = [k for k in own if scoring.sign_state(votes, k) is True]
+    # техника: средний за сутки окна довод по этапам и как он соотносится с итоговым этапом
+    wdays_eq = [eq_days[days[i]] for i in window if days[i] in eq_days]
+    rows = fusion.summarize(wdays_eq, fcfg)
+    avg = {s: 0.0 for s in order}
+    for day in wdays_eq:
+        for s, v in fusion.stage_scores(day, order, fcfg).items():
+            avg[s] += v / len(wdays_eq)
+    rel, eq_stages = fusion.relation(final, avg, rows) if wdays_eq else ("neutral", [])
+    text = fusion.describe(final, rows, rel, eq_stages, checklist_stage, signs)
+    decided_by = ("equipment" if rel == "agree" and checklist_stage != final
+                  else "both" if rel == "agree" else "checklist")
+    return {"stage": final, "text": text, "decided_by": decided_by, "equipment_relation": rel,
+            "checklist_stage": checklist_stage, "equipment_stages": eq_stages, "equipment": rows,
+            "signs": signs[:5], "window": [days[window[0]].isoformat(), days[window[-1]].isoformat()]}
 
 
 def _latched_votes(day_votes: list[Votes], days: list[dt.date], cfg: SequenceConfig) -> list[Votes]:

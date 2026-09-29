@@ -153,6 +153,32 @@ def test_manual_stage_mark_survives_recompute(env):
     assert env.client.patch(f"/api/sites/{site['id']}/stages/42", json={"status": "done"}).status_code == 404
 
 
+def test_stage_is_inferred_with_equipment_of_model_a(env):
+    """Пересчёт отдаёт хронологии этапов технику модели А (журнал моточасов + рамки), а в отчёт
+    пишет основание этапа. Настоящие core.stage.sequence/fusion поверх фейковых моделей."""
+    from app.services import providers
+    from core.stage import fusion, sequence
+
+    providers.override_module("core.stage.sequence", sequence)
+    providers.override_module("core.stage.fusion", fusion)
+    site = env.site(timezone="UTC")
+    cam = env.camera(site["id"])
+    env.upload(cam["id"], series(4, step_min=20, move=15))   # экскаватор копает, чек-лист видит котлован
+    pipeline.recompute_site(site["id"])
+    report = env.client.get(f"/api/sites/{site['id']}/overview").json()["report"]
+    basis = report["stage_basis"]
+    assert report["current_stage"] == 3 and basis["stage"] == 3
+    assert basis["equipment"][0]["cls"] == "excavator" and basis["equipment"][0]["hours"] == 1.0
+    assert basis["equipment_relation"] == "agree" and "экскаватор (1,0 ч)" in basis["text"]
+
+    # вес техники 0 — этап только по чек-листу, техника в основание не попадает
+    r = env.client.put("/api/settings", json={"thresholds": {"stage": {"equipment_weight": 0}}})
+    assert r.status_code == 200, r.text
+    pipeline.recompute_site(site["id"])
+    basis = env.client.get(f"/api/sites/{site['id']}/overview").json()["report"]["stage_basis"]
+    assert basis["stage"] == 3 and basis["equipment"] == [] and basis["decided_by"] == "checklist"
+
+
 def test_deviations_upsert_by_key_ack_and_auto_resolve(env):
     site = env.site(timezone="UTC")
     cam = env.camera(site["id"])

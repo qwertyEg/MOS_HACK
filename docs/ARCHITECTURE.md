@@ -47,6 +47,7 @@ core/                     чистая доменная логика: без Б�
     checklist_vlm.py      EXTERNAL: GLM-4.6V двухшаговый разбор (порт analyzer/prompts/vlm Никиты); LOCAL VLM по OpenAI-API (порт model_b Дениса)
     scoring.py            ответы → статусы подэтапов и доказательность этапов (порт scoring Никиты с исправлениями)
     sequence.py           монотонная хронология этапов (HMM/Витерби: без отката, без перескока), выбросы, needs_review
+    fusion.py             этап с учётом техники: работа/присутствие модели А по нормам «этап → техника» → слагаемое эмиссии HMM, объяснение
   plan/
     catalog.py            каталог работ из xlsx: код → название → макроэтап/подэтап (work_map.csv)
     importer.py           импорт календарного плана CSV/XLSX (многоуровневые коды → макроэтапы), демо-план
@@ -104,7 +105,7 @@ docs/                     ARCHITECTURE.md, methodology.md, TZ_case07.md
        → зоны → fusion (unit_id, site_xy) → status → hours (ActivityInterval) → запись Detection/EquipmentUnit
   → МОДЕЛЬ Б (только usable_for_stage и не чаще 1 раза в N часов на камеру; + внеочередно при сильном изменении маски):
        mask.apply → classifier.assess → запись StageObservation
-  → пересчёт площадки (с дебаунсом): sequence.infer → StageState (ручные отметки не трогаем)
+  → пересчёт площадки (с дебаунсом): sequence.infer(чек-лист модели Б + техника модели А) → StageState (ручные отметки не трогаем)
        → hours.balance → rules.evaluate → report.build → запись Deviation/StageState
 ```
 
@@ -145,7 +146,8 @@ docs/                     ARCHITECTURE.md, methodology.md, TZ_case07.md
    калибровка по демо-объектам, см. `core/stage/checklist_clip.py`). EXTERNAL — GLM-4.6V, двухшаговый разбор Никиты.
    Доля «не уверен» > 0.5 → кадр в `needs_review`, предупреждение «проверьте вручную».
 4. **Хронология**: HMM по «фронту» 1..8 — переходы только «остаться» / «+1» / редко «+2», откат запрещён; эмиссия —
-   доказательность этапов из scoring (UNSURE не голосует). Кадры, противоречащие пути Витерби, — `rejected_outliers`
+   доказательность этапов из scoring (UNSURE не голосует) плюс довод техники модели А по нормам «этап → техника»
+   (`fusion.py`, вес `thresholds.stage.equipment_weight`; см. docs/methodology.md §2.5). Кадры, противоречащие пути Витерби, — `rejected_outliers`
    (так отсекаются соседние стройки в кадре и одиночные галлюцинации). Latching-признак подтверждается ≥ 2 днями.
 
 ## 7. План

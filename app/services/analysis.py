@@ -21,7 +21,7 @@ from app import storage
 from app.models import Frame
 from app.services import adapters, providers
 from app.services import settings as settings_svc
-from app.services.pipeline import assess_quality
+from app.services.pipeline import _params, assess_quality
 from app.services.providers import registry
 from core import contracts as c
 from core import taxonomy
@@ -156,6 +156,8 @@ def analyze_image(s: Session, img: np.ndarray, model_a: str, model_b: str,
                 "equipment_hint": adapters.jsonable(res.equipment_hint),
             }
             stage = _stage_from_answers(res, errors)
+            if stage is not None:
+                stage["fused"] = _stage_with_equipment(s, res, detections, errors)
         except providers.ProviderUnavailable as exc:
             errors.append(f"модель Б ({model_b}) не готова: {exc.reason}")
         except Exception as exc:  # noqa: BLE001
@@ -184,6 +186,34 @@ def analyze_image(s: Session, img: np.ndarray, model_a: str, model_b: str,
     timings["total_ms"] = round((time.perf_counter() - t_start) * 1000, 1)
     out["timings"] = timings
     return out
+
+
+def _stage_with_equipment(s: Session, res: c.ChecklistResult, detections: list[c.Detection],
+                          errors: list[str]) -> dict[str, Any] | None:
+    """Этап одного снимка так же, как на площадке: чек-лист модели Б + техника модели А на снимке
+    (core.stage.sequence.infer по одному наблюдению). Работу по одному кадру не оценить, поэтому
+    техника — «видна» (как на снимках раз в сутки). None — модули слияния не подключены."""
+    sequence = providers.optional_module("core.stage.sequence")
+    fusion = providers.optional_module("core.stage.fusion")
+    if sequence is None or fusion is None or "equipment" not in _params(sequence.infer):
+        return None
+    try:
+        now = dt.datetime.now(dt.UTC)
+        obs = c.StageObservation(frame_id="adhoc", camera_id="adhoc", captured_at=now, result=res)
+        seen = [fusion.Sighting(frame_id="adhoc", captured_at=now, cls=d.cls, conf=float(d.conf))
+                for d in detections]
+        weight = settings_svc.get_state(s)["thresholds"]["stage"].get("equipment_weight", 1.0)
+        tl = sequence.infer([obs], config={"equipment_weight": weight},
+                            equipment=fusion.EquipmentEvidence(sightings=seen))
+    except Exception as exc:  # noqa: BLE001 — этап по чек-листу всё равно показан
+        errors.append(f"этап с учётом техники: {type(exc).__name__}: {exc}")
+        return None
+    basis = dict(getattr(tl, "basis", None) or {})
+    front = tl.current_stage
+    return {"front": front, "name": taxonomy.stage_name(front) if front is not None else None,
+            "checklist_front": basis.get("checklist_stage"), "decided_by": basis.get("decided_by"),
+            "equipment_relation": basis.get("equipment_relation"),
+            "equipment_stages": basis.get("equipment_stages") or [], "text": basis.get("text") or ""}
 
 
 def _stage_from_answers(res: c.ChecklistResult, errors: list[str]) -> dict[str, Any] | None:

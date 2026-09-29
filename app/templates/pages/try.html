@@ -103,9 +103,10 @@
         {# этап #}
         <template x-if="stage">
           <section class="card card-pad">
-            <p class="eyebrow">Этап по чек-листу</p>
+            <p class="eyebrow" x-text="stage.basis ? 'Этап по чек-листу и технике' : 'Этап по чек-листу'">Этап по чек-листу</p>
             <p class="mt-2 text-[17px] font-semibold leading-6" x-text="stage.id + '. ' + stage.name"></p>
             <p class="text-sm text-fg-2" x-show="stage.substage" x-text="stage.substage ? 'Подэтап ' + stage.substage.id + ' · ' + stage.substage.name : ''"></p>
+            <p class="mt-2 text-xs leading-5 text-fg-2" x-show="stage.basis" x-text="stage.basis"></p>
             <div class="mt-2 flex flex-wrap gap-1"><template x-for="w in (stage.works || [])" :key="w.code"><span class="badge badge-neutral"><span class="num" x-text="w.code"></span><span class="font-normal" x-text="w.name"></span></span></template></div>
             <div class="mt-3 grid grid-cols-2 gap-3">
               <div>

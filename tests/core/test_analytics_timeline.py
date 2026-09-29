@@ -15,8 +15,10 @@ SPANS = {it.stage_id: (it.planned_start, it.planned_end) for it in PLAN}
 FINISH = max(e for _, e in SPANS.values())
 
 
-def facts_like_plan_at(x: dt.date, *, pace: float = 1.0) -> StageTimeline:
-    """Факт, равный плану на дату x. pace < 1 — стройка всё время шла медленнее плана в 1/pace раз."""
+def facts_like_plan_at(x: dt.date, *, pace: float = 1.0, seen_until: dt.date | None = None) -> StageTimeline:
+    """Факт, равный плану на дату x. pace < 1 — стройка всё время шла медленнее плана в 1/pace раз.
+    seen_until — последний день наблюдений модели Б (по умолчанию x): медленная стройка, которую
+    снимают до сегодня, и стройка, о которой с даты x нет данных, — разные случаи."""
     states = {}
     for s, (a, b) in SPANS.items():
         frac = min(1.0, max(0.0, ((x - a).days + 1) / ((b - a).days + 1)))
@@ -27,7 +29,7 @@ def facts_like_plan_at(x: dt.date, *, pace: float = 1.0) -> StageTimeline:
         elif frac > 0:
             states[s] = ("active", frac, act_a)
     front = max((s for s, v in states.items() if v[0] == "active"), default=None)
-    return sc.timeline(states, front=front, daily_front=[(x, front or 1)])
+    return sc.timeline(states, front=front, daily_front=[(seen_until or x, front or 1)])
 
 
 def test_expected_progress_is_linear_within_stage():
@@ -67,7 +69,7 @@ def test_forecast_by_pace_relative_to_plan():
     on_plan = plan_vs_fact(PLAN, facts_like_plan_at(today), today)
     assert on_plan.pace_ratio == pytest.approx(1.0, abs=0.05)
     assert abs((on_plan.forecast_finish - FINISH).days) <= 3
-    slow = plan_vs_fact(PLAN, facts_like_plan_at(START + 120 * DAY, pace=0.5), today)
+    slow = plan_vs_fact(PLAN, facts_like_plan_at(START + 120 * DAY, pace=0.5, seen_until=today), today)
     assert slow.verdict == Verdict.BEHIND
     assert slow.pace_ratio == pytest.approx(0.5, abs=0.07)
     remaining = (FINISH - (START + 120 * DAY)).days
@@ -137,3 +139,46 @@ def test_series_for_chart():
     assert after and all(a is None for a in after)
     stages = {r["stage_id"]: r for r in pf.stages}
     assert stages[5]["planned_status"] == "in_progress" and stages[5]["status"] == StageStatus.ACTIVE.value
+
+
+def test_short_observation_takes_plan_as_baseline_inside_running_stage():
+    """1–2 дня съёмки внутри этапа: готовность по подэтапам не измерить (0 % или 70 %), поэтому база —
+    план на дату первого кадра («Сборный каркас»: было «отставание 10,0 дн.» = дни от начала этапа)."""
+    plan = [PlanItem(5, START, START + 39 * DAY)]
+    today = START + 9 * DAY
+    for measured in (0.0, 0.7):
+        tl = sc.timeline({**{s: ("done", 1.0) for s in range(1, 5)}, 5: ("active", measured)}, front=5,
+                         daily_front=[(today, 5)])
+        pf = plan_vs_fact(plan, tl, today)
+        assert pf.verdict == Verdict.ON_TRACK and abs(pf.lag_days) <= 1 and pf.observed_since == today
+
+
+def test_short_observation_still_shows_wrong_stage_as_behind():
+    """«Расчистка участка»: по плану подготовка кончилась, с 17.04 идёт котлован, а на кадрах 18–19.04 — расчистка."""
+    plan = [PlanItem(1, START, START + 4 * DAY), PlanItem(3, START + 7 * DAY, START + 18 * DAY)]
+    today = START + 9 * DAY
+    tl = sc.timeline({1: ("active", 0.3)}, front=1, daily_front=[(today - DAY, 1), (today, 1)])
+    pf = plan_vs_fact(plan, tl, today)
+    assert pf.verdict == Verdict.BEHIND and 3 <= pf.lag_days <= 6
+
+
+def test_long_history_or_known_start_keeps_measured_progress():
+    plan = [PlanItem(5, START, START + 39 * DAY)]
+    today = START + 20 * DAY
+    long = sc.timeline({5: ("active", 0.0)}, front=5, daily_front=[(today - i * DAY, 5) for i in range(10, -1, -1)])
+    pf = plan_vs_fact(plan, long, today)
+    assert pf.observed_since is None and pf.verdict == Verdict.BEHIND
+    started = sc.timeline({5: ("active", 0.0, today - DAY)}, front=5, daily_front=[(today, 5)])
+    assert plan_vs_fact(plan, started, today).observed_since is None
+
+
+def test_stale_stage_data_is_compared_with_plan_at_last_known_day():
+    """Эдинбург, весна 2008: объективы закрыты сеткой, этап по снимкам не обновляется. Каждый день без
+    наблюдений не должен прибавлять день «отставания» — сравнение на дату последнего состояния."""
+    last = START + 200 * DAY
+    tl = facts_like_plan_at(last)
+    pf = plan_vs_fact(PLAN, tl, last + 120 * DAY)
+    assert pf.fact_as_of == last and pf.verdict == Verdict.ON_TRACK and abs(pf.lag_days) <= 1
+    assert pf.series["today"] == last.isoformat()
+    fresh = plan_vs_fact(PLAN, tl, last + 10 * DAY)          # 10 дней без снимков — ещё не «давно»
+    assert fresh.fact_as_of is None and fresh.lag_days == pytest.approx(10, abs=1.0)

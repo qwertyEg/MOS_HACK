@@ -81,3 +81,21 @@ def test_explanation_mentions_forecast_delay():
     r = report.build(slow)
     assert r.verdict == Verdict.BEHIND
     assert any(p.startswith("Прогноз окончания") and "позже плана" in p for p in r.explanation)
+
+
+def test_fact_phrase_explains_stage_by_checklist_and_equipment():
+    """Объяснение этапа упоминает технику (core/stage/fusion.py → StageTimeline.basis); ручную отметку — нет."""
+    tl = sc.timeline({1: ("done", 1.0), 2: ("done", 1.0), 3: ("active", 0.5, TODAY - 20 * DAY)}, front=3,
+                     daily_front=[(TODAY - i * DAY, 3) for i in range(20, -1, -1)])
+    tl.basis = {"stage": 3, "text": "Этап «Земляные работы, котлован»: на снимках котлован, и техника это "
+                                    "подтверждает — работают экскаватор (6,0 ч) и самосвал (2,0 ч)."}
+    ctx = sc.context(NOW, plan_items=sc.excavation_plan(TODAY), tl=tl)
+    assert "работают экскаватор (6,0 ч)" in " ".join(report.build(ctx).explanation)
+    tl.states[3] = dataclasses.replace(tl.states[3], manual=True)
+    assert "работают экскаватор" not in " ".join(report.build(ctx).explanation)
+
+
+def test_short_observation_is_named_in_verdict():
+    tl = sc.timeline({1: ("done", 1.0), 2: ("done", 1.0), 3: ("active", 0.0)}, front=3, daily_front=[(TODAY, 3)])
+    r = report.build(sc.context(NOW, plan_items=sc.excavation_plan(TODAY), tl=tl))
+    assert r.verdict == Verdict.ON_TRACK and "Съёмка идёт с 28.09.2026" in r.explanation[0]

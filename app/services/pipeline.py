@@ -634,6 +634,31 @@ def _balances(hours_mod: Any, plan: list[c.PlanItem], intervals: list[c.Activity
     return hours_mod.balances(plan, intervals)
 
 
+def _equipment_evidence(s: Session, site_id: int, model_a: str,
+                        intervals: list[c.ActivityInterval], thr: dict) -> Any | None:
+    """Довод модели А об этапе (core.stage.fusion): журнал моточасов + уверенные рамки площадки.
+    None — модуль слияния не подключён или вес техники выключен: этап только по чек-листу."""
+    fusion = providers.optional_module("core.stage.fusion")
+    if fusion is None or float(thr["stage"].get("equipment_weight", 1.0)) <= 0:
+        return None
+    min_conf = float(getattr(fusion.FusionConfig(), "min_conf", 0.5))
+    seen = [fusion.Sighting(frame_id=fid, captured_at=at, cls=cls, conf=conf, activity=act)
+            for fid, at, cls, conf, act in adapters.sightings(s, site_id, model_a, min_conf)]
+    # Рабочие зоны размечены — моточасы техники, которую в них ни разу не видели (кран соседней
+    # очереди), этап не выдают; ручные поправки часов остаются.
+    in_zones = adapters.work_zone_units(s, site_id)
+    if in_zones is not None:
+        intervals = [iv for iv in intervals if iv.unit_id in in_zones or str(iv.unit_id).startswith("manual:")]
+    return fusion.EquipmentEvidence(intervals=list(intervals), sightings=seen)
+
+
+def _infer(observations: list, manual: dict, config: dict, equipment: Any | None) -> c.StageTimeline:
+    infer = providers.module("core.stage.sequence").infer
+    if equipment is not None and "equipment" in _params(infer):
+        return infer(observations, manual=manual, config=config, equipment=equipment)
+    return infer(observations, manual=manual, config=config)
+
+
 def recompute_site(site_id: int) -> dict | None:
     """Пересчитать этапы, часы, отклонения и отчёт площадки. Идемпотентно."""
     with _recompute_locks[site_id]:
@@ -651,17 +676,18 @@ def recompute_site(site_id: int) -> dict | None:
                       s.scalars(select(StageState).where(StageState.site_id == site_id, StageState.manual.is_(True)))}
             observations = adapters.observations(s, site_id, state["model_b"])
             seq_config = _sequence_config(thr, site, now)
+            # Этап — по чек-листу модели Б вместе с техникой модели А (ТЗ: «этап → техника»).
+            intervals = adapters.intervals(s, site_id)
+            equipment = _step(errors, "техника для этапа",
+                              lambda: _equipment_evidence(s, site_id, state["model_a"], intervals, thr), None)
 
             timeline = _step(errors, "хронология этапов",
-                             lambda: providers.module("core.stage.sequence").infer(
-                                 observations, manual=manual, config=seq_config),
+                             lambda: _infer(observations, manual, seq_config, equipment),
                              lambda: _empty_timeline(manual))
             for stage_id, st in manual.items():         # ручное всегда в итоговой картине
                 timeline.states[stage_id] = st
             _write_stage_states(s, site_id, timeline)
             s.flush()
-
-            intervals = adapters.intervals(s, site_id)
             balances = _step(errors, "моточасы",
                              lambda: _balances(providers.module("core.equipment.hours"), plan, intervals, site), [])
             ctx = None
@@ -720,6 +746,8 @@ def recompute_site(site_id: int) -> dict | None:
                 "explanation": [str(x) for x in (report.explanation or [])],
                 "needs_review": adapters.jsonable(list(timeline.needs_review or [])),
                 "rejected_outliers": adapters.jsonable(list(timeline.rejected_outliers or [])),
+                # почему этап такой: чек-лист модели Б + техника модели А (core/stage/fusion.py)
+                "stage_basis": adapters.jsonable(dict(getattr(timeline, "basis", None) or {})),
                 "daily_front": adapters.jsonable(list(timeline.daily_front or []))[-400:],
                 "balances": [{"stage_id": b.stage_id, "cls": b.cls, "planned_hours": float(b.planned_hours),
                               "worked_hours": float(b.worked_hours),
