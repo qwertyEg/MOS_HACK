@@ -20,7 +20,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _run(args: list[str], tmp: Path) -> subprocess.CompletedProcess:
     env = {**os.environ, "DATABASE_URL": f"sqlite:///{tmp}/cli.db", "LOCAL_STORAGE_DIR": str(tmp / "storage"),
-           "TMP_DIR": str(tmp / "tmp"), "DEMO_DIR": str(tmp / "demo"), "STORAGE_BACKEND": "local"}
+           "TMP_DIR": str(tmp / "tmp"), "DEMO_DIR": str(tmp / "demo"), "STORAGE_BACKEND": "local",
+           # Тест проверяет CLI и очередь, а не загрузку весов. Без этого ultralytics
+           # в чистом checkout может скачать YOLO-World и SigLIP из сети.
+           "DEFAULT_MODE": "external", "ZAI_API_KEY": ""}
     return subprocess.run([sys.executable, *args], cwd=tmp, env=env, capture_output=True, text=True, timeout=180)
 
 
