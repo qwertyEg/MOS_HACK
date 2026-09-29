@@ -1,6 +1,6 @@
 # СтройВзор — архитектура и контракты объединённого сервиса
 
-> Ветка `egor-unified`. Объединяет работу команды:
+> Ветка `dev_egor` (основа — `egor-unified`). Объединяет работу команды:
 > **Денис** (`dev-lamonifi`: FastAPI-каркас, камеры и поток кадров, маска фона, модель Б на локальной VLM, simcam, Гант),
 > **Никита** (`api-solution`: справочник-чек-лист, скоринг этапов, правила отклонений, хронология/прогноз, клиент GLM-4.6V),
 > **Егор** (модель А: детекция и классификация техники, «работает/стоит», единая техника без двойного счёта между камерами, моточасы).
@@ -87,6 +87,9 @@ docs/                     ARCHITECTURE.md, methodology.md, TZ_case07.md
 - **Техника**: 21 ключ из `reference/checklist.json` → `core.taxonomy.equipment()`. Восемь обязательных по ТЗ — `taxonomy.TZ_EQUIPMENT`.
   Детектор может знать не все 21 класс; его классы маппятся на эти ключи, список поддерживаемых отдаётся в `/api/settings`.
 - **Этапы**: 8 макроэтапов, 32 подэтапа с кодами xlsx (`substages[].xlsx`) и признаками `active_when` / `done_when`.
+  В `dev-lamonifi` кровля и фасад позднее были сведены в один наблюдаемый этап. В этой ветке оставлены 8:
+  такая схема закреплена `PLAN.md` §3.1, `reference/checklist.json`, импортом плана и демо-данными. Объединять
+  их следует одной миграцией справочника, планов и истории наблюдений, а не тихой заменой номеров.
 - **Признаки**: 60 ключей, флаг `latching` (однажды увиденное не исчезает).
 - **Работы xlsx**: `reference/work_map.csv` — каждой строке перечня организаторов сопоставлен статус
   `substage | unobservable | out_of_scope | header`, макроэтап и подэтап. Этап на UI показывается вместе с кодами работ,
@@ -206,6 +209,8 @@ docs/                     ARCHITECTURE.md, methodology.md, TZ_case07.md
 | `site_fleet` | id, site_id, cls, count  (заявленный парк техники) |
 | `deviations` | id, site_id, key (unique per site), type, severity, title, message, stage_id, camera_id, zone_id, frame_ids JSON, unit_ids JSON, started_at, last_seen_at, status (open/ack/resolved), data JSON |
 | `settings` | key, value JSON |
+| `annotations` | нестираемые переанализом ручные правки: добавить/удалить/сменить класс, merge/split единиц, verify |
+| `raw_detections` | исходный ответ модели А до наложения ручных правок; основа воспроизводимого replay/export |
 
 ## 12. JSON API (префикс `/api`, все ответы — JSON; авторизация — сессия после `/login`, для камер — `X-Camera-Key`)
 
@@ -232,6 +237,10 @@ docs/                     ARCHITECTURE.md, methodology.md, TZ_case07.md
 | `GET /media/{key}` ; `GET /api/frames/{id}/annotated.jpg` | файлы (под авторизацией); кадр с нарисованными рамками |
 | `POST /api/detect` | **контракт модели А** (PLAN §4.3): файл или `{frame_id}` → `{frame_id, detections:[Detection.to_contract()]}` |
 | `POST /api/analyze` | «Проверить снимок»: файл + `provider` → детекции, чек-лист, этап, время ответа (без сохранения) |
+| `PATCH/DELETE /api/detections/{id}`, `POST /api/frames/{id}/detections` | ручная правка, удаление и добавление рамки; сохраняется поверх ответа модели |
+| `POST /api/units/merge`, `POST /api/units/{id}/split` | ручная склейка/разделение единиц техники |
+| `GET /api/sites/{id}/dataset.zip` | экспорт проверенной ручной разметки в YOLO-датасет |
+| `GET/PUT/DELETE /api/cameras/{id}/mask*` | просмотр, ручная правка кистью и сброс маски к автоматической |
 | `POST /api/sites/{id}/reprocess` | переанализировать текущими провайдерами |
 | `POST /api/demo/seed` | засеять демо-объект |
 

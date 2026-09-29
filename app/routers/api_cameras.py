@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app import auth, netutil
 from app.config import settings
 from app.db import get_session
-from app.models import Camera, CameraState, Frame, Site, Zone
+from app.models import Camera, Frame, Site, Zone
 from app.routers.common import bad, get_or_404, json_body, not_found, num_field, points_field, require_obj, str_field
 from app.services import adapters, ingest, masks, pipeline, providers, sites, views
 from app.services import settings as settings_svc
