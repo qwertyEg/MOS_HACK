@@ -44,6 +44,31 @@ def test_queue_processes_frames_with_fake_detector(env):
     assert eq["units"][0]["worked_hours"] == 1.0
 
 
+def test_hours_expected_counts_from_first_frame(env):
+    """Требование 5: этап идёт с 1 мая, камера начала снимать 12 мая в 08:00 и сняла час.
+    Ожидаемое к «сейчас» — доля смены с первого кадра (0.1 смены), а не 9 смен с начала этапа."""
+    import importlib
+    env.fakes.equipment.hours = importlib.import_module("core.equipment.hours")
+    site = env.site(timezone="Europe/Moscow")
+    cam = env.camera(site["id"])
+    r = env.client.put(f"/api/sites/{site['id']}/plan", json=[{
+        "stage_id": 3, "planned_start": "2025-05-01", "planned_end": "2025-05-31",
+        "planned_hours": {"excavator": 140.0}, "hours_manual": True}])
+    assert r.status_code == 200, r.text
+    env.upload(cam["id"], series(4, step_min=20, move=15))
+    env.client.post(f"/api/sites/{site['id']}/recompute")
+    ov = env.client.get(f"/api/sites/{site['id']}/overview").json()
+    assert ov["report"]["observed_from"].startswith("2025-05-12T05:00")      # 08:00 МСК
+    ex = next(r for r in ov["equipment"] if r["cls"] == "excavator")
+    per_workday = 140.0 / 27                                                 # май 2025: 27 рабочих дней пн–сб
+    assert abs(ex["expected_hours"] - round(per_workday * 0.1, 2)) < 0.02, ex
+    assert ex["expected_from"].startswith("2025-05-12T05:00")
+    assert abs(ex["planned_observed_hours"] - per_workday * 18) < 0.05      # 12–31 мая: 18 рабочих дней
+    assert ex["worked_hours"] > ex["expected_hours"] and ex["detectable"] is True
+    bal = env.client.get(f"/api/sites/{site['id']}/equipment").json()["balances"]
+    assert bal[0]["expected_hours"] == ex["expected_hours"]
+
+
 def test_provider_not_ready_postpones_then_resumes(env):
     det = env.fakes.equipment.get_detector("yolo")
     det.is_ready, det.reason = False, "нет весов models/equipment.pt"

@@ -150,6 +150,27 @@ def test_excavation_scene_excavator_digs_truck_shuttles():
     assert {u.cls: u.status for u in upd.units}["excavator"] == UnitStatus.ACTIVE
 
 
+def test_truck_under_loading_works_while_excavator_loads_it():
+    """Карьер в Кирове: КАМАЗ стоит под погрузкой, экскаватор рядом работает — у самосвала
+    идут машино-часы (раньше «стоит» на всех кадрах и 5 ч из 40). Самосвал поодаль — стоит."""
+    eng = EquipmentEngine()
+    truck, far = (560.0, 320.0, 200.0, 130.0), (60.0, 560.0, 200.0, 130.0)
+    ivs, upd = [], None
+    for k in range(5):
+        dets = [moving(k, y=300), S.det("dump_truck", truck, conf=0.8), S.det("dump_truck", far, conf=0.8)]
+        upd = eng.process(fi("c1", 25 * k, k), None, dets, None, [], PLAN)
+        ivs += upd.intervals
+    by_unit = {}
+    for iv in ivs:
+        by_unit[iv.unit_id] = by_unit.get(iv.unit_id, 0.0) + iv.hours
+    trucks = sorted((u for u in upd.units if u.cls == "dump_truck"), key=lambda u: u.worked_hours)
+    assert len(trucks) == 2
+    assert trucks[0].worked_hours == 0.0, "самосвал вдали от экскаватора стоит"
+    assert trucks[1].worked_hours == pytest.approx(4 * 25 / 60), "самосвал под погрузкой работает"
+    loaded = [d for d in upd.detections if d.cls == "dump_truck" and d.extra.get("served_by")]
+    assert len(loaded) == 1 and loaded[0].activity == Activity.WORKING and loaded[0].extra["served_by"] == "excavator"
+
+
 def test_output_is_serializable_and_matches_contract():
     eng = EquipmentEngine()
     upd = None

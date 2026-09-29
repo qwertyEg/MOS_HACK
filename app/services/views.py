@@ -139,7 +139,9 @@ def _equipment_summary(s: Session, site: Site, plan: list[PlanItem], rep: dict) 
         if cls not in by_cls:
             by_cls[cls] = {"cls": cls, "name": taxonomy.equipment_name(cls), "units": 0, "active": 0, "idle": 0,
                            "parked": 0, "departed": 0, "planned_hours": 0.0, "worked_hours": 0.0,
-                           "remaining_hours": 0.0, "done_ratio": 0.0, "stage_ids": [], "last_worked_at": None}
+                           "remaining_hours": 0.0, "done_ratio": 0.0, "stage_ids": [], "last_worked_at": None,
+                           "expected_hours": None, "planned_observed_hours": None, "expected_from": None,
+                           "detectable": True}
         return by_cls[cls]
 
     for u in units:
@@ -158,10 +160,21 @@ def _equipment_summary(s: Session, site: Site, plan: list[PlanItem], rep: dict) 
             e["stage_ids"].append(b["stage_id"])
         if b.get("last_worked_at") and (e["last_worked_at"] is None or b["last_worked_at"] > e["last_worked_at"]):
             e["last_worked_at"] = b["last_worked_at"]
+        # Ожидаемое к «сейчас» — от начала наблюдения (core.equipment.hours); None — не считалось.
+        for k in ("expected_hours", "planned_observed_hours"):
+            if b.get(k) is not None:
+                e[k] = (e[k] or 0.0) + float(b[k])
+        if b.get("expected_from") and (e["expected_from"] is None or b["expected_from"] < e["expected_from"]):
+            e["expected_from"] = b["expected_from"]
+        if b.get("detectable") is False:
+            e["detectable"] = False
     out = []
     for e in by_cls.values():
         for k in ("planned_hours", "worked_hours", "remaining_hours"):
             e[k] = round(e[k], 2)
+        for k in ("expected_hours", "planned_observed_hours"):
+            if e[k] is not None:
+                e[k] = round(e[k], 2)
         e["done_ratio"] = round(min(1.0, e["worked_hours"] / e["planned_hours"]), 3) if e["planned_hours"] > 0 else 0.0
         out.append(e)
     out.sort(key=lambda e: (-e["units"], -e["planned_hours"], e["cls"]))
@@ -231,6 +244,7 @@ def overview(s: Session, site: Site) -> dict[str, Any]:
             "current_stage": current, "current_stage_name": taxonomy.stage_name(current) if current else None,
             "stage_basis": rep.get("stage_basis") or {},   # почему этап такой: чек-лист + техника
             "needs_review": rep.get("needs_review") or [], "now": rep.get("now"),
+            "observed_from": rep.get("observed_from"), "stage_sources": rep.get("stage_sources") or {},
             "computed_at": iso(site.report_at), "errors": rep.get("errors") or [],
         },
         "stages": stages,

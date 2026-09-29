@@ -5,6 +5,7 @@ import datetime as dt
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -125,7 +126,7 @@ async def put_plan(site_id: int, request: Request, s: Session = Depends(get_sess
     except ValueError as exc:
         raise bad(str(exc)) from None
     sites.save_plan(s, site, items, "manual")
-    recomputer.run(site.id)
+    await run_in_threadpool(recomputer.run, site.id)   # пересчёт до 0.8 с — не в цикле событий
     return _plan_list(s, site)
 
 
@@ -145,7 +146,7 @@ async def import_plan(site_id: int, request: Request, s: Session = Depends(get_s
     except ImportError:
         raise bad("импорт плана недоступен: модуль core.plan не подключён") from None
     try:
-        items, warnings = importer.parse(data, upload.filename or "plan.csv")
+        items, warnings = await run_in_threadpool(importer.parse, data, upload.filename or "plan.csv")
     except (ValueError, KeyError) as exc:
         raise bad(f"план не разобран: {exc}") from None
     if not items:
@@ -153,7 +154,7 @@ async def import_plan(site_id: int, request: Request, s: Session = Depends(get_s
     warnings = list(warnings)
     if apply:
         warnings += sites.save_plan(s, site, list(items), "import")
-        recomputer.run(site.id)
+        await run_in_threadpool(recomputer.run, site.id)   # пересчёт до 0.8 с — не в цикле событий
         plan = _plan_list(s, site)
     else:
         from app.services.adapters import jsonable
@@ -188,7 +189,7 @@ async def demo_plan(site_id: int, request: Request, s: Session = Depends(get_ses
     warnings = [f"Демо-план: этапы разложены на {start}…{end or 'по нормам'}; это не реальный график — "
                 "поправьте даты в редакторе плана"]
     warnings += sites.save_plan(s, site, list(items), "demo")
-    recomputer.run(site.id)
+    await run_in_threadpool(recomputer.run, site.id)   # пересчёт до 0.8 с — не в цикле событий
     return {"plan": _plan_list(s, site), "warnings": warnings, "applied": True}
 
 
@@ -206,7 +207,7 @@ async def put_fleet(site_id: int, request: Request, s: Session = Depends(get_ses
         sites.save_fleet(s, site, await json_body(request))
     except ValueError as exc:
         raise bad(str(exc)) from None
-    recomputer.run(site.id)
+    await run_in_threadpool(recomputer.run, site.id)   # пересчёт до 0.8 с — не в цикле событий
     return get_fleet(site_id, s)
 
 
@@ -223,7 +224,7 @@ async def patch_stage(site_id: int, stage_id: int, request: Request, s: Session 
         raise not_found(str(exc)) from None
     except ValueError as exc:
         raise bad(str(exc)) from None
-    recomputer.run(site.id)
+    await run_in_threadpool(recomputer.run, site.id)   # пересчёт до 0.8 с — не в цикле событий
     s.refresh(row)
     return views.stage_state_json(row)
 
@@ -263,7 +264,7 @@ async def add_hours(site_id: int, request: Request, s: Session = Depends(get_ses
         row = sites.add_hours_correction(s, site, await json_body(request))
     except ValueError as exc:
         raise bad(str(exc)) from None
-    recomputer.run(site.id)
+    await run_in_threadpool(recomputer.run, site.id)   # пересчёт до 0.8 с — не в цикле событий
     return views.interval_json(row)
 
 
@@ -305,6 +306,23 @@ async def patch_deviation(deviation_id: int, request: Request, s: Session = Depe
     dev.updated_at = utcnow()
     s.commit()
     return views.deviations_json(s, [dev])[0]
+
+
+@router.post("/sites/{site_id}/retry-errors", status_code=202)
+def retry_errors(site_id: int, s: Session = Depends(get_session)) -> dict:
+    """Кадры с ошибкой (упал провайдер, порог был NaN, процесс падал на кадре) — снова в очередь.
+    Сделанное по кадру не повторяется: флаги processed_a / processed_b сохраняются."""
+    site = get_or_404(s, Site, site_id, "объект")
+    cams = select(Camera.id).where(Camera.site_id == site.id)
+    n = 0
+    for fr in s.scalars(select(Frame).where(Frame.camera_id.in_(cams), Frame.status == "error")):
+        fr.status = "pending"
+        fr.meta = {k: v for k, v in (fr.meta or {}).items() if k != "crashes"}
+        n += 1
+    s.commit()
+    from app.services.queue import frame_queue
+    frame_queue.recover()
+    return {"frames": n}
 
 
 @router.post("/sites/{site_id}/reprocess", status_code=202)

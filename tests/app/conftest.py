@@ -81,6 +81,9 @@ def env(tmp_path, monkeypatch):
     db.configure(f"sqlite:///{tmp_path}/app.db")
     storage.configure("local", tmp_path / "storage")
 
+    from app import auth
+    auth.limiter.reset()                  # лимит неверных паролей — в памяти процесса, тесты не делят счёт
+
     fakes = Fakes()
     fakes.install(providers)
     providers.registry.reset()

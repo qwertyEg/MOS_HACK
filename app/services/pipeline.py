@@ -611,8 +611,11 @@ def process_frame(frame_id: int) -> str:
         state = settings_svc.get_state(s)
         thresholds = state["thresholds"]
 
-        img = storage.get().get(fr.key)
-        img = cv2.imdecode(np.frombuffer(img, np.uint8), cv2.IMREAD_COLOR)
+        # С проверкой размера до декодирования: кадр-«бомба», попавший в хранилище мимо
+        # приёма, иначе ронял бы процесс по памяти на каждом перезапуске (ImageTooLarge →
+        # кадр помечается ошибкой, очередь живёт).
+        from app.services.ingest import decode_image
+        img = decode_image(storage.get().get(fr.key))
         if img is None:
             raise ValueError("файл кадра не читается как изображение")
 
@@ -695,6 +698,9 @@ def process_frame(frame_id: int) -> str:
         fr.status = "error" if errors else ("postponed" if postponed else "done")
         if a_ran or errors or notes:     # повторный заход только за моделью Б — примечание модели А не терять
             fr.note = "; ".join(errors + notes)[:2000]
+        if (fr.meta or {}).get("crashes"):
+            # кадр дошёл до конца — прошлые падения процесса на нём не в счёт (queue.reset_stale)
+            fr.meta = {k: v for k, v in fr.meta.items() if k != "crashes"}
         site_id = site.id
         s.commit()
         status = fr.status
@@ -850,10 +856,39 @@ def _analytics_config(s: Session, thr: dict, site: Site, model_a: str) -> dict:
     return cfg
 
 
-def _balances(hours_mod: Any, plan: list[c.PlanItem], intervals: list[c.ActivityInterval], site: Site) -> list:
-    if "tz" in _params(hours_mod.balances):
-        return hours_mod.balances(plan, intervals, tz=site.timezone or "Europe/Moscow")
-    return hours_mod.balances(plan, intervals)
+def observed_from(s: Session, site_id: int) -> dt.datetime | None:
+    """Начало наблюдения — первый кадр площадки: от него считается ожидаемое
+    к «сейчас» на полосках моточасов (что было до камер, камеры не видели)."""
+    return s.scalar(select(func.min(Frame.captured_at)).join(Camera, Camera.id == Frame.camera_id)
+                    .where(Camera.site_id == site_id))
+
+
+def _balances(hours_mod: Any, plan: list[c.PlanItem], intervals: list[c.ActivityInterval], site: Site,
+              now: dt.datetime | None = None, since: dt.datetime | None = None) -> list:
+    params = _params(hours_mod.balances)
+    kw: dict[str, Any] = {}
+    if "tz" in params:
+        kw["tz"] = site.timezone or "Europe/Moscow"
+    if "now" in params and now is not None:
+        kw.update(now=now, observed_from=since, shift_hours=float(site.shift_hours or 10.0))
+    return hours_mod.balances(plan, intervals, **kw)
+
+
+def _balances_json(balances: list, detectable: list[str] | None) -> list[dict]:
+    """Полоски в отчёт. `detectable: false` — текущий детектор этот тип не различает
+    (у YOLO нет асфальтоукладчика и гусеничного крана): часы по нему модель А не
+    спишет, и UI честно пишет «учёт вручную», а не «нет на площадке»."""
+    out = []
+    for b in balances:
+        row = {"stage_id": b.stage_id, "cls": b.cls, "planned_hours": float(b.planned_hours),
+               "worked_hours": float(b.worked_hours), "last_worked_at": adapters.iso(b.last_worked_at)}
+        for key in ("expected_hours", "planned_observed_hours"):
+            value = getattr(b, key, None)
+            row[key] = round(float(value), 2) if value is not None else None
+        row["expected_from"] = adapters.iso(getattr(b, "expected_from", None))
+        row["detectable"] = detectable is None or b.cls in detectable
+        out.append(row)
+    return out
 
 
 def _equipment_evidence(s: Session, site_id: int, model_a: str,
@@ -896,7 +931,8 @@ def recompute_site(site_id: int) -> dict | None:
             plan = adapters.plan_items(s, site_id)
             manual = {r.stage_id: adapters.stage_state(r) for r in
                       s.scalars(select(StageState).where(StageState.site_id == site_id, StageState.manual.is_(True)))}
-            observations = adapters.observations(s, site_id, state["model_b"])
+            stage_sources: dict[str, int] = {}
+            observations = adapters.observations(s, site_id, state["model_b"], stage_sources)
             seq_config = _sequence_config(thr, site, now)
             # Этап — по чек-листу модели Б вместе с техникой модели А (ТЗ: «этап → техника»).
             intervals = adapters.intervals(s, site_id)
@@ -910,8 +946,10 @@ def recompute_site(site_id: int) -> dict | None:
                 timeline.states[stage_id] = st
             _write_stage_states(s, site_id, timeline)
             s.flush()
+            since = observed_from(s, site_id)
             balances = _step(errors, "моточасы",
-                             lambda: _balances(providers.module("core.equipment.hours"), plan, intervals, site), [])
+                             lambda: _balances(providers.module("core.equipment.hours"), plan, intervals, site,
+                                               now, since), [])
             ctx = None
             ctx_mod = providers.optional_module("core.analytics.context")
             if ctx_mod is not None:
@@ -971,14 +1009,14 @@ def recompute_site(site_id: int) -> dict | None:
                 # почему этап такой: чек-лист модели Б + техника модели А (core/stage/fusion.py)
                 "stage_basis": adapters.jsonable(dict(getattr(timeline, "basis", None) or {})),
                 "daily_front": adapters.jsonable(list(timeline.daily_front or []))[-400:],
-                "balances": [{"stage_id": b.stage_id, "cls": b.cls, "planned_hours": float(b.planned_hours),
-                              "worked_hours": float(b.worked_hours),
-                              "last_worked_at": adapters.iso(b.last_worked_at)} for b in balances],
+                "balances": _balances_json(balances, _detectable(state["model_a"])),
+                "observed_from": adapters.iso(since),
                 "series": series,
                 "planned_finish": adapters.jsonable(getattr(plan_fact, "planned_finish", None)),
                 "delay_days": adapters.jsonable(getattr(plan_fact, "delay_days", None)),
                 "forecast_note": str(getattr(plan_fact, "forecast_note", "") or ""),
                 "stage_obs": len(observations),
+                "stage_sources": stage_sources,     # чьи ответы модели Б в хронологии (сшивка при смене режима)
                 "now": now.isoformat(),
                 "errors": errors,
             })

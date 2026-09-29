@@ -372,3 +372,35 @@
 Задевает: `core/equipment/engine.py`, `status.py` (новый необязательный параметр
 `still_until`), `core/stage/quality.py` (`config_for_timezone`),
 `app/services/pipeline.assess_quality(…, timezone)`.
+
+### 2026-09-28 · Егор / egor-unified (r2-hours-robust) · моточасы от начала наблюдения, надёжность и доступ из сети
+
+Сделано:
+- «Временная полоска»: ожидаемое к «сейчас» считается в бэкенде (`core/equipment/hours.balances(now=,
+  observed_from=)` → `HoursBalance.expected_hours / expected_from / planned_observed_hours`) — по рабочим
+  сменам с max(начало этапа по плану, первый кадр площадки). Сверка А↔Б (HOURS_SPENT_NO_PROGRESS) идёт с планом
+  на наблюдаемую часть этапа. Типы, которых детектор не различает, помечены `detectable: false` («учёт вручную»).
+  Самосвал под погрузкой и миксер у бетононасоса — работа (`EquipmentEngine._served`, `SERVED_BY`).
+- Надёжность: имена ДД.ММ.ГГГГ российских регистраторов (самое длинное совпадение со временем);
+  лимит пикселей до декодирования (`ingest.decode_image`, JPEG уменьшается при чтении, прочее — `ImageTooLarge`),
+  кадр, дважды ронявший процесс, — `error` (`queue.reset_stale`, счётчик `meta.crashes`), `POST
+  /api/sites/{id}/retry-errors`; оборванные рестартом загрузки → `failed`, `var/tmp` чистится; zip-бомба;
+  кадр «из будущего» (> now+2 ч) не принимается; догрузка задним числом и кадры без даты на архиве —
+  предупреждение/отказ в задании; смена провайдера модели Б сшивает хронологию (`adapters.observations`).
+- Доступ из сети (`app/security.py` — один ASGI-слой `Guard`): лимит тела по Content-Length и потоку, CSRF по
+  Sec-Fetch-Site/Origin/Referer, JSON-API только с `application/json` (415), CSP и прочие заголовки, отброс
+  многодиапазонного Range к /static. Вход: лимит неверных паролей (429 + Retry-After), PBKDF2 в пуле потоков,
+  не больше 2 хешей одновременно; сессия с id и отпечатком пароля — выход её отзывает (`settings`
+  «auth.revoked_sessions»); SECRET_KEY по умолчанию → случайный ключ процесса; /api/docs и openapi — после входа;
+  /api/health без входа — только `{ok, version}`; 500 — номер ошибки вместо текста исключения; NaN/Infinity/
+  20-значные числа/годы вне 1990–2100 — 400; адрес камеры — только http(s), не link-local/метаданные,
+  ответ камеры — только белый список полей; тяжёлое в async-обработчиках — `run_in_threadpool`.
+Почему: требование 5 пользователя (на коротких демо вся техника «сильно отставала»; карьер в Кирове —
+экскаватор 31 % при «опережении») и подтверждённые находки ревью «надёжность» (PNG 57 КБ ронял сервис,
+перебор пароля замораживал интерфейс, 13 эндпоинтов отвечали 500).
+Отвергнуто: ожидание по календарному времени (ночь и выходные давали «отставание» дневной смены); отказ
+стартовать с паролем admin (ломает `python -m app` без настройки — вместо этого предупреждение в журнале);
+запрет loopback у камеры (simcam на той же машине — демо; настройка `CAMERA_ALLOW_LOOPBACK`).
+Задевает: `core/contracts.HoursBalance` (новые поля с умолчаниями), `app/services/pipeline._balances`,
+`app/routers/common.json_body` (415 без `application/json`), `app/auth.py` (сессии), `app/main.py`,
+`simcam` шлёт `X-Camera-Id`. Схема БД не менялась (счётчики — в `frames.meta` и `settings`).

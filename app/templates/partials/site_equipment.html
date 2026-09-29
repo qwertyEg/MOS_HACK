@@ -6,7 +6,7 @@
     <div class="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
       <div>
         <h2 id="hours-h" class="card-title">Моточасы по типам техники<span class="font-normal text-fg-3" x-show="hoursStage" x-text="' · ' + (hoursStageSel === 'now' ? 'идёт ' : '') + '«' + (hoursStage ? hoursStage.name : '') + '»'"></span></h2>
-        <p class="card-sub max-w-3xl">Полоска — план часов на этапе. Заливка — отработано: машина засчитывается, когда смещается или меняет позу между снимками. Риска — сколько должно быть отработано к <span x-text="isArchive ? 'дате последнего кадра' : 'сегодняшнему дню'"></span>.</p>
+        <p class="card-sub max-w-3xl">Полоска — план часов на этапе. Заливка — отработано: машина засчитывается, когда смещается или меняет позу между снимками. Риска — сколько должно быть отработано к <span x-text="isArchive ? 'дате последнего кадра' : 'сегодняшнему дню'"></span>, считая по рабочим сменам с начала этапа или с начала съёмки<span x-show="firstFrameIso" x-text="' (' + SV.fmt.date(firstFrameAt) + ')'"></span>, если камеры начали снимать позже.</p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <label class="sr-only" for="hours-stage">Этап</label>
@@ -42,7 +42,7 @@
             <div class="relative h-3 overflow-visible rounded-full bg-panel-3" role="img" :aria-label="`Отработано ${SV.fmt.hours(h.worked)} из ${SV.fmt.hours(h.planned)}`">
               <div class="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500" :class="h.tone === 'neutral' ? 'bg-fg-3/35' : SV.toneBg[h.tone]" :style="`width:${h.fill}%`"></div>
               <template x-if="h.over"><div class="hatch-bad absolute inset-y-0 rounded-r-full" :style="`left:${h.fill - h.over}%;width:${h.over}%`"></div></template>
-              <template x-if="h.mark != null && h.planned > 0"><span class="absolute -top-1 h-5 w-0.5 rounded bg-fg" :style="`left:calc(${h.mark}% - 1px)`" :title="'Ожидалось к сегодня: ' + SV.fmt.hours(h.expected)"></span></template>
+              <template x-if="h.mark != null && h.planned > 0"><span class="absolute -top-1 h-5 w-0.5 rounded bg-fg" :style="`left:calc(${h.mark}% - 1px)`" :title="'Ожидалось к сегодня' + (h.since ? ' (с начала съёмки ' + h.since + ')' : '') + ': ' + SV.fmt.hours(h.expected, 1)"></span></template>
             </div>
             <div class="mt-1.5 flex justify-between text-2xs text-fg-3">
               <span><span class="num text-fg-2" x-text="SV.fmt.hours(h.worked)"></span> отработано<span x-show="h.planned > 0"> из <span class="num" x-text="SV.fmt.hours(h.planned)"></span></span></span>

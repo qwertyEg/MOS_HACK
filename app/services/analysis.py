@@ -90,7 +90,8 @@ def stored_detections(s: Session, fr: Frame, preferred: str) -> list[c.Detection
 
 
 def load_frame_image(fr: Frame) -> np.ndarray:
-    img = cv2.imdecode(np.frombuffer(storage.get().get(fr.key), np.uint8), cv2.IMREAD_COLOR)
+    from app.services.ingest import decode_image      # с лимитом пикселей (ImageTooLarge — ValueError)
+    img = decode_image(storage.get().get(fr.key))
     if img is None:
         raise ValueError("файл кадра не читается")
     return img

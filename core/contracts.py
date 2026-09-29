@@ -321,12 +321,24 @@ class PlanItem:
 
 @dataclass
 class HoursBalance:
-    """«Временная полоска» по типу техники на этапе."""
+    """«Временная полоска» по типу техники на этапе.
+
+    Ожидание к «сейчас» считается от начала НАБЛЮДЕНИЯ (первый кадр площадки),
+    если камеры начали снимать после начала этапа по плану: что было до первого
+    кадра, камера не видела, и считать это «отставанием» техники нельзя.
+    `expected_hours` — сколько должно быть отработано к «сейчас» с `expected_from`;
+    `planned_observed_hours` — сколько плановых часов этапа приходится на период
+    с `expected_from` до конца этапа (с ним сверяются модели А и Б). None — не
+    считалось (нет дат плана или «сейчас»).
+    """
     stage_id: int | None
     cls: str
     planned_hours: float
     worked_hours: float
     last_worked_at: dt.datetime | None
+    expected_hours: float | None = None
+    expected_from: dt.datetime | None = None
+    planned_observed_hours: float | None = None
 
     @property
     def remaining_hours(self) -> float:

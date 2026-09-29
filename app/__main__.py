@@ -17,7 +17,9 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=args.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     # Один воркер намеренно: очередь кадров и кэш моделей живут в памяти процесса.
-    uvicorn.run("app.main:app", host=args.host, port=args.port, log_level=args.log_level, workers=1)
+    # server_header=False: «server: uvicorn» лишний раз рассказывает, чем атаковать.
+    uvicorn.run("app.main:app", host=args.host, port=args.port, log_level=args.log_level, workers=1,
+                server_header=False)
 
 
 if __name__ == "__main__":

@@ -589,11 +589,22 @@ def _days_since_front_change(ctx: AnalyticsContext) -> int | None:
     return (ctx.today - last_change).days
 
 
+def _hours_budget(b) -> float:
+    """С чем сверять отработанные часы: план на НАБЛЮДАЕМУЮ часть этапа, если камеры
+    начали снимать посреди этапа (что было до первого кадра, модель А не видела и
+    не списала), иначе — план этапа целиком."""
+    seen = getattr(b, "planned_observed_hours", None)
+    if seen is not None and 0 < seen < b.planned_hours:
+        return seen
+    return b.planned_hours
+
+
 def hours_spent_no_progress(ctx: AnalyticsContext) -> list[DeviationRecord]:
     cfg = ctx.cfg
     by_stage: dict[int, list] = defaultdict(list)
     for b in ctx.balances:
-        if b.stage_id is not None and b.planned_hours > 0 and b.worked_hours / b.planned_hours >= cfg.hours_warn_ratio:
+        budget = _hours_budget(b)
+        if b.stage_id is not None and budget > 0 and b.worked_hours / budget >= cfg.hours_warn_ratio:
             by_stage[b.stage_id].append(b)
     unchanged = _days_since_front_change(ctx)
     out = []
@@ -604,7 +615,7 @@ def hours_spent_no_progress(ctx: AnalyticsContext) -> list[DeviationRecord]:
         front = ctx.timeline.current_stage
         if unchanged is not None and front == s and unchanged < cfg.no_progress_days:
             continue  # этап только что сменился — рано судить
-        ratio = max(b.worked_hours / b.planned_hours for b in bals)
+        ratio = max(b.worked_hours / _hours_budget(b) for b in bals)
         if unchanged is None:
             sev = Severity.INFO
             fact = "данных модели Б по этапу нет — завершение не подтверждено снимками"
@@ -613,8 +624,13 @@ def hours_spent_no_progress(ctx: AnalyticsContext) -> list[DeviationRecord]:
             prog = f", готовность этапа {fmt.pct(st.progress)}" if st else ""
             status = "не начат" if not st or st.status == StageStatus.NOT_STARTED else "всё ещё идёт"
             fact = f"по снимкам этап {status}{prog}, текущий этап не менялся уже {fmt.count(unchanged, fmt.DAYS)}"
-        spent = "; ".join(f"{fmt.eq(b.cls)} — {b.worked_hours:.0f} из {b.planned_hours:.0f} ч "
-                          f"({round(100 * b.worked_hours / b.planned_hours)} %)" for b in bals)
+        def _spent(b) -> str:
+            budget = _hours_budget(b)
+            part = (f" — на период съёмки с {fmt.date(ctx.local(b.expected_from).date())}"
+                    if budget < b.planned_hours and getattr(b, "expected_from", None) else "")
+            return (f"{fmt.eq(b.cls)} — {b.worked_hours:.0f} из {budget:.0f} ч{part} "
+                    f"({round(100 * b.worked_hours / budget)} %)")
+        spent = "; ".join(_spent(b) for b in bals)
         types = {b.cls for b in bals}
         ev = [fid for i in ctx.intervals if i.stage_id == s and i.cls in types for fid in i.frame_ids]
         ev = _spread(ev[-12:], 2) + ([st.evidence_frame_ids[-1]] if st and st.evidence_frame_ids else [])

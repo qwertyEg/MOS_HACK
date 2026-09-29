@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import cv2
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app import auth, storage
 from app.db import get_session
 from app.models import Frame
-from app.routers.common import bad, get_or_404, not_found
+from app.routers.common import bad, get_or_404, json_body, not_found
 from app.services import analysis, ingest, views
 from app.services import settings as settings_svc
 from app.services.providers import ProviderUnavailable
@@ -60,7 +61,10 @@ def annotated(frame_id: int, max_w: int = 1600, s: Session = Depends(get_session
 
 async def _read_image(upload) -> "cv2.typing.MatLike":
     data = await upload.read()
-    img = ingest.decode_image(data)
+    try:
+        img = await run_in_threadpool(ingest.decode_image, data)
+    except ingest.ImageTooLarge as exc:
+        raise HTTPException(413, str(exc)) from None
     if img is None:
         raise bad("файл не распознан как изображение (jpg/png/webp/bmp)")
     return img
@@ -78,10 +82,7 @@ async def detect(request: Request, s: Session = Depends(get_session)) -> dict:
         upload = form.get("file") if hasattr(form.get("file"), "read") else None
         frame_id, provider = form.get("frame_id"), form.get("provider") or form.get("model_a")
     elif ctype.startswith("application/json"):
-        try:
-            body = await request.json()
-        except ValueError:
-            raise bad("тело запроса — не JSON") from None
+        body = await json_body(request)          # NaN/Infinity/1e400 → 400, а не 500
         if not isinstance(body, dict):
             raise bad("ожидается объект {frame_id}")
         frame_id, provider = body.get("frame_id"), body.get("provider") or body.get("model_a")
@@ -96,7 +97,9 @@ async def detect(request: Request, s: Session = Depends(get_session)) -> dict:
     if upload is not None:
         img = await _read_image(upload)
         try:
-            dets, ms = analysis.detect_image(img, model_a)
+            # Детектор и общий замок моделей — в пуле потоков: цикл событий не ждёт их
+            # и отдаёт остальным пользователям страницы и статику.
+            dets, ms = await run_in_threadpool(analysis.detect_image, img, model_a)
         except ProviderUnavailable as exc:
             raise HTTPException(503, f"модель А ({model_a}) не готова: {exc.reason}") from None
         h, w = img.shape[:2]
@@ -111,11 +114,11 @@ async def detect(request: Request, s: Session = Depends(get_session)) -> dict:
     ms = None
     if dets is None:
         try:
-            img = analysis.load_frame_image(fr)
+            img = await run_in_threadpool(analysis.load_frame_image, fr)
         except (ValueError, FileNotFoundError, OSError):
             raise not_found("файл кадра недоступен") from None
         try:
-            dets, ms = analysis.detect_image(img, model_a)
+            dets, ms = await run_in_threadpool(analysis.detect_image, img, model_a)
         except ProviderUnavailable as exc:
             raise HTTPException(503, f"модель А ({model_a}) не готова: {exc.reason}") from None
         source = "live"
@@ -142,5 +145,5 @@ async def analyze(request: Request, s: Session = Depends(get_session)) -> dict:
     except ValueError as exc:
         raise bad(str(exc)) from None
     flag = lambda k, d: str(form.get(k, d)).lower() not in ("0", "false", "no", "")  # noqa: E731
-    return analysis.analyze_image(s, img, model_a, model_b, annotate_image=flag("annotate", "1"),
-                                  force_stage=flag("force_stage", "0"))
+    return await run_in_threadpool(analysis.analyze_image, s, img, model_a, model_b,
+                                   annotate_image=flag("annotate", "1"), force_stage=flag("force_stage", "0"))

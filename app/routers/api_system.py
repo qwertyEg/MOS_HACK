@@ -4,6 +4,7 @@ from __future__ import annotations
 import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -21,8 +22,11 @@ router = APIRouter(prefix="/api", tags=["система"], dependencies=[Depends
 
 
 @public.get("/health")
-def health() -> dict:
-    """Открыт без входа (healthcheck Docker). Секретов не содержит."""
+def health(request: Request) -> dict:
+    """Открыт без входа (healthcheck Docker): без входа — только «жив ли» и версия.
+    Подробности (провайдеры с адресами, очередь) — после входа: адреса внутренних
+    сервисов и готовность моделей посторонним знать незачем, а проверка
+    провайдеров ходит в сеть — healthcheck каждые 30 с её не дёргает."""
     db_ok = True
     try:
         with db.session() as s:
@@ -30,15 +34,24 @@ def health() -> dict:
     except Exception:  # noqa: BLE001
         db_ok = False
     storage_ok = storage.get().ping()
-    return {"ok": db_ok and storage_ok, "version": __version__, "providers": registry.status(),
-            "db": db_ok, "storage": storage_ok, "queue": {"running": frame_queue.started,
-                                                          "pending": frame_queue.pending()}}
+    out = {"ok": db_ok and storage_ok, "version": __version__}
+    if auth.current_user(request):
+        out.update({"providers": registry.status(), "db": db_ok, "storage": storage_ok,
+                    "queue": {"running": frame_queue.started, "pending": frame_queue.pending()}})
+    return out
 
 
 @public.post("/login")
 async def api_login(request: Request, s: Session = Depends(get_session)) -> dict:
     body = require_obj(await json_body(request))
-    user = auth.authenticate(s, str(body.get("login", "")), str(body.get("password", "")))
+    try:
+        # PBKDF2 — в пуле потоков: 16 параллельных неверных паролей раньше держали цикл
+        # событий, и страницы всех пользователей ждали по секунде.
+        user = await run_in_threadpool(auth.login_attempt, request, s, str(body.get("login", "")),
+                                       str(body.get("password", "")))
+    except auth.TooManyAttempts as exc:
+        raise HTTPException(429, f"слишком много неверных попыток — повторите через {exc.wait_s} с",
+                            headers={"Retry-After": str(exc.wait_s)}) from None
     if user is None:
         raise HTTPException(401, "неверный логин или пароль")
     auth.login_user(request, user)
@@ -46,8 +59,8 @@ async def api_login(request: Request, s: Session = Depends(get_session)) -> dict
 
 
 @public.post("/logout")
-def api_logout(request: Request) -> dict:
-    auth.logout_user(request)
+def api_logout(request: Request, s: Session = Depends(get_session)) -> dict:
+    auth.logout_user(request, s)
     return {"ok": True}
 
 
@@ -165,7 +178,8 @@ async def demo_seed(request: Request, s: Session = Depends(get_session)) -> dict
     if only is not None and (not isinstance(only, list) or not all(isinstance(x, str) for x in only)):
         raise bad("sites: список имён каталогов/объектов")
     try:
-        result = demo.seed(s, only=only, replace=bool(body.get("replace", False)))
+        # Засев читает каталоги и пишет в БД — в пуле потоков, не в цикле событий.
+        result = await run_in_threadpool(demo.seed, s, only=only, replace=bool(body.get("replace", False)))
     except demo.DemoError as exc:
         raise not_found(str(exc)) from None
     return {"sites": result["sites"], "jobs": [j["job_id"] for j in result["jobs"]],

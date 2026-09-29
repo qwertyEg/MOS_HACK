@@ -63,7 +63,13 @@ def login_page(request: Request, next: str = "/"):
 @router.post("/login")
 def login_submit(request: Request, login: str = Form(""), password: str = Form(""), next: str = Form("/"),
                  s: Session = Depends(get_session)):
-    user = auth.authenticate(s, login, password)
+    try:
+        user = auth.login_attempt(request, s, login, password)
+    except auth.TooManyAttempts as exc:
+        resp = render(request, "login", None, status_code=429, next=auth.safe_next(next),
+                      error=f"Слишком много неверных попыток — повторите через {exc.wait_s} с")
+        resp.headers["Retry-After"] = str(exc.wait_s)
+        return resp
     if user is None:
         return render(request, "login", None, status_code=401, next=auth.safe_next(next),
                       error="Неверный логин или пароль")
@@ -72,8 +78,18 @@ def login_submit(request: Request, login: str = Form(""), password: str = Form("
 
 
 @router.get("/logout")
-def logout(request: Request):
-    auth.logout_user(request)
+def logout(request: Request, s: Session = Depends(get_session)):
+    # Ссылка «Выйти» в шапке — обычный GET. Чужая страница (картинка, ссылка) не должна
+    # разлогинивать: браузер помечает такие запросы Sec-Fetch-Site: cross-site / same-site.
+    if request.headers.get("sec-fetch-site", "same-origin") not in ("same-origin", "none"):
+        return RedirectResponse("/", status_code=303)
+    auth.logout_user(request, s)
+    return RedirectResponse("/login", status_code=303)
+
+
+@router.post("/logout")
+def logout_post(request: Request, s: Session = Depends(get_session)):
+    auth.logout_user(request, s)
     return RedirectResponse("/login", status_code=303)
 
 

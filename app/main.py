@@ -12,10 +12,12 @@ from __future__ import annotations
 import contextlib
 import logging
 import threading
+import uuid
 from urllib.parse import quote
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -24,6 +26,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app import __version__, auth, db
 from app.config import BASE_DIR, settings
 from app.routers import api_annotations, api_cameras, api_frames, api_sites, api_system, ingest, pages
+from app.security import Guard
 from app.services.providers import registry
 from app.services.queue import frame_queue
 
@@ -80,6 +83,11 @@ async def lifespan(_app: FastAPI):
     db.init_db()
     with db.session() as s:
         auth.ensure_admin(s)
+    if auth.session_secret() != settings.secret_key:
+        log.warning("SECRET_KEY по умолчанию или короче 16 символов — куки подписываются случайным ключом "
+                    "процесса (сессии сбросятся при перезапуске); задайте свой SECRET_KEY в .env")
+    from app.services.ingest import recover_after_restart
+    recover_after_restart()
     if settings.workers_enabled:
         frame_queue.start()
     threading.Thread(target=_warm_up, name="providers-warmup", daemon=True).start()
@@ -90,10 +98,21 @@ async def lifespan(_app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    # Документация API — только после входа: без входа карта всех эндпоинтов не отдаётся.
     app = FastAPI(title="СтройВзор — мониторинг стройплощадки", version=__version__,
-                  docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=lifespan)
-    app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, same_site="lax",
+                  docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    app.add_middleware(SessionMiddleware, secret_key=auth.session_secret(), same_site="lax",
+                       https_only=settings.session_https_only,
                        max_age=settings.session_max_age_h * 3600, session_cookie="stroyvzor_session")
+    app.add_middleware(Guard)
+
+    @app.get("/api/openapi.json", include_in_schema=False)
+    def _openapi(_user: str = Depends(auth.require_api_user)):
+        return app.openapi()
+
+    @app.get("/api/docs", include_in_schema=False)
+    def _docs(_user: str = Depends(auth.require_page_user)):
+        return get_swagger_ui_html(openapi_url="/api/openapi.json", title="СтройВзор — API")
 
     @app.exception_handler(auth.LoginRedirect)
     async def _login_redirect(request: Request, exc: auth.LoginRedirect):
@@ -111,10 +130,18 @@ def create_app() -> FastAPI:
     async def _http(request: Request, exc: StarletteHTTPException):
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
 
+    @app.exception_handler(OverflowError)
+    async def _overflow(request: Request, exc: OverflowError):
+        # 20-значный id, год 9999 с поясом и т.п. — это неверный ввод, а не сбой сервиса
+        return JSONResponse({"detail": "число или дата вне допустимого диапазона"}, status_code=400)
+
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception):
-        log.exception("необработанная ошибка %s %s", request.method, request.url.path)
-        return JSONResponse({"detail": f"внутренняя ошибка: {type(exc).__name__}: {exc}"}, status_code=500)
+        # Текст исключения (вплоть до SQL) — только в журнал; клиенту — номер для поиска в журнале.
+        ref = uuid.uuid4().hex[:8]
+        log.exception("необработанная ошибка [%s] %s %s", ref, request.method, request.url.path)
+        return JSONResponse({"detail": f"внутренняя ошибка сервера (номер {ref}) — подробности в журнале сервиса"},
+                            status_code=500)
 
     static_dir = BASE_DIR / "app" / "static"
     if static_dir.is_dir():

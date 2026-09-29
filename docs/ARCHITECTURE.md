@@ -133,7 +133,15 @@ docs/                     ARCHITECTURE.md, methodology.md, TZ_case07.md
 6. **Моточасы.** Плановые часы по типу на этапе = число единиц (парк площадки, вводит пользователь; по умолчанию min_count из норм)
    × рабочие дни этапа × длительность смены (10 ч) × коэффициент использования (0.7). Всё редактируется.
    Факт: если единица ACTIVE в интервале между кадрами t₀→t₁, списываем min(t₁−t₀, 45 мин) на этап, идущий по плану в этот день.
-   «Полоска» = план − факт по (этап, тип).
+   Стоящая машина, которую рядом обслуживает работающая (самосвал под экскаватором/погрузчиком, автобетоносмеситель
+   у бетононасоса), — тоже работа: машино-часы КАМАЗа под погрузкой рабочие (`EquipmentEngine._served`).
+   «Полоска» = план − факт по (этап, тип). **Ожидаемое к «сейчас»** (риска на полоске, `HoursBalance.expected_hours`) —
+   от начала наблюдения: с max(начало этапа по плану, первый кадр площадки) по рабочим сменам (пн–сб, смена с 08:00
+   длиной `shift_hours`) × плановые часы / рабочие дни этапа. Что было до камер, модель А не видела — на двухдневном
+   демо «от начала этапа» вся техника «сильно отставала». `planned_observed_hours` — план на наблюдаемую часть этапа:
+   с ним сверяются модели А и Б (HOURS_SPENT_NO_PROGRESS), если камеры начали снимать посреди этапа.
+   Типы, которых детектор не различает (у YOLO нет асфальтоукладчика и гусеничного крана), помечаются
+   `detectable: false` — в UI «Не различается детектором», часы вносятся ручной поправкой.
 
 ## 6. Модель Б — детали
 
@@ -203,10 +211,10 @@ docs/                     ARCHITECTURE.md, methodology.md, TZ_case07.md
 
 | Метод и путь | Назначение / ответ |
 |---|---|
-| `GET /api/health` | `{ok, version, providers:{yolo:{ready,reason}, siglip:{…}, glm:{…}, local_vlm:{…}}}` |
+| `GET /api/health` | без входа — `{ok, version}` (healthcheck); после входа ещё `providers:{yolo:{ready,reason}, siglip:{…}, glm:{…}, local_vlm:{…}}, db, storage, queue` |
 | `GET/PUT /api/settings` | `{mode, model_a, model_b, thresholds:{…}, classes:[{key,name,tz,supported}]}` |
 | `GET/POST /api/sites`, `GET/PATCH/DELETE /api/sites/{id}` | список/создание; карточка `{id,name,verdict,lag_days,current_stage,progress,active_units,open_deviations,last_frame_at,thumb}` |
-| `GET /api/sites/{id}/overview` | всё для страницы объекта: `{site, report:{verdict,lag_days,expected_progress,actual_progress,forecast_finish,explanation[]}, stages:[{id,name,status,progress,planned_start,planned_end,actual_start,actual_end,manual,works:[{code,name}]}], equipment:[{cls,name,units,active,idle,parked,planned_hours,worked_hours,remaining_hours}], deviations:[…], cameras:[{id,name,last_frame:{id,url,captured_at},units_now}], series:{days[],expected[],actual[]}}` |
+| `GET /api/sites/{id}/overview` | всё для страницы объекта: `{site, report:{verdict,lag_days,expected_progress,actual_progress,forecast_finish,explanation[]}, stages:[{id,name,status,progress,planned_start,planned_end,actual_start,actual_end,manual,works:[{code,name}]}], equipment:[{cls,name,units,active,idle,parked,planned_hours,worked_hours,remaining_hours,expected_hours,expected_from,planned_observed_hours,detectable}], deviations:[…], cameras:[{id,name,last_frame:{id,url,captured_at},units_now}], series:{days[],expected[],actual[]}}` |
 | `GET/PUT /api/sites/{id}/plan` | `[{stage_id,name,work_codes,planned_start,planned_end,equipment,planned_hours,hours_manual}]` |
 | `POST /api/sites/{id}/plan/import` | multipart xlsx/csv → разобранный план + предупреждения |
 | `POST /api/sites/{id}/plan/demo` | демо-план под диапазон кадров |

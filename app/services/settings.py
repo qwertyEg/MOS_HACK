@@ -13,6 +13,7 @@ stage (пороги чек-листа), equipment (EquipmentConfig модели 
 from __future__ import annotations
 
 import copy
+import math
 import threading
 import time
 from typing import Any
@@ -56,6 +57,14 @@ DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
         "utilization": 0.7,
         "no_progress_days": 3.0,
     },
+}
+
+# Разумные верхние границы порогов (часы — не больше месяца окна, доли — не больше 1).
+THRESHOLD_MAX: dict[str, float] = {
+    "stage_every_h": 168.0, "stage_mask_change": 1.0, "recent_window_h": 720.0, "live_gap_days": 3650.0,
+    "yes_thr": 1.0, "no_thr": 1.0, "unsure_review_ratio": 1.0,
+    "pair_window_h": 168.0, "idle_alert_h": 720.0, "on_track_days": 365.0, "utilization": 1.0,
+    "no_progress_days": 365.0,
 }
 
 _cache: dict[str, Any] | None = None
@@ -157,10 +166,15 @@ def _validate_thresholds(patch: Any, current: dict[str, dict]) -> dict[str, dict
             if isinstance(value, bool):
                 clean[key] = value
                 continue
-            if not isinstance(value, (int, float)):
+            if not isinstance(value, (int, float)) or not math.isfinite(value):
                 raise ValueError(f"thresholds.{group}.{key}: ожидается число")
             if value < 0:
                 raise ValueError(f"thresholds.{group}.{key}: не может быть отрицательным")
+            # Без верхней границы recent_window_h = 1e300 ронял каждый пересчёт (OverflowError),
+            # а видно это было только в журнале.
+            top = THRESHOLD_MAX.get(key, 1e6)
+            if value > top:
+                raise ValueError(f"thresholds.{group}.{key}: не больше {top:g}")
             clean[key] = value
         if group == "stage":
             merged = {**current["stage"], **clean}

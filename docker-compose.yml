@@ -38,6 +38,8 @@ services:
       # Локальная VLM (Ollama/vLLM) живёт на хосте: localhost из контейнера — это сам контейнер.
       VLM_BASE_URL: ${VLM_BASE_URL:-http://host.docker.internal:11434/v1}
       DEMO_DIR: /app/datasets/demo
+      EQUIPMENT_THREADS: ${EQUIPMENT_THREADS:-2}
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-2}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -50,6 +52,9 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    # Обе локальные модели — 1–2 ГБ; кадр крупнее MAX_IMAGE_MP уменьшается при чтении,
+    # так что 4 ГБ хватает с запасом. Потоки torch — по числу ядер, выделенных контейнеру.
+    mem_limit: ${APP_MEM_LIMIT:-4g}
 
   minio:
     profiles: ["s3"]

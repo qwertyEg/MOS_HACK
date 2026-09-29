@@ -516,10 +516,17 @@ document.addEventListener("alpine:init", () => {
       const sinceH = r.last_worked_at ? (this.nowMs - SV.fmt.toDate(r.last_worked_at).getTime()) / 3600000 : null;
       const idleAlert = Number(Alpine.store("app").settings?.thresholds?.analytics?.idle_alert_h) || 4;
       const onSite = (r.active || 0) + (r.idle || 0) + (r.parked || 0);
+      const since = this.expectedSince(r);
+      // Коротко: колонка статуса узкая. Дата — если ожидание считается с начала съёмки, а не этапа.
+      const vsExpected = (x) => `${SV.fmt.pct(x)} от ожидаемого ${since ? "с " + since : "к сегодня"}`;
       let tone = "good", label = "В норме", note = "";
       if (planned <= 0) {
         tone = "neutral"; label = "Не по плану";
         note = onSite ? "на площадке, но в плане этапа не нужна" : "";
+      } else if (r.detectable === false && worked <= 0) {
+        // Детектор этот тип не различает (у YOLO нет асфальтоукладчика, гусеничного крана):
+        // «нет на площадке» было бы неправдой — часы вносятся вручную.
+        tone = "neutral"; label = "Не различается детектором"; note = "моточасы — ручной поправкой (±)";
       } else if (worked >= planned) {
         tone = "warn"; label = "Часы выработаны"; note = "проверьте, сменился ли этап";
       } else if (!onSite && worked === 0) {
@@ -527,31 +534,45 @@ document.addEventListener("alpine:init", () => {
       } else if (sinceH != null && sinceH > idleAlert && !(r.active > 0)) {
         tone = "bad"; label = "Простой"; note = `полоска не уменьшается ${SV.fmt.dur(sinceH)}`;
       } else if (expected > 0 && worked / expected < 0.6) {
-        tone = "bad"; label = "Сильно отстаёт"; note = `${SV.fmt.pct(worked / expected)} от ожидаемого к сегодня`;
+        tone = "bad"; label = "Сильно отстаёт"; note = vsExpected(worked / expected);
       } else if (expected > 0 && worked / expected < 0.9) {
-        tone = "warn"; label = "Отстаёт"; note = `${SV.fmt.pct(worked / expected)} от ожидаемого к сегодня`;
+        tone = "warn"; label = "Отстаёт"; note = vsExpected(worked / expected);
       }
       if (!note && sinceH != null) note = sinceH < 0.75 ? "работает сейчас" : `работала ${this.relNow(r.last_worked_at)}`;
       const max = Math.max(planned, worked, 1);
       return {
-        planned, worked, remaining, expected, tone, label, note,
+        planned, worked, remaining, expected, since, tone, label, note,
         // Не нужна по плану: просто отработанные часы, без «перерасхода».
         fill: planned <= 0 ? (worked > 0 ? 100 : 0) : Math.min(100, (worked / max) * 100),
         over: planned > 0 && worked > planned ? ((worked - planned) / max) * 100 : 0,
-        mark: expected > 0 ? Math.min(100, (expected / max) * 100) : null,
+        mark: expected > 0 && !(r.detectable === false && worked <= 0) ? Math.min(100, (expected / max) * 100) : null,
       };
     },
-    /* Сколько часов должно быть отработано к «сегодня»: доля прошедшего срока этапа(ов) строки. */
+    /* Сколько часов должно быть отработано к «сегодня» — от НАЧАЛА НАБЛЮДЕНИЯ (требование 5):
+       бэкенд считает по рабочим сменам с первого кадра площадки или с начала этапа, что позже
+       (expected_hours). Запасной расчёт для старого отчёта — доля срока этапа с того же момента. */
     expectedHours(r) {
+      if (r.expected_hours != null) return Number(r.expected_hours) || 0;
       const ids = r.stage_ids || (r.stage_id != null ? [r.stage_id] : []);
       const sts = ids.map((id) => this.stages.find((s) => s.id === id)).filter((s) => s && s.planned_start && s.planned_end);
       if (!sts.length) return 0;
+      const seen = this.firstFrameAt ? SV.fmt.toDate(this.firstFrameAt).getTime() : null;
       let f = 0;
       for (const st of sts) {
-        const a = SV.fmt.toDate(st.planned_start).getTime(), b = SV.fmt.toDate(st.planned_end).getTime() + DAY;
-        f = Math.max(f, Math.max(0, Math.min(1, (this.nowMs - a) / (b - a))));
+        const a0 = SV.fmt.toDate(st.planned_start).getTime(), b = SV.fmt.toDate(st.planned_end).getTime() + DAY;
+        const a = seen != null ? Math.max(a0, seen) : a0;
+        if (b > a) f = Math.max(f, Math.max(0, Math.min(1, (this.nowMs - a) / (b - a0))));
       }
       return (Number(r.planned_hours) || 0) * f;
+    },
+    /* С какой даты считается ожидание, если позже начала этапа по плану (камеры начали снимать посреди этапа). */
+    expectedSince(r) {
+      if (!r.expected_from) return "";
+      const ids = r.stage_ids || (r.stage_id != null ? [r.stage_id] : []);
+      const starts = ids.map((id) => (this.stages.find((s) => s.id === id) || {}).planned_start).filter(Boolean);
+      const from = SV.fmt.ymd(r.expected_from);
+      if (starts.length && starts.every((d) => from <= SV.fmt.ymd(d))) return "";
+      return SV.fmt.date(r.expected_from);
     },
     /* Выбор этапа для полосок: «сейчас» (сводка бэкенда по идущим этапам) или любой этап из balances. */
     get hoursStages() {
@@ -578,7 +599,8 @@ document.addEventListener("alpine:init", () => {
         .sort((a, b) => ((b.planned_hours || 0) > 0) - ((a.planned_hours || 0) > 0) || order.indexOf(a.cls) - order.indexOf(b.cls));
     },
     get hoursTotals() {
-      const rows = this.hoursRows.filter((r) => (r.planned_hours || 0) > 0);
+      // Типы, которые детектор не различает и по которым нет ручных часов, выработку не занижают.
+      const rows = this.hoursRows.filter((r) => (r.planned_hours || 0) > 0 && !(r.detectable === false && !(r.worked_hours > 0)));
       const p = rows.reduce((a, r) => a + (Number(r.planned_hours) || 0), 0);
       const w = rows.reduce((a, r) => a + Math.min(Number(r.worked_hours) || 0, Number(r.planned_hours) || 0), 0);
       return { planned: p, worked: w, ratio: p ? w / p : 0 };

@@ -6,7 +6,8 @@
              → трекер камеры (та же машина? двигалась?)
              → проекция на план + зоны
              → единицы техники (слияние камер, номер, возврат уехавшей)
-             → моточасы (интервалы с движением → ActivityInterval)
+             → моточасы (интервалы с движением → ActivityInterval; самосвал под
+               погрузкой и миксер у бетононасоса — тоже работа, см. _served)
              → статусы всех единиц площадки
 
 Движок чистый: ни БД, ни HTTP. Веб-слой хранит строки, после рестарта
@@ -32,7 +33,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from core import taxonomy
-from core.contracts import (ActivityInterval, CameraGeometry, Detection, FrameInfo, PlanItem,
+from core.contracts import (Activity, ActivityInterval, CameraGeometry, Detection, FrameInfo, PlanItem,
                             UnitState, UnitStatus, Zone)
 
 from . import fusion, hours as hours_mod, postprocess
@@ -240,9 +241,10 @@ class EquipmentEngine:
 
         intervals: list[ActivityInterval] = []
         for k, s in enumerate(steps):
-            u = self._units[s.track.unit_id]
-            self._observe(u, s, cam, t, parking[k])
-            intervals += self._credit(u, s, frame, plan)
+            self._observe(self._units[s.track.unit_id], s, cam, t, parking[k])
+        served = self._served(steps)
+        for k, s in enumerate(steps):
+            intervals += self._credit(self._units[s.track.unit_id], s, frame, plan, served.get(k))
 
         now = max(self._cam_last.values())
         for u in self._units.values():
@@ -634,13 +636,40 @@ class EquipmentEngine:
     # моточасы
     # ------------------------------------------------------------------
 
-    def _credit(self, u: _Unit, s: TrackStep, frame: FrameInfo, plan: list[PlanItem]) -> list[ActivityInterval]:
+    def _served(self, steps: list[TrackStep]) -> dict[int, str]:
+        """Стоящие машины, которые в этом кадре обслуживает работающая: {индекс шага: кто}.
+
+        Самосвал под экскаватором и автобетоносмеситель у бетононасоса стоят, но
+        работают: машино-часы КАМАЗа под погрузкой — рабочие (путевой лист, табель).
+        По одному движению рамки такой самосвал за двое суток погрузки получал 5 ч
+        из 40 (карьер в Кирове) и «сильно отставал». Засчитываем, если рядом (зазор
+        меньше половины большей рамки) на том же кадре работает машина-партнёр."""
+        units = [self._units[s.track.unit_id] for s in steps]
+        out: dict[int, str] = {}
+        for k, s in enumerate(steps):
+            partners = SERVED_BY.get(units[k].state.cls)
+            if not partners or not s.judged or s.detection.moved_since_prev:
+                continue
+            for j, o in enumerate(steps):
+                if j != k and units[j].state.cls in partners and o.judged and o.detection.moved_since_prev \
+                        and _near(s.detection.bbox, o.detection.bbox):
+                    out[k] = units[j].state.cls
+                    break
+        return out
+
+    def _credit(self, u: _Unit, s: TrackStep, frame: FrameInfo, plan: list[PlanItem],
+                served_by: str | None = None) -> list[ActivityInterval]:
         """Интервал с движением → строка журнала. «Работает» — движение на
         `confirm_moves` интервалах подряд: единичный сдвиг (человек прошёл
-        перед машиной, её разок переставили) работой не считается."""
+        перед машиной, её разок переставили) работой не считается. Стоящая
+        машина, которую обслуживает работающая (`served_by`, см. _served), —
+        тоже работа: самосвал под погрузкой."""
         cfg = self.cfg
         tr, d = s.track, s.detection
-        if not s.judged or not d.moved_since_prev or s.prev_seen is None:
+        if served_by and s.judged and not d.moved_since_prev:
+            d.activity = Activity.WORKING
+            d.extra["served_by"] = served_by
+        if not s.judged or not (d.moved_since_prev or served_by) or s.prev_seen is None:
             tr.move_streak = 0
             tr.pending.clear()
             return []
@@ -682,6 +711,23 @@ def _label(cls: str, ordinal: int) -> str:
 def _ordinal_from_label(label: str) -> int | None:
     m = re.search(r"№\s*(\d+)", label or "")
     return int(m.group(1)) if m else None
+
+
+# Кто кого обслуживает стоя: погрузка самосвала, выгрузка бетона в насос (см. EquipmentEngine._served).
+SERVED_BY: dict[str, tuple[str, ...]] = {
+    "dump_truck": ("excavator", "backhoe_loader", "wheel_loader"),
+    "concrete_mixer": ("concrete_pump",),
+}
+
+
+def _near(a, b) -> bool:
+    """Рамки рядом: зазор по обеим осям не больше половины большей стороны рамок."""
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    gap_x = max(0.0, max(ax, bx) - min(ax + aw, bx + bw))
+    gap_y = max(0.0, max(ay, by) - min(ay + ah, by + bh))
+    reach = 0.5 * max(aw, ah, bw, bh)
+    return gap_x <= reach and gap_y <= reach
 
 
 def _dist(a, b) -> float:

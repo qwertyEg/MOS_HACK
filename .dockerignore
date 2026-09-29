@@ -1,0 +1,22 @@
+# Контекст сборки — только код: без секретов (.env), данных, весов и рабочих копий агентов.
+# Было ~450 МБ контекста (datasets 358 МБ, *.avi, .claude, .git) и .env внутри.
+.env
+.env.*
+!.env.example
+.git
+.claude
+.venv
+var
+datasets
+models/*.pt
+models/*.onnx
+models/*.engine
+models/hf
+**/__pycache__
+**/*.pyc
+.pytest_cache
+*.avi
+*.mp4
+*.mov
+tests/ui/fixtures
+materials

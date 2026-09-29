@@ -164,7 +164,8 @@ def _send(req: StartRequest, path: Path, when: dt.datetime, seq: int) -> None:
     with path.open("rb") as fh:
         resp = requests.post(
             req.ingest_url,
-            headers={"X-Camera-Key": req.api_key},
+            # X-Camera-Id — сервис проверит ключ до чтения тела кадра
+            headers={"X-Camera-Key": req.api_key, "X-Camera-Id": str(req.camera_id)},
             files={"file": (path.name, fh, "image/jpeg")},
             data={"camera_id": str(req.camera_id),
                   "captured_at": when.isoformat(),

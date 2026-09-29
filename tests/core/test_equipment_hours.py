@@ -145,3 +145,72 @@ def test_interval_set_matches_brute_force():
 def test_interval_set_floor_blocks_everything_before_restart():
     s = hours.IntervalSet(floor=T0)
     assert s.add(T0 - dt.timedelta(hours=1), T0 + dt.timedelta(minutes=10)) == [(T0, T0 + dt.timedelta(minutes=10))]
+
+
+# --------------------------------------------------------------------------
+# ожидаемое к «сейчас» — от начала наблюдения (требование 5)
+# --------------------------------------------------------------------------
+
+MSK = dt.timezone(dt.timedelta(hours=3))
+
+
+def msk(y, mo, d, h=0, mi=0):
+    return dt.datetime(y, mo, d, h, mi, tzinfo=MSK)
+
+
+def test_shift_fraction_counts_working_shifts_only():
+    kw = {"tz": "Europe/Moscow", "shift_start_h": 8.0, "shift_hours": 10.0}
+    # понедельник 20.04.2015: смена 08–18 целиком, ночь не в счёт
+    assert hours.shift_fraction(msk(2015, 4, 20, 6), msk(2015, 4, 21, 6), **kw) == pytest.approx(1.0)
+    # камера начала в 13:00 — половина смены
+    assert hours.shift_fraction(msk(2015, 4, 20, 13), msk(2015, 4, 20, 23), **kw) == pytest.approx(0.5)
+    # воскресенье 26.04 — выходной
+    assert hours.shift_fraction(msk(2015, 4, 26, 8), msk(2015, 4, 26, 18), **kw) == 0.0
+    # неделя пн–вс = 6 смен, как в знаменателе плановых часов
+    assert hours.shift_fraction(msk(2015, 4, 20), msk(2015, 4, 27), **kw) == pytest.approx(6.0)
+    assert hours.shift_fraction(msk(2015, 4, 21), msk(2015, 4, 20), **kw) == 0.0
+
+
+def test_expected_counts_from_first_frame_not_from_stage_start():
+    """Песчаный карьер (Киров): этап 3 по плану 13–30.04.2015, камера снимает 20.04 08:01 – 21.04 15:24.
+    От начала этапа ожидалось бы ~54 ч, и экскаватор с 15.5 ч был бы «сильно отстаёт».
+    От начала съёмки — 1.74 смены × 7 ч = 12.2 ч: экскаватор в норме."""
+    plan = [PlanItem(3, dt.date(2015, 4, 13), dt.date(2015, 4, 30),
+                     planned_hours={"excavator": 112.0, "dump_truck": 224.0})]
+    first, now = msk(2015, 4, 20, 8, 1), msk(2015, 4, 21, 15, 24)
+    rows = {b.cls: b for b in hours.balances(plan, [], now=now, observed_from=first)}
+    ex = rows["excavator"]
+    assert ex.expected_from == first.astimezone(UTC)
+    shifts = (18 - (8 + 1 / 60)) / 10 + (15.4 - 8) / 10
+    assert ex.expected_hours == pytest.approx(112.0 / 16 * shifts, abs=0.05)   # 16 рабочих дней этапа
+    assert 12.0 < ex.expected_hours < 12.4
+    # на наблюдаемую часть этапа (20–30.04, 10 рабочих дней) план отводит 70 ч
+    assert ex.planned_observed_hours == pytest.approx(70.0, abs=0.05)
+    assert rows["dump_truck"].expected_hours == pytest.approx(2 * ex.expected_hours, abs=0.05)
+    # без первого кадра — от начала этапа, как раньше: 6 смен первой недели + 1.74
+    legacy = {b.cls: b for b in hours.balances(plan, [], now=now)}["excavator"]
+    assert legacy.expected_hours == pytest.approx(7.0 * (6 + shifts), abs=0.05)
+    assert legacy.planned_observed_hours == pytest.approx(112.0)
+
+
+def test_expected_equals_plan_after_stage_end_and_zero_before_start():
+    plan = [PlanItem(3, dt.date(2015, 4, 13), dt.date(2015, 4, 18), planned_hours={"excavator": 42.0})]
+    after = {b.cls: b for b in hours.balances(plan, [], now=msk(2015, 5, 10), observed_from=msk(2015, 4, 1))}
+    assert after["excavator"].expected_hours == pytest.approx(42.0)
+    before = {b.cls: b for b in hours.balances(plan, [], now=msk(2015, 4, 10), observed_from=msk(2015, 4, 1))}
+    assert before["excavator"].expected_hours == 0.0
+    # камеры повесили после конца этапа — этап прошёл до них: ни ожидания, ни плана на период съёмки
+    late = {b.cls: b for b in hours.balances(plan, [], now=msk(2015, 5, 10), observed_from=msk(2015, 4, 25))}
+    assert late["excavator"].expected_hours == 0.0 and late["excavator"].planned_observed_hours == 0.0
+
+
+def test_expected_absent_without_now_or_dates():
+    plan = [PlanItem(3, None, None, planned_hours={"excavator": 42.0}),
+            PlanItem(4, dt.date(2015, 4, 13), dt.date(2015, 4, 18), planned_hours={"tower_crane": 10.0})]
+    rows = {b.cls: b for b in hours.balances(plan, [iv(T0, 30, cls="bulldozer")])}
+    assert rows["excavator"].expected_hours is None
+    assert rows["tower_crane"].expected_hours is None       # без «сейчас» не считаем
+    rows = {b.cls: b for b in hours.balances(plan, [iv(T0, 30, cls="bulldozer")], now=msk(2015, 4, 15))}
+    assert rows["excavator"].expected_hours is None         # у этапа нет дат
+    assert rows["bulldozer"].expected_hours is None         # не по плану
+    assert rows["tower_crane"].expected_hours == pytest.approx(10.0 / 6 * 2, abs=0.01)

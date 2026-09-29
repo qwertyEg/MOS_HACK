@@ -378,6 +378,21 @@ def test_hours_no_progress_levels_and_negatives():
     assert not of_type(rules.evaluate(fresh), DT.HOURS_SPENT_NO_PROGRESS)
 
 
+def test_hours_no_progress_counts_against_observed_part_of_stage():
+    """Камеры начали снимать посреди этапа: до первого кадра модель А ничего не списала.
+    Сверка идёт с планом на наблюдаемую часть этапа (100 ч), а не на весь этап (160 ч)."""
+    since = NOW - 10 * DAY
+    seen = HoursBalance(3, "excavator", 160.0, 110.0, NOW, expected_hours=60.0, expected_from=since,
+                        planned_observed_hours=100.0)
+    d = of_type(rules.evaluate(ctx_stage(3, balances=[seen])), DT.HOURS_SPENT_NO_PROGRESS)
+    assert len(d) == 1 and d[0].data["ratio"] == pytest.approx(1.1)
+    assert "110 из 100 ч — на период съёмки с" in d[0].message
+    # с начала этапа — прежняя сверка со всем планом этапа
+    whole = HoursBalance(3, "excavator", 160.0, 110.0, NOW, expected_hours=60.0, expected_from=since,
+                         planned_observed_hours=160.0)
+    assert not of_type(rules.evaluate(ctx_stage(3, balances=[whole])), DT.HOURS_SPENT_NO_PROGRESS)
+
+
 def test_schedule_details():
     late = {d.stage_id: d for d in of_type(rules.evaluate(case_late_start()), DT.STAGE_LATE_START)}
     assert late[4].data["days"] == 10 and "не начат" in late[4].title

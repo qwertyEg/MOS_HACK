@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     admin_login: str = "admin"
     admin_password: str = "admin"
     session_max_age_h: int = 72
+    session_https_only: bool = False      # true за TLS-прокси: кука сессии с флагом Secure
+    login_max_failures: int = 5           # неверных паролей подряд с одного адреса на логин…
+    login_lockout_s: int = 60             # …и потом пауза: 429 без проверки пароля
+    max_body_mb: float = 8.0              # тело JSON (план, маска кистью…); загрузки — свои лимиты ниже
+    camera_allow_loopback: bool = True    # камера-поток на 127.0.0.1 (simcam на той же машине); в сети — false
+    max_frame_mb: float = 64.0            # один кадр: /api/ingest, /api/analyze, /api/detect, импорт плана
 
     # --- режим по умолчанию (пока в таблице settings ничего не сохранено) ---
     default_mode: Literal["local", "external", "hybrid"] = "local"
@@ -75,6 +81,8 @@ class Settings(BaseSettings):
     recover_scan_s: float = 30.0          # как часто подбирать «pending»-кадры, записанные мимо очереди
     provider_status_ttl_s: float = 30.0   # кэш готовности провайдеров (ready() локальной VLM ходит в сеть)
     max_upload_mb: int = 1024
+    max_image_mp: float = 50.0            # больше — JPEG уменьшается при чтении, прочее отклоняется (бомбы PNG)
+    zip_max_unpacked_mb: int = 4096       # распакованный объём zip (zip-бомба)
     preview_width: int = 640
     video_max_frames: int = 3000
     zip_max_members: int = 20000
@@ -112,3 +120,8 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Страховка OpenCV от «бомб» в форматах, чей заголовок не читает PIL: свой лимит пикселей
+# OpenCV читает из окружения при первом декодировании (по умолчанию ~1 Гп = 3 ГБ памяти).
+# Вдвое выше нашего лимита — JPEG, уменьшенный при чтении, проходит.
+os.environ.setdefault("OPENCV_IO_MAX_IMAGE_PIXELS", str(int(settings.max_image_mp * 2_000_000)))

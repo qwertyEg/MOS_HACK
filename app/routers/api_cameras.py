@@ -8,6 +8,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -199,8 +200,10 @@ async def upload(camera_id: int, request: Request, s: Session = Depends(get_sess
         raise bad("не передано ни одного файла (поле files)")
     unsupported = [f.filename for f in uploads if not ingest.classify(f.filename or "")]
     if len(unsupported) == len(uploads):
+        heic = any(Path(n or "").suffix.lower() in (".heic", ".heif") for n in unsupported)
         raise bad("формат не поддерживается: " + ", ".join(unsupported[:10]) +
-                  f". Поддерживаются: {', '.join(sorted(ingest.SUPPORTED_EXT))}")
+                  f". Поддерживаются: {', '.join(sorted(ingest.SUPPORTED_EXT))}" +
+                  (". Снимки iPhone (HEIC) сохраните как JPEG" if heic else ""))
 
     def form_num(key: str, cast, lo, hi, default):
         raw = form.get(key)
@@ -253,7 +256,7 @@ async def upload(camera_id: int, request: Request, s: Session = Depends(get_sess
         raise
     job = ingest.new_job(s, "upload", cam, message=f"{len(uploads)} файл(ов)")
     if unsupported:
-        job.errors = [f"{n}: формат не поддерживается, пропущен" for n in unsupported]
+        job.errors = [f"{n}: {ingest.unsupported_reason(n)}" for n in unsupported]
         job.skipped = len(unsupported)
         s.commit()
     ingest.start_job(job.id, cam.id, paths, params, cleanup_dir=tmp)
@@ -394,19 +397,64 @@ def mask_preview(camera_id: int, frame: int, s: Session = Depends(get_session)) 
 # камера-поток (simcam Дениса): сообщить адрес приёмника и включить съёмку
 # --------------------------------------------------------------------------
 
-def _remote(cam: Camera, path: str, method: str = "get", **kw):
+# Что из ответа камеры-потока (simcam) отдаём клиенту. Тело чужого ответа целиком не
+# пересылаем: иначе source_uri = http://127.0.0.1:<порт>/… превращал сервис в прокси к
+# внутренним сервисам сервера (SSRF с чтением ответа).
+_CAMERA_FIELDS = ("ok", "name", "frames", "interval", "loop", "start_date", "first_capture", "last_capture",
+                  "running", "sent", "failed", "finished", "last_error", "last_sent_at", "error")
+
+
+def _camera_url(uri: str) -> str:
+    """Адрес камеры: только http(s) и не служебные сети (метаданные облака, link-local,
+    multicast). Loopback разрешён настройкой camera_allow_loopback (simcam на той же
+    машине — демо), кроме порта самого сервиса."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(uri)
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:
+        raise bad("source_uri: неверный адрес") from None
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise bad("source_uri: нужен адрес вида http://10.0.0.5:8001")
+    try:
+        infos = socket.getaddrinfo(parts.hostname, port, proto=socket.IPPROTO_TCP)
+    except (socket.gaierror, UnicodeError):
+        raise HTTPException(502, f"камера: имя «{parts.hostname}» не разрешается") from None
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved or \
+                (ip.version == 4 and ip in ipaddress.ip_network("100.64.0.0/10")):
+            raise bad(f"source_uri: адрес {ip} — служебная сеть, камерой быть не может")
+        if ip.is_loopback and (not settings.camera_allow_loopback or port == settings.port):
+            raise bad("source_uri: локальный адрес сервера не может быть камерой")
+    return uri.rstrip("/")
+
+
+def _remote(cam: Camera, path: str, method: str = "get", **kw) -> dict:
     import requests
 
     if not cam.source_uri:
         raise bad("у камеры не задан адрес (source_uri)")
-    url = cam.source_uri.rstrip("/") + path
+    url = _camera_url(cam.source_uri) + path
     try:
-        resp = getattr(requests, method)(url, timeout=5, proxies=netutil.proxies_for(url), **kw)
+        resp = getattr(requests, method)(url, timeout=5, proxies=netutil.proxies_for(url),
+                                         allow_redirects=False, **kw)
     except requests.RequestException as exc:
-        raise HTTPException(502, f"камера не отвечает ({url}): {exc.__class__.__name__}") from None
-    if resp.status_code >= 400:
-        raise HTTPException(502, f"камера ответила {resp.status_code}: {resp.text[:200]}")
-    return resp
+        raise HTTPException(502, f"камера не отвечает: {exc.__class__.__name__}") from None
+    if resp.status_code >= 400 or 300 <= resp.status_code < 400:
+        raise HTTPException(502, f"камера ответила {resp.status_code}")
+    try:
+        data = resp.json()
+    except ValueError:
+        raise HTTPException(502, "камера ответила не JSON — это не камера-поток (simcam)?") from None
+    if not isinstance(data, dict):
+        raise HTTPException(502, "камера ответила не объектом JSON")
+    state = data.get("state") if isinstance(data.get("state"), dict) else {}
+    merged = {**state, **data}
+    return {k: merged[k] for k in _CAMERA_FIELDS if k in merged and isinstance(merged[k], (str, int, float, bool))}
 
 
 @router.post("/cameras/{camera_id}/connect")
@@ -421,17 +469,18 @@ async def connect(camera_id: int, request: Request, s: Session = Depends(get_ses
                "api_key": cam.ingest_key, "restart": bool(body.get("restart", False))}
     if body.get("interval"):
         payload["interval"] = num_field(body, "interval", lo=0.1, hi=86400)
-    resp = _remote(cam, "/api/start", "post", json=payload)
-    return {"ok": True, "camera": resp.json()}
+    # Сеть с таймаутом 5 с — в пуле потоков: цикл событий не замирает для всех пользователей.
+    camera = await run_in_threadpool(_remote, cam, "/api/start", "post", json=payload)
+    return {"ok": True, "camera": camera}
 
 
 @router.post("/cameras/{camera_id}/disconnect")
 def disconnect(camera_id: int, s: Session = Depends(get_session)) -> dict:
     cam = get_or_404(s, Camera, camera_id, "камера")
-    return {"ok": True, "camera": _remote(cam, "/api/stop", "post").json()}
+    return {"ok": True, "camera": _remote(cam, "/api/stop", "post")}
 
 
 @router.get("/cameras/{camera_id}/stream")
 def stream_info(camera_id: int, s: Session = Depends(get_session)) -> dict:
     cam = get_or_404(s, Camera, camera_id, "камера")
-    return _remote(cam, "/api/info").json()
+    return _remote(cam, "/api/info")

@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 
 _STOP = object()
 _seq = itertools.count()
+MAX_CRASHES = 2           # столько раз процесс умер на кадре — кадр больше не берём (см. reset_stale)
 
 
 class _CameraWorker(threading.Thread):
@@ -347,12 +348,26 @@ class FrameQueue:
         return count
 
     def reset_stale(self) -> int:
-        """Кадры, застрявшие в `processing` после падения процесса, — снова в работу."""
+        """Кадры, застрявшие в `processing` после падения процесса, — снова в работу.
+
+        Кадр, на котором процесс падал уже MAX_CRASHES раз (нехватка памяти на
+        «бомбе», сбой библиотеки), в работу не возвращается: иначе сервис под
+        mos-keeper / `restart: unless-stopped` падал бы на нём бесконечно."""
+        n = 0
         with db.session() as s:
-            res = s.execute(Frame.__table__.update().where(Frame.status == "processing")
-                            .values(status="pending"))
+            for fr in s.scalars(select(Frame).where(Frame.status == "processing")):
+                crashes = int((fr.meta or {}).get("crashes", 0)) + 1
+                fr.meta = {**(fr.meta or {}), "crashes": crashes}
+                if crashes >= MAX_CRASHES:
+                    fr.status = "error"
+                    fr.note = (f"обработка кадра {crashes} раза обрывалась падением сервиса (память?) — "
+                               "кадр пропущен; повторить: POST /api/sites/{id}/retry-errors")
+                    log.error("кадр %s ронял обработку %s раза — помечен ошибкой", fr.id, crashes)
+                else:
+                    fr.status = "pending"
+                    n += 1
             s.commit()
-            return res.rowcount or 0
+        return n
 
     def _supervise(self) -> None:
         # Отложенные кадры проверяем сразу, но в этом потоке: проверка готовности

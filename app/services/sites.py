@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import math
 from typing import Any
 
 from sqlalchemy import delete, select, update
@@ -26,9 +27,13 @@ STAGE_STATUSES = tuple(s.value for s in c.StageStatus)
 
 def _date(value: Any, field: str) -> dt.date | None:
     try:
-        return adapters._date(value)
+        got = adapters._date(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{field}: дата «{value}» не разобрана, нужен формат ГГГГ-ММ-ДД") from exc
+    # 9999-12-31 + 1 день и 0001-01-01 в поясе площадки переполняют datetime в пересчёте
+    if got is not None and not 1990 <= got.year <= 2100:
+        raise ValueError(f"{field}: дата «{value}» вне допустимого диапазона (1990–2100 годы)")
+    return got
 
 
 def _check_equipment(value: Any, field: str, kind: type = int) -> dict:
@@ -41,8 +46,8 @@ def _check_equipment(value: Any, field: str, kind: type = int) -> dict:
     for cls, n in value.items():
         if cls not in known:
             raise ValueError(f"{field}: неизвестный тип техники «{cls}» (см. /api/settings → classes)")
-        if isinstance(n, bool) or not isinstance(n, (int, float)) or n < 0:
-            raise ValueError(f"{field}.{cls}: ожидается неотрицательное число")
+        if isinstance(n, bool) or not isinstance(n, (int, float)) or not math.isfinite(n) or n < 0 or n > 1e6:
+            raise ValueError(f"{field}.{cls}: ожидается неотрицательное число (до миллиона)")
         if kind is int and int(n) != n:
             raise ValueError(f"{field}.{cls}: количество техники — целое число")
         out[cls] = kind(n)
@@ -179,13 +184,14 @@ def add_hours_correction(s: Session, site: Site, payload: Any) -> ActivityInterv
     if not isinstance(payload, dict):
         raise ValueError("ожидается JSON-объект {cls, hours, stage_id?, at?, note?}")
     cls = payload.get("cls")
-    if cls not in taxonomy.equipment():
+    if not isinstance(cls, str) or cls not in taxonomy.equipment():
         raise ValueError(f"cls: неизвестный тип техники «{cls}»")
     hours = payload.get("hours")
-    if isinstance(hours, bool) or not isinstance(hours, (int, float)) or hours == 0 or abs(hours) > 10000:
+    if (isinstance(hours, bool) or not isinstance(hours, (int, float)) or not math.isfinite(hours)
+            or hours == 0 or abs(hours) > 10000):
         raise ValueError("hours: ненулевое число часов (можно отрицательное), по модулю до 10000")
     stage_id = payload.get("stage_id")
-    if stage_id is not None and stage_id not in taxonomy.stages():
+    if stage_id is not None and (not isinstance(stage_id, int) or stage_id not in taxonomy.stages()):
         raise ValueError(f"stage_id: этапа {stage_id} нет в справочнике")
     at = payload.get("at")
     when = dt.datetime.now(dt.UTC)
@@ -194,6 +200,8 @@ def add_hours_correction(s: Session, site: Site, payload: Any) -> ActivityInterv
             parsed = dt.datetime.fromisoformat(str(at).replace("Z", "+00:00"))
         except ValueError:
             raise ValueError("at: время в ISO 8601") from None
+        if not 1990 <= parsed.year <= 2100:
+            raise ValueError("at: время вне допустимого диапазона (1990–2100 годы)")
         when = adapters.to_utc(parsed, adapters.site_tz(site))
     row = ActivityInterval(unit_id=None, site_id=site.id, cls=cls, stage_id=stage_id, start=when, end=when,
                            hours=float(hours), frame_ids=[], manual=True,

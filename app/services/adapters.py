@@ -370,18 +370,41 @@ def observation_row(res: c.ChecklistResult, frame_id: int, provider: str) -> m.S
     )
 
 
-def observations(s: Session, site_id: int, preferred: str | None) -> list[c.StageObservation]:
-    """Наблюдения площадки по времени. Провайдера не смешиваем: у SigLIP и GLM
-    разная калибровка «да/нет», хронология по смеси скакала бы."""
+def observations(s: Session, site_id: int, preferred: str | None,
+                 sources: dict[str, int] | None = None) -> list[c.StageObservation]:
+    """Наблюдения площадки по времени. Провайдера в один момент не смешиваем: у SigLIP
+    и GLM разная калибровка «да/нет», хронология по смеси скакала бы.
+
+    Но и историю при переключении режима не выбрасываем: раньше первый же ответ
+    нового провайдера заменял многолетнюю хронологию одним наблюдением. Теперь
+    сшиваем: до первого ответа нового провайдера — прежний (самый частый из
+    остальных), с него — только новый. Полная замена — переанализом объекта.
+    `sources` получает, сколько наблюдений какого провайдера пошло в хронологию."""
     rows = s.execute(
         select(m.StageObservation, m.Frame).join(m.Frame, m.Frame.id == m.StageObservation.frame_id)
         .join(m.Camera, m.Camera.id == m.Frame.camera_id)
         .where(m.Camera.site_id == site_id).order_by(m.Frame.captured_at, m.StageObservation.id)).all()
+    if not rows:
+        return []
     providers = {o.provider for o, _ in rows}
-    use = preferred if preferred in providers else (rows[-1][0].provider if rows else None)
+    use = preferred if preferred in providers else rows[-1][0].provider
+    mine = [(o, fr) for o, fr in rows if o.provider == use]
+    start = mine[0][1].captured_at
+    before: dict[str, int] = defaultdict(int)
+    for o, fr in rows:
+        if o.provider != use and fr.captured_at < start:
+            before[o.provider] += 1
+    older = []
+    if before:
+        prev = max(before, key=before.get)
+        older = [(o, fr) for o, fr in rows if o.provider == prev and fr.captured_at < start]
+    picked = older + mine
+    if sources is not None:
+        for o, _fr in picked:
+            sources[o.provider] = sources.get(o.provider, 0) + 1
     return [c.StageObservation(frame_id=fr.id, camera_id=fr.camera_id, captured_at=fr.captured_at,
                                result=checklist_result(o))
-            for o, fr in rows if o.provider == use]
+            for o, fr in picked]
 
 
 def stage_state(row: m.StageState) -> c.StageState:

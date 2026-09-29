@@ -15,6 +15,15 @@ min(t₁ − t₀, 45 мин): кадры идут раз в 20–30 минут,
 интервалы засчитываются наравне с дневными.
 
 «Временная полоска» (HoursBalance) = план − факт по (этап, тип техники).
+
+Ожидаемое к «сейчас» (риска на полоске) считается от НАЧАЛА НАБЛЮДЕНИЯ —
+первого кадра площадки, — если камеры начали снимать после начала этапа по
+плану. Камера не видела, что было до неё: на двухдневном демо (или на объекте,
+где камеру повесили посреди котлована) ожидание «от начала этапа» делало всю
+технику «сильно отстающей». Ожидание растёт по рабочему времени: доля
+прошедших смен (рабочие дни пн–сб, смена shift_hours с shift_start_h по часам
+площадки) × плановые часы / рабочих дней этапа — тот же знаменатель, что у
+плановых часов, поэтому к концу этапа ожидание ровно равно плану.
 """
 from __future__ import annotations
 
@@ -149,10 +158,73 @@ def stage_for(plan: list[PlanItem], cls: str, day: dt.date) -> int | None:
     return best.stage_id
 
 
+def _aware(t: dt.datetime) -> dt.datetime:
+    return t if t.tzinfo is not None else t.replace(tzinfo=dt.timezone.utc)
+
+
+def shift_fraction(start: dt.datetime, end: dt.datetime, *, tz: str | dt.tzinfo = DEFAULT_TZ,
+                   shift_start_h: float = 8.0, shift_hours: float = 10.0,
+                   workdays: Iterable[int] = (0, 1, 2, 3, 4, 5)) -> float:
+    """Сколько рабочих смен (в долях) уложилось в [start, end] по часам площадки.
+
+    Рабочий день даёт 1.0, если смена прошла целиком: смена — shift_hours часов
+    с shift_start_h (длинная смена сдвигается к полуночи, чтобы уместиться в
+    сутки). Выходные — 0. Концы отрезка режут смену пропорционально: камера,
+    начавшая снимать в 13:00, видит половину десятичасовой смены с 08:00.
+    """
+    zone = local_tz(tz) if isinstance(tz, str) else tz
+    start, end = _aware(start).astimezone(zone), _aware(end).astimezone(zone)
+    if end <= start:
+        return 0.0
+    length = max(0.25, min(24.0, float(shift_hours)))
+    s0 = min(max(0.0, float(shift_start_h)), 24.0 - length)
+    days = set(workdays)
+
+    def part(day: dt.date, lo: dt.datetime | None, hi: dt.datetime | None) -> float:
+        if day.weekday() not in days:
+            return 0.0
+        base = dt.datetime.combine(day, dt.time(0), tzinfo=zone)
+        a = base + dt.timedelta(hours=s0)
+        b = a + dt.timedelta(hours=length)
+        a = max(a, lo) if lo is not None else a
+        b = min(b, hi) if hi is not None else b
+        return max(0.0, (b - a).total_seconds() / 3600.0) / length
+
+    d0, d1 = start.date(), end.date()
+    if d0 == d1:
+        return part(d0, start, end)
+    total = part(d0, start, None) + part(d1, None, end)
+    if (d1 - d0).days > 1:
+        total += workdays_in(d0 + dt.timedelta(days=1), d1 - dt.timedelta(days=1), days)
+    return total
+
+
+def _expected(item: PlanItem, planned: float, *, observed_from: dt.datetime | None, now: dt.datetime | None,
+              tz: str, shift_start_h: float, shift_hours: float,
+              workdays: tuple[int, ...]) -> tuple[float, float, dt.datetime] | None:
+    """(ожидаемое к now, план на наблюдаемую часть этапа, с какого момента) — или None."""
+    if not (item.planned_start and item.planned_end) or planned <= 0 or now is None:
+        return None
+    total = workdays_in(item.planned_start, item.planned_end, workdays)
+    if total <= 0:
+        return None
+    zone = local_tz(tz)
+    stage_start = dt.datetime.combine(item.planned_start, dt.time(0), tzinfo=zone)
+    stage_end = dt.datetime.combine(item.planned_end + dt.timedelta(days=1), dt.time(0), tzinfo=zone)
+    since = max(stage_start, _aware(observed_from)) if observed_from is not None else stage_start
+    kw = {"tz": zone, "shift_start_h": shift_start_h, "shift_hours": shift_hours, "workdays": workdays}
+    until = min(_aware(now), stage_end)
+    elapsed = shift_fraction(since, until, **kw) if until > since else 0.0
+    ahead = shift_fraction(since, stage_end, **kw) if stage_end > since else 0.0
+    return planned * elapsed / total, planned * ahead / total, since
+
+
 def balances(plan: list[PlanItem], intervals: list[ActivityInterval], *,
              fleet: Mapping[str, int] | None = None, tz: str = DEFAULT_TZ,
              shift_hours: float = 10.0, utilization: float = 0.7,
-             workdays: Iterable[int] = (0, 1, 2, 3, 4, 5)) -> list[HoursBalance]:
+             workdays: Iterable[int] = (0, 1, 2, 3, 4, 5),
+             observed_from: dt.datetime | None = None, now: dt.datetime | None = None,
+             shift_start_h: float = 8.0) -> list[HoursBalance]:
     """«Полоски» по (этап, тип).
 
     Плановые часы: из строки плана (их туда кладёт веб-слой — авто или
@@ -160,15 +232,28 @@ def balances(plan: list[PlanItem], intervals: list[ActivityInterval], *,
     Этап интервала выводится из ТЕКУЩЕГО плана по дате интервала: если
     пользователь сдвинул даты этапов, полоски пересчитаются, а не останутся
     привязанными к старому плану. Без плана — этап, записанный в интервале.
+
+    `now` — «сейчас» аналитики, `observed_from` — первый кадр площадки: с ними
+    каждая полоска получает ожидаемое к «сейчас» от начала наблюдения
+    (см. шапку модуля). Без `now` ожидание не считается.
     """
+    wd = tuple(workdays)
     planned: dict[tuple[int | None, str], float] = defaultdict(float)
+    expected: dict[tuple[int | None, str], list] = {}
     for item in plan:
         if item.planned_hours and fleet is None:
             ph = {cls: float(h) for cls, h in item.planned_hours.items()}
         else:
-            ph = planned_hours([item], fleet or {}, shift_hours, utilization, workdays).get(item.stage_id, {})
+            ph = planned_hours([item], fleet or {}, shift_hours, utilization, wd).get(item.stage_id, {})
         for cls, h in ph.items():
-            planned[(item.stage_id, cls)] += h
+            key = (item.stage_id, cls)
+            planned[key] += h
+            got = _expected(item, h, observed_from=observed_from, now=now, tz=tz, shift_start_h=shift_start_h,
+                            shift_hours=shift_hours, workdays=wd)
+            if got is not None:
+                prev = expected.get(key)
+                expected[key] = [got[0], got[1], got[2]] if prev is None else \
+                    [prev[0] + got[0], prev[1] + got[1], min(prev[2], got[2])]
 
     worked: dict[tuple[int | None, str], float] = defaultdict(float)
     last: dict[tuple[int | None, str], dt.datetime] = {}
@@ -183,9 +268,16 @@ def balances(plan: list[PlanItem], intervals: list[ActivityInterval], *,
     order = {k: i for i, k in enumerate(taxonomy.equipment())}
     keys = sorted(set(planned) | set(worked),
                   key=lambda k: (k[0] is None, k[0] or 0, order.get(k[1], len(order)), k[1]))
-    return [HoursBalance(stage_id=k[0], cls=k[1], planned_hours=round(planned.get(k, 0.0), 2),
-                         worked_hours=worked.get(k, 0.0), last_worked_at=last.get(k))
-            for k in keys]
+    out = []
+    for k in keys:
+        exp = expected.get(k)
+        out.append(HoursBalance(
+            stage_id=k[0], cls=k[1], planned_hours=round(planned.get(k, 0.0), 2),
+            worked_hours=worked.get(k, 0.0), last_worked_at=last.get(k),
+            expected_hours=round(exp[0], 2) if exp else None,
+            expected_from=exp[2].astimezone(dt.timezone.utc) if exp else None,
+            planned_observed_hours=round(exp[1], 2) if exp else None))
+    return out
 
 
 def _without_overlaps(intervals: list[ActivityInterval]):

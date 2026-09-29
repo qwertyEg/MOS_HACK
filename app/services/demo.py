@@ -160,6 +160,12 @@ def seed(s: Session, root: Path | None = None, only: list[str] | None = None, re
             if not replace:
                 warnings.append(f"{name}: уже есть (id={existing.id}) — пропущен; replace=true пересоздаст")
                 continue
+            # Как DELETE /api/sites: сперва остановить очередь камер объекта, иначе воркер
+            # дорабатывает кадры удаляемого объекта (StaleDataError посреди засева).
+            from app.services.queue import frame_queue
+            cams = list(s.scalars(select(Camera.id).where(Camera.site_id == existing.id)))
+            frame_queue.cancel(cams)
+            frame_queue.wait_cameras(cams, timeout=60)
             delete_site(s, existing.id)
 
         site = Site(name=name, address=cfg.get("address", ""), object_type=cfg.get("object_type", "Жильё"),

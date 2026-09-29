@@ -37,7 +37,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -58,11 +58,21 @@ _CONTENT_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/pn
                   ".webp": "image/webp", ".bmp": "image/bmp", ".tif": "image/tiff", ".tiff": "image/tiff"}
 
 # Порядок важен: сначала форматы со временем, иначе «2024-03-14_10-30-00»
-# распознался бы как одна дата.
+# распознался бы как одна дата. Из всех совпадений со временем берётся самое
+# длинное: в «Камера 1_14.10.2020_07-06-00» кусок «2020_07-06» — не дата.
+# Российские регистраторы (Trassir, Macroscop, «Линия»), мессенджеры и выгрузки
+# NVR пишут день первым: «14.10.2020_07-06-00», «14.03.2024 10.30.00»,
+# «snapshot_14-03-2024_103000», «14032024_103000», «Фото 14.03.2024 в 10.30».
+_DMY = r"(?<!\d)(\d{2})[-_.](\d{2})[-_.](\d{4})"
+_SEP = r"(?:[ T_-]+|[ _]+в[ _]+)"
 _WITH_TIME = [
-    re.compile(r"(?<!\d)(\d{4})[-_.](\d{2})[-_.](\d{2})[ T_-](\d{2})[-_.:h](\d{2})[-_.:m](\d{2})(?!\d)"),
-    re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})[ T_-]?(\d{2})(\d{2})(\d{2})(?!\d)"),
-    re.compile(r"(?<!\d)(\d{4})[-_.](\d{2})[-_.](\d{2})[ T_-](\d{2})[-_.:h](\d{2})(?!\d)"),
+    (re.compile(r"(?<!\d)(\d{4})[-_.](\d{2})[-_.](\d{2})[ T_-](\d{2})[-_.:h](\d{2})[-_.:m](\d{2})(?!\d)"), "ymd"),
+    (re.compile(r"(?<!\d)(\d{4})(\d{2})(\d{2})[ T_-]?(\d{2})(\d{2})(\d{2})(?!\d)"), "ymd"),
+    (re.compile(r"(?<!\d)(\d{4})[-_.](\d{2})[-_.](\d{2})[ T_-](\d{2})[-_.:h](\d{2})(?!\d)"), "ymd"),
+    (re.compile(_DMY + _SEP + r"(\d{2})[-_.:h](\d{2})[-_.:m](\d{2})(?!\d)"), "dmy"),
+    (re.compile(_DMY + _SEP + r"(\d{2})(\d{2})(\d{2})(?!\d)"), "dmy"),
+    (re.compile(_DMY + _SEP + r"(\d{2})[-_.:h](\d{2})(?![\d])"), "dmy"),
+    (re.compile(r"(?<!\d)(\d{2})(\d{2})((?:19|20)\d{2})[ T_-]?(\d{2})(\d{2})(\d{2})(?!\d)"), "dmy"),
 ]
 _DATE_ONLY = [
     (re.compile(r"(?<!\d)(\d{4})[-_.](\d{2})[-_.](\d{2})(?!\d)"), "ymd"),
@@ -79,15 +89,23 @@ def _plausible(value: dt.datetime) -> bool:
 def parse_timestamp(name: str) -> tuple[dt.datetime, bool] | None:
     """Метка из имени файла: (наивное время, есть ли время суток)."""
     stem = Path(name).name
-    for rx in _WITH_TIME:
+    best: tuple[int, int, dt.datetime] | None = None     # (длина совпадения, −начало, время)
+    for rx, kind in _WITH_TIME:
         for mt in rx.finditer(stem):
             g = [int(x) for x in mt.groups()]
+            if kind == "dmy":
+                g[0], g[2] = g[2], g[0]
             try:
                 value = dt.datetime(*g)
             except ValueError:
                 continue
-            if _plausible(value):
-                return value, True
+            if not _plausible(value):
+                continue
+            key = (mt.end() - mt.start(), -mt.start())
+            if best is None or key > best[:2]:
+                best = (key[0], key[1], value)
+    if best is not None:
+        return best[2], True
     for rx, kind in _DATE_ONLY:
         for mt in rx.finditer(stem):
             g = [int(x) for x in mt.groups()]
@@ -131,19 +149,68 @@ def parse_datetime_input(value: str | None) -> dt.datetime | None:
         return None
     raw = str(value).strip().replace("Z", "+00:00")
     try:
-        return dt.datetime.fromisoformat(raw)
+        parsed = dt.datetime.fromisoformat(raw)
     except ValueError as exc:
         raise ValueError(f"не удалось разобрать время «{value}» — нужен ISO 8601, например 2026-05-01T08:00") from exc
+    # 0001-01-01 и 9999-12-31 с поясом переполняют datetime при переводе в UTC (было 500)
+    if not 1990 <= parsed.year <= 2100:
+        raise ValueError(f"время «{value}» вне допустимого диапазона (1990–2100 годы)")
+    return parsed
 
 
 # --------------------------------------------------------------------------
 # кадр → хранилище + БД
 # --------------------------------------------------------------------------
 
-def decode_image(data: bytes) -> np.ndarray | None:
+class ImageTooLarge(ValueError):
+    """Снимок больше лимита пикселей: PNG на 57 КБ может развернуться в 900 МБ и уронить сервис."""
+
+
+_REDUCED = ((2, cv2.IMREAD_REDUCED_COLOR_2), (4, cv2.IMREAD_REDUCED_COLOR_4), (8, cv2.IMREAD_REDUCED_COLOR_8))
+
+
+def max_image_pixels() -> int:
+    return int(settings.max_image_mp * 1_000_000)
+
+
+def image_size(data: bytes) -> tuple[int, int] | None:
+    """(ширина, высота) по заголовку — без декодирования (PIL читает только заголовок).
+    None — формат PIL не знает (тогда решает OpenCV со своим лимитом, см. app/config.py)."""
+    try:
+        import warnings
+
+        from PIL import Image
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")          # DecompressionBombWarning: размер проверяем сами
+            with Image.open(io.BytesIO(data)) as im:
+                return int(im.size[0]), int(im.size[1])
+    except Exception as exc:  # noqa: BLE001
+        if type(exc).__name__ == "DecompressionBombError":
+            raise ImageTooLarge("снимок слишком большой (больше 178 Мп) — уменьшите его") from None
+        return None
+
+
+def decode_image(data: bytes, *, info: dict | None = None) -> np.ndarray | None:
+    """Декодировать снимок с защитой от «бомб»: размер проверяется ДО декодирования.
+    JPEG крупнее лимита декодируется сразу уменьшенным (libjpeg масштабирует при
+    чтении, памяти в 4–64 раза меньше); остальное крупнее лимита — ImageTooLarge.
+    `info` получает {"reduced": k}, если кадр уменьшен в k раз."""
     if not data:
         return None
     arr = np.frombuffer(data, np.uint8)
+    size = image_size(data)
+    limit = max_image_pixels()
+    if size is not None and size[0] * size[1] > limit:
+        w, h = size
+        if data[:3] == b"\xff\xd8\xff":
+            for k, flag in _REDUCED:
+                if (w // k) * (h // k) <= limit:
+                    img = cv2.imdecode(arr, flag)
+                    if img is not None and info is not None:
+                        info["reduced"] = k
+                    return img
+        raise ImageTooLarge(f"снимок {w}×{h} ({w * h / 1e6:.0f} Мп) больше допустимых "
+                            f"{limit / 1e6:.0f} Мп — уменьшите его перед загрузкой")
     return cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
 
@@ -161,6 +228,9 @@ def make_preview(img: np.ndarray, width: int) -> bytes:
     return encode_jpeg(img, 82)
 
 
+FUTURE_TOLERANCE = dt.timedelta(hours=2)    # кадр «из будущего» дальше этого — сбой часов камеры
+
+
 @dataclass
 class SaveResult:
     status: str                      # saved | duplicate | error
@@ -174,15 +244,28 @@ def save_frame(s: Session, cam: Camera, data: bytes, captured_at: dt.datetime, m
     """Сохранить один кадр. `captured_at` — aware. `on_collision`: bump | skip."""
     if not data:
         return SaveResult("error", reason="пустой файл")
+    when = captured_at.astimezone(dt.UTC).replace(microsecond=0)
+    if when > dt.datetime.now(dt.UTC) + FUTURE_TOLERANCE:
+        # Сбой часов камеры (после отключения питания — 2036 год) или неверный часовой пояс:
+        # такой кадр «сдвинул бы» объект в будущее и заморозил маску и моточасы камеры.
+        return SaveResult("error", reason=f"метка времени {when:%d.%m.%Y %H:%M} UTC — в будущем: проверьте часы "
+                                          "камеры и часовой пояс объекта; кадр не принят")
     sha = hashlib.sha256(data).hexdigest()
     dup = s.scalar(select(Frame).where(Frame.camera_id == cam.id, Frame.sha256 == sha).limit(1))
     if dup is not None:
         return SaveResult("duplicate", dup, "такой снимок уже загружен в эту камеру")
-    img = image if image is not None else decode_image(data)
+    decoded: dict = {}
+    try:
+        img = image if image is not None else decode_image(data, info=decoded)
+    except ImageTooLarge as exc:
+        return SaveResult("error", reason=str(exc))
     if img is None:
         return SaveResult("error", reason="не удалось прочитать изображение (формат не поддерживается или файл повреждён)")
+    if decoded.get("reduced"):
+        # Храним уменьшенный кадр: и модели, и рамки в UI работают с одним размером.
+        data, ext = encode_jpeg(img, 92), ".jpg"
+        meta = {**(meta or {}), "reduced_x": decoded["reduced"]}
 
-    when = captured_at.astimezone(dt.UTC).replace(microsecond=0)
     shift = 0
     while s.scalar(select(Frame.id).where(Frame.camera_id == cam.id, Frame.captured_at == when)) is not None:
         if on_collision == "skip":
@@ -220,6 +303,23 @@ def save_frame(s: Session, cam: Camera, data: bytes, captured_at: dt.datetime, m
         return save_frame(s, s.get(Camera, cam.id), data, when + dt.timedelta(seconds=1), meta, ext,
                           job_id, on_collision, img)
     return SaveResult("saved", fr)
+
+
+ARCHIVE_GAP = dt.timedelta(days=3)          # как live_gap_days: последний кадр старше — объект-архив
+
+
+def _aware(t: dt.datetime) -> dt.datetime:
+    return t if t.tzinfo is not None else t.replace(tzinfo=dt.UTC)
+
+
+def _archive_until(s: Session, site_id: int) -> dt.datetime | None:
+    """Последний кадр объекта, если объект — архив (последний кадр старше трёх суток), иначе None."""
+    last = s.scalar(select(func.max(Frame.captured_at)).join(Camera, Camera.id == Frame.camera_id)
+                    .where(Camera.site_id == site_id))
+    if last is None:
+        return None
+    last = last if last.tzinfo is not None else last.replace(tzinfo=dt.UTC)
+    return last if dt.datetime.now(dt.UTC) - last > ARCHIVE_GAP else None
 
 
 def _submit(fr: Frame) -> None:
@@ -276,6 +376,13 @@ class _Plan:
     errors: list[str] = field(default_factory=list)
 
 
+def unsupported_reason(name: str) -> str:
+    """Почему файл пропущен — с подсказкой для частых случаев (снимки iPhone)."""
+    if Path(name).suffix.lower() in (".heic", ".heif"):
+        return "HEIC/HEIF (снимок iPhone) не поддерживается — сохраните его как JPEG (в iPhone: «Самый совместимый»), пропущен"
+    return "формат не поддерживается, пропущен"
+
+
 def classify(name: str) -> str | None:
     ext = Path(name).suffix.lower()
     if ext in IMAGE_EXT:
@@ -307,6 +414,18 @@ def _expand(paths: list[Path], tmp_dir: Path, closers: list) -> _Plan:
             if len(members) > settings.zip_max_members:
                 plan.errors.append(f"{path.name}: слишком много файлов ({len(members)} > {settings.zip_max_members})")
                 continue
+            unpacked = sum(max(0, i.file_size) for i in members)
+            if unpacked > settings.zip_max_unpacked_mb * 1024 * 1024:
+                # zip-бомба: 10 МБ архива → десятки ГБ на диске и в памяти
+                plan.errors.append(f"{path.name}: в распакованном виде {unpacked / 2**20:.0f} МБ — больше "
+                                   f"{settings.zip_max_unpacked_mb} МБ, архив пропущен")
+                continue
+            def cap_mb(name: str) -> float:      # снимок читается в память целиком, видео — потоком на диск
+                return settings.max_frame_mb if classify(name) == "image" else settings.max_upload_mb
+            too_big = {i.filename for i in members if i.file_size > cap_mb(i.filename) * 1024 * 1024}
+            for name in sorted(too_big):
+                plan.errors.append(f"{path.name}/{name}: файл больше {cap_mb(name):.0f} МБ, пропущен")
+            members = [i for i in members if i.filename not in too_big]
             for info in sorted(members, key=lambda i: i.filename):
                 sub = classify(info.filename)
                 if sub == "image":
@@ -318,9 +437,9 @@ def _expand(paths: list[Path], tmp_dir: Path, closers: list) -> _Plan:
                         shutil.copyfileobj(src, dst)
                     plan.videos.append(_Video(Path(info.filename).name, target))
                 else:
-                    plan.errors.append(f"{path.name}/{info.filename}: формат не поддерживается, пропущен")
+                    plan.errors.append(f"{path.name}/{info.filename}: {unsupported_reason(info.filename)}")
         else:
-            plan.errors.append(f"{path.name}: формат не поддерживается, пропущен")
+            plan.errors.append(f"{path.name}: {unsupported_reason(path.name)}")
     return plan
 
 
@@ -423,10 +542,18 @@ def run_job(job_id: str, camera_id: int, paths: list[Path], params: UploadParams
             job.skipped += 1
         s.commit()
 
+        # Камера уже разобрана моделью А до этого момента: кадры раньше него трекер не сравнивает
+        # (догрузка «задним числом» — моточасы по ним не посчитаются без переанализа).
+        processed_until = s.scalar(select(func.max(Frame.captured_at))
+                                   .where(Frame.camera_id == cam.id, Frame.processed_a.is_(True)))
+        late: list[dt.datetime] = []
+
         def store(data: bytes, when: dt.datetime, meta: dict, ext: str, image=None) -> None:
             res = save_frame(s, cam, data, when, meta, ext=ext, job_id=job_id, image=image)
             if res.status == "saved":
                 job.total += 1
+                if processed_until is not None and _aware(res.frame.captured_at) <= _aware(processed_until):
+                    late.append(res.frame.captured_at)
                 if submit:
                     _submit(res.frame)
             elif res.status == "duplicate":
@@ -437,6 +564,25 @@ def run_job(job_id: str, camera_id: int, paths: list[Path], params: UploadParams
             s.commit()
 
         _assign_image_times(plan.images, params, tz)
+        archive_until = _archive_until(s, site.id)
+        undated = [i for i in plan.images if i.source.startswith("время загрузки")]
+        if undated and archive_until is not None:
+            # Архив 2020 года + снимки без даты с меткой «сейчас» = объект внезапно «живой»
+            # и «отстаёт на 2000 дней». Такие файлы без start_at не принимаем.
+            job.skipped += len(undated)
+            _job_error(job, f"{len(undated)} файл(ов) без даты съёмки ({', '.join(i.name for i in undated[:3])}"
+                            f"{'…' if len(undated) > 3 else ''}) пропущены: у объекта архив по "
+                            f"{archive_until:%d.%m.%Y}, метка «время загрузки» перенесла бы его в сегодняшний день. "
+                            "Укажите «Начало съёмки» (start_at) и загрузите снова.")
+            plan.images = [i for i in plan.images if not i.source.startswith("время загрузки")]
+        elif undated:
+            _job_error(job, f"{len(undated)} файл(ов) без даты съёмки: метки поставлены по времени загрузки "
+                            "(для архива укажите «Начало съёмки»).")
+        date_only = [i for i in plan.images if "только дата" in i.source]
+        if date_only:
+            _job_error(job, f"{len(date_only)} файл(ов) с датой без времени в имени — поставлено 12:00 "
+                            "(с разносом по секундам): моточасы по ним не посчитать. Поддерживаются имена "
+                            "вида ДД.ММ.ГГГГ_ЧЧ-ММ-СС, ГГГГ-ММ-ДД_ЧЧ-ММ-СС, ГГГГММДД_ЧЧММСС.")
         # Порядок сохранения = порядок съёмки: очередь камеры обрабатывает кадры
         # по времени, и трекер модели А сравнивает кадр с предыдущим.
         for img in sorted(plan.images, key=lambda i: (i.ts, i.name)):
@@ -454,8 +600,16 @@ def run_job(job_id: str, camera_id: int, paths: list[Path], params: UploadParams
                 base, source = params.start_at, "видео: start_at + позиция"
             elif parsed:
                 base, source = to_utc(parsed[0], tz), "видео: дата из имени + позиция"
+            elif archive_until is not None:
+                job.skipped += 1
+                _job_error(job, f"{vid.name}: нет даты съёмки ни в имени, ни в «Начале съёмки» — у объекта архив "
+                                f"по {archive_until:%d.%m.%Y}, и видео встало бы на сегодняшний день. "
+                                "Укажите «Начало съёмки» (start_at).")
+                s.commit()
+                continue
             else:
                 base, source = None, "видео: время загрузки + позиция"
+                _job_error(job, f"{vid.name}: дата съёмки не найдена — метки по времени загрузки.")
             try:
                 for frame_img, when, extra in iter_video(vid.path, params, base):
                     meta = {"source_file": vid.name, "ts_source": source, "video_mode": params.video_mode, **extra}
@@ -465,6 +619,10 @@ def run_job(job_id: str, camera_id: int, paths: list[Path], params: UploadParams
                 _job_error(job, f"{vid.name}: {exc}")
                 s.commit()
 
+        if late:
+            _job_error(job, f"{len(late)} кадр(ов) старше уже разобранных камерой (разобрано по "
+                            f"{_aware(processed_until):%d.%m.%Y %H:%M} UTC): движение техники и моточасы по ним "
+                            "не посчитаются — запустите «Переанализировать» объекта, кадры пройдут по порядку.")
         job.state = "queued"
         job.finished_at = utcnow()
         if not job.total and not job.duplicates:
@@ -486,6 +644,29 @@ def run_job(job_id: str, camera_id: int, paths: list[Path], params: UploadParams
         shutil.rmtree(tmp_dir, ignore_errors=True)
         if cleanup_dir is not None:
             shutil.rmtree(cleanup_dir, ignore_errors=True)
+
+
+def recover_after_restart() -> None:
+    """Старт сервиса: задания загрузки, оборванные рестартом, честно помечаются
+    «failed» (раньше навсегда висели в «ingesting»), временные файлы оборванных
+    загрузок удаляются (раньше копились в var/tmp)."""
+    try:
+        with db.session() as s:
+            for job in s.scalars(select(Job).where(Job.state == "ingesting", Job.kind.in_(("upload", "seed")))):
+                job.state = "failed"
+                job.message = "загрузка оборвалась: сервис перезапустился — загрузите файлы снова (дубликаты пропустятся)"
+                job.finished_at = utcnow()
+            s.commit()
+    except Exception:  # noqa: BLE001 — не мешать старту
+        log.exception("восстановление заданий после рестарта")
+    tmp = settings.path(settings.tmp_dir)
+    horizon = dt.datetime.now().timestamp() - 3600       # свежее часа — может принадлежать утилите в соседнем процессе
+    for sub in [*(tmp / "uploads").glob("*"), *tmp.glob("job-*")]:
+        try:
+            if sub.is_dir() and sub.stat().st_mtime < horizon:
+                shutil.rmtree(sub, ignore_errors=True)
+        except OSError:
+            continue
 
 
 def start_job(job_id: str, camera_id: int, paths: list[Path], params: UploadParams,
