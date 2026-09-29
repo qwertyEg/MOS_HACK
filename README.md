@@ -110,6 +110,17 @@ sudo systemctl restart mos-app
 PyTorch выбирает CUDA автоматически, когда драйвер действительно предоставляет
 устройство вычисления; иначе YOLO и SigLIP продолжают работать на CPU.
 
+Для временного командного демо по внешнему IP установите второй drop-in:
+
+```bash
+sudo cp deploy/mos-app-public.conf /etc/systemd/system/mos-app.service.d/public.conf
+sudo systemctl daemon-reload
+sudo systemctl restart mos-app
+```
+
+Он открывает HTTP-порт 8000 на всех интерфейсах. Пароль администратора при этом
+не должен быть значением по умолчанию; для постоянного доступа нужен TLS-прокси.
+
 ---
 
 ## Веса моделей
