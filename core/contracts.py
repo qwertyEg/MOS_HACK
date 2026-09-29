@@ -80,6 +80,11 @@ class QualityReport:
     blur: float = 0.0
     brightness: float = 0.0
     usable_for_stage: bool = True      # False для ночи, дождя, брака — модель Б пропускает
+    # Помехи кадра кодами (core/stage/quality.FLAGS): night, twilight, drops, fog, glare, snow_cover,
+    # snowfall, occluded, shifted, low_visibility, blur, dark, overexposed, low_contrast, ir.
+    # Часть — только пометка (снег на площадке, сумерки), часть исключает кадр из модели Б.
+    flags: list[str] = field(default_factory=list)
+    details: dict[str, Any] = field(default_factory=dict)   # сырые числа оценки — журнал кадра и UI
 
 
 # --------------------------------------------------------------------------
