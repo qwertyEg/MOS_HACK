@@ -270,6 +270,8 @@
         const hl = opts.highlight === i ? ' stroke-width="3.5"' : "";
         parts.push(`<rect class="box-halo" x="${x}" y="${y}" width="${w}" height="${h}" rx="${W / 400}"/>`);
         parts.push(`<rect class="box${idle}" x="${x}" y="${y}" width="${w}" height="${h}" rx="${W / 400}" stroke="${c}"${hl}/>`);
+        // Рамка, исправленная или дорисованная оператором, — белый внутренний контур.
+        if (d.manual) parts.push(`<rect class="box-manual" x="${x + 2}" y="${y + 2}" width="${Math.max(0, w - 4)}" height="${Math.max(0, h - 4)}" rx="${W / 400}"/>`);
       });
     }
     if (opts.draft && opts.draft.length) {
@@ -302,10 +304,12 @@
       const [x, y, w, h] = (d.bbox || [0, 0, 0, 0]).map(Number);
       const cls = d.class || d.cls;
       const c = SV.palette.color(cls);
-      const name = unitName(d.unit_id) || d.unit_label || d.name || (SV.classNames[cls] || cls);
+      let name = unitName(d.unit_id) || d.unit_label || d.name || (SV.classNames[cls] || cls);
+      // Класс рамки задан вручную и расходится с машиной («только эта рамка») — подпись по рамке.
+      if (d.manual && d.manual.cls && !String(name).startsWith(SV.classNames[cls] || cls)) name = SV.classNames[cls] || cls;
       const act = META.activity[d.activity] || "";
       const conf = opts.conf && d.conf != null ? ` · ${Math.round(d.conf * 100)}%` : "";
-      const text = (act ? `${name} · ${act}` : name) + conf;
+      const text = (d.manual ? "✎ " : "") + (act ? `${name} · ${act}` : name) + (d.manual ? "" : conf);
       // На узком экране подписи мельче, иначе закрывают саму технику.
       const small = dispW < 520;
       const lw = ((text.length * (small ? 5.6 : 6.4) + (small ? 8 : 12)) / dispW) * 100;

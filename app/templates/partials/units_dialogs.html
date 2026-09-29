@@ -1,0 +1,105 @@
+{#- Диалоги правки машин (внутри unitTools): склеить, сменить тип, разделить с кадра, «не техника». -#}
+<div x-show="dlg" x-cloak x-transition.opacity class="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4" @click.self="dlg && !dlg.busy && (dlg = null)" @keydown.escape.window="dlg && !dlg.busy && (dlg = null)">
+  <template x-if="dlg">
+    <div class="card flex max-h-[92vh] w-full flex-col shadow-pop" :class="dlg.kind === 'split' ? 'max-w-3xl' : 'max-w-md'" role="dialog" aria-modal="true" aria-labelledby="ud-title" x-trap.noscroll="!!dlg">
+
+      {# склейка #}
+      <template x-if="dlg.kind === 'merge'">
+        <form class="p-5" @submit.prevent="doMerge()">
+          <h2 id="ud-title" class="text-base font-semibold">Склеить в одну машину</h2>
+          <p class="mt-1 text-sm text-fg-2">Модель посчитала одну машину несколько раз (две камеры, кран разрезан на стрелу и башню, трек порвался). После склейки — одна машина: рамки, моточасы без двойного счёта и отклонения пересчитаются. Переанализ склейку не отменит.</p>
+          <ul class="mt-3 space-y-1.5">
+            <template x-for="u in dlg.units" :key="u.id">
+              <li class="flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm" :class="dlg.target_id === u.id ? 'border-info/50 bg-info/5' : 'border-line'">
+                <input type="radio" name="ud-target" class="accent-[rgb(57,135,229)]" :checked="dlg.target_id === u.id" @change="dlg.target_id = u.id; dlg.cls = u.cls" :aria-label="'Оставить имя: ' + unitLabel(u)">
+                <span class="h-2.5 w-2.5 shrink-0 rounded-sm" :style="'background:' + SV.palette.color(u.cls)"></span>
+                <span class="min-w-0 flex-1 truncate" x-text="unitLabel(u)"></span>
+                <span class="num text-2xs text-fg-3" x-text="SV.fmt.hours(u.worked_hours, 1)"></span>
+              </li>
+            </template>
+          </ul>
+          <p class="hint">Отмеченная — чьё имя останется.</p>
+          <div class="mt-3"><label class="label" for="ud-merge-cls">Что это за машина</label>
+            <select id="ud-merge-cls" class="input" x-model="dlg.cls">
+              <template x-for="c in uClasses" :key="c.key"><option :value="c.key" x-text="c.name" :selected="c.key === dlg.cls"></option></template>
+            </select></div>
+          <div class="mt-5 flex justify-end gap-2">
+            <button type="button" class="btn btn-ghost" @click="dlg = null" :disabled="dlg.busy">Отмена</button>
+            <button class="btn btn-primary" :disabled="dlg.busy" x-text="dlg.busy ? 'Склеиваем и пересчитываем…' : 'Склеить'"></button>
+          </div>
+        </form>
+      </template>
+
+      {# смена типа #}
+      <template x-if="dlg.kind === 'relabel'">
+        <form class="p-5" @submit.prevent="doRelabel()">
+          <h2 id="ud-title" class="text-base font-semibold" x-text="'Изменить тип: ' + unitLabel(dlg.unit)"></h2>
+          <p class="mt-1 text-sm text-fg-2">Все рамки этой машины на всех кадрах и её моточасы перейдут к новому типу («полоска» и правила «этап → техника» пересчитаются). Детектор тип больше не поменяет.</p>
+          <div class="mt-3"><label class="label" for="ud-cls">Правильный тип</label>
+            <select id="ud-cls" class="input" x-model="dlg.cls">
+              <template x-for="c in uClasses" :key="c.key"><option :value="c.key" x-text="c.name" :selected="c.key === dlg.cls"></option></template>
+            </select></div>
+          <div class="mt-5 flex justify-end gap-2">
+            <button type="button" class="btn btn-ghost" @click="dlg = null" :disabled="dlg.busy">Отмена</button>
+            <button class="btn btn-primary" :disabled="dlg.busy || dlg.cls === dlg.unit.cls" x-text="dlg.busy ? 'Сохраняем…' : 'Сохранить'"></button>
+          </div>
+        </form>
+      </template>
+
+      {# разделение #}
+      <template x-if="dlg.kind === 'split'">
+        <form class="flex min-h-0 flex-col" @submit.prevent="doSplit()">
+          <div class="border-b border-line p-5 pb-4">
+            <h2 id="ud-title" class="text-base font-semibold" x-text="'Разделить: ' + unitLabel(dlg.unit)"></h2>
+            <p class="mt-1 text-sm text-fg-2">Трекер слепил две машины (утром — мачта на горизонте, днём — кран на том же месте кадра). Выберите первый кадр «другой» машины: с него и дальше на этой камере рамки станут отдельной машиной.</p>
+          </div>
+          <div class="min-h-0 flex-1 overflow-y-auto p-5 pt-3">
+            <template x-if="!dlg.items && !dlg.error"><div class="skeleton h-24 w-full"></div></template>
+            <p x-show="dlg.error" class="text-sm text-bad-fg" x-text="dlg.error"></p>
+            <template x-for="g in splitGroups" :key="g.camera_id">
+              <div class="mb-3">
+                <p class="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-fg-2"><span x-html="$icon('camera', 'w-3.5 h-3.5')"></span><span x-text="g.name"></span><span class="text-fg-3" x-text="'· ' + g.items.length + ' ' + SV.fmt.plural(g.items.length, 'кадр', 'кадра', 'кадров')"></span></p>
+                <div class="flex flex-wrap gap-1.5">
+                  <template x-for="it in g.items" :key="it.detection_id">
+                    <button type="button" class="relative h-[60px] w-[88px] shrink-0 overflow-hidden rounded-md border-2 bg-panel-3 bg-no-repeat"
+                            :class="splitMark(it)"
+                            :style="thumbStyle(it)" @click="dlg.frame_id = it.frame_id" :title="SV.fmt.dateTime(it.captured_at)" :aria-label="'Разделить с кадра ' + SV.fmt.dateTime(it.captured_at)">
+                      <span class="absolute inset-x-0 bottom-0 bg-black/60 px-1 text-left text-[10px] leading-4 text-white" x-text="SV.fmt.dateTime(it.captured_at)"></span>
+                    </button>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+          <div class="flex flex-wrap items-end gap-3 border-t border-line p-5 pt-4">
+            <div class="min-w-[200px] flex-1"><label class="label" for="ud-split-cls">Отделённая машина — это</label>
+              <select id="ud-split-cls" class="input" x-model="dlg.cls">
+                <template x-for="c in uClasses" :key="c.key"><option :value="c.key" x-text="c.name" :selected="c.key === dlg.cls"></option></template>
+              </select></div>
+            <p class="text-xs text-fg-3" x-text="dlg.frame_id ? 'отделится ' + splitCount + ' ' + SV.fmt.plural(splitCount, 'кадр', 'кадра', 'кадров') : 'кадр не выбран'"></p>
+            <div class="ml-auto flex gap-2">
+              <button type="button" class="btn btn-ghost" @click="dlg = null" :disabled="dlg.busy">Отмена</button>
+              <button class="btn btn-primary" :disabled="dlg.busy || !dlg.frame_id" x-text="dlg.busy ? 'Разделяем…' : 'Разделить'"></button>
+            </div>
+          </div>
+        </form>
+      </template>
+
+      {# не техника #}
+      <template x-if="dlg.kind === 'delete'">
+        <form class="p-5" @submit.prevent="doDelete()">
+          <h2 id="ud-title" class="text-base font-semibold" x-text="'Это не техника: ' + unitLabel(dlg.unit)"></h2>
+          <p class="mt-1 text-sm text-fg-2">Все рамки этой «машины» уберутся из аналитики (моточасы, отклонения, парк) и из датасета — как ложные срабатывания детектора.</p>
+          <label class="mt-3 flex cursor-pointer items-start gap-2.5 rounded-lg border border-line p-3 text-sm">
+            <input type="checkbox" class="mt-0.5 accent-[rgb(57,135,229)]" x-model="dlg.hide">
+            <span><span class="block text-fg">И не считать техникой это место на камере</span><span class="block text-xs text-fg-3">Для неподвижного: бытовка, контейнер, мачта связи, фонарный столб — на следующих кадрах она не появится снова. Для машины, которая ездила, не отмечайте.</span></span>
+          </label>
+          <div class="mt-5 flex justify-end gap-2">
+            <button type="button" class="btn btn-ghost" @click="dlg = null" :disabled="dlg.busy">Отмена</button>
+            <button class="btn btn-danger" :disabled="dlg.busy" x-text="dlg.busy ? 'Убираем…' : 'Убрать'"></button>
+          </div>
+        </form>
+      </template>
+    </div>
+  </template>
+</div>

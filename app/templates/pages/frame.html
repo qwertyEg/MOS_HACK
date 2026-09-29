@@ -26,7 +26,8 @@
           <h1 class="tnum text-[24px] font-semibold leading-8 tracking-[-0.025em]" x-text="'Кадр · ' + SV.fmt.dateTime(frame.captured_at)"></h1>
           <p class="mt-1 text-xs text-fg-3" x-text="[frame.camera_name, frame.width + '×' + frame.height, frame.ts_source ? 'время: ' + frame.ts_source : null, providersLine].filter(Boolean).join(' · ')"></p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          {% include "partials/annotate_bar.html" %}
           <div class="seg" role="group" aria-label="Слои">
             <button type="button" :aria-pressed="layers.boxes" @click="layers.boxes = !layers.boxes">{{ ic.icon("scan") }}Рамки</button>
             <button type="button" :aria-pressed="layers.mask" @click="maskUrl ? (layers.mask = !layers.mask) : SV.toast('Маска для этой камеры ещё не построена', { kind: 'info' })" :class="!maskUrl && 'opacity-50'">{{ ic.icon("layers") }}Маска</button>
@@ -44,15 +45,18 @@
             <img x-show="layers.mask && maskUrl" class="viewer-layer mask-layer" :src="layers.mask && maskUrl ? maskUrl : ''" alt="">
             <svg :view-box.camel="`0 0 ${frame.width} ${frame.height}`" preserveAspectRatio="none" x-html="svg"></svg>
             <div class="viewer-layer pointer-events-none"><template x-for="l in labels" :key="l.i"><span class="box-label transition-opacity" :class="highlight !== null && highlight !== l.i && 'opacity-40'" :style="l.style" x-text="l.text"></span></template></div>
+            {% include "partials/annotate_layer.html" %}
           </div>
         </section>
         <aside class="card p-4 lg:col-span-4">{% include "partials/frame_panel.html" %}</aside>
       </div>
     </div>
   </template>
+  {% include "partials/annotate_popover.html" %}
 </div>
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/viewer.js?v={{ app_version|default('dev') }}" defer></script>
+<script src="/static/js/annotate.js?v={{ app_version|default('dev') }}" defer></script>
 <script src="/static/js/frame.js?v={{ app_version|default('dev') }}" defer></script>
 {% endblock %}

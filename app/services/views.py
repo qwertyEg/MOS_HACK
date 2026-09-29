@@ -20,7 +20,7 @@ from app.models import (
     ActivityInterval, Camera, CameraState, Detection, Deviation, EquipmentUnit, Frame, Job, PlanItem,
     Site, StageObservation, StageState, Zone,
 )
-from app.services import adapters, providers
+from app.services import adapters, annotations, providers
 from app.services import settings as settings_svc
 from app.services.analysis import detection_json
 from app.services.queue import frame_queue
@@ -342,6 +342,9 @@ def frame_detail(s: Session, fr: Frame) -> dict[str, Any]:
         item = detection_json(d)
         item.update({"id": row.id, "provider": row.provider, "unit_row_id": row.unit_id,
                      "site_xy": [row.site_x, row.site_y] if row.site_x is not None else None})
+        manual = (row.extra or {}).get(annotations.MANUAL)
+        if manual:
+            item["manual"] = manual         # правка оператора: что было у модели, какие правки
         det_json.append(item)
 
     obs_rows = list(s.scalars(select(StageObservation).where(StageObservation.frame_id == fr.id)
@@ -374,6 +377,7 @@ def frame_detail(s: Session, fr: Frame) -> dict[str, Any]:
                          for o in obs_rows],
         "meta": fr.meta or {}, "sha256": fr.sha256, "job_id": fr.job_id,
         "prev_id": prev_id, "next_id": next_id,
+        "annotations": annotations.frame_summary(s, fr),
     }
 
 
@@ -388,6 +392,7 @@ def unit_json(u: EquipmentUnit) -> dict[str, Any]:
         "last_moved": iso(u.last_moved), "worked_hours": round(u.worked_hours or 0.0, 2),
         "cameras": u.cameras or [], "plate": u.plate,
         "site_xy": [u.site_x, u.site_y] if u.site_x is not None else None,
+        "manual": annotations.is_manual(u.uid),     # машину склеил / разделил / переименовал оператор
     }
 
 

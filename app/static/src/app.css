@@ -262,6 +262,30 @@
 .viewer.is-picking { cursor: crosshair; }
 .viewer .mask-layer { mix-blend-mode: normal; opacity: 0.62; pointer-events: none; object-fit: fill; }
 
+/* Ручная разметка (annotate.js): кликабельные рамки, черновик новой рамки, меню правки. */
+.viewer .box-manual { fill: none; stroke: rgb(255 255 255 / 0.9); stroke-width: 1px; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.viewer .ann-layer { touch-action: none; }
+.viewer .ann-layer.is-drawing { cursor: crosshair; }
+.viewer .ann-layer.is-drawing .ann-box { pointer-events: none; }
+.viewer .ann-box {
+  position: absolute; border: 2px dashed rgb(255 255 255 / 0.6); border-radius: 3px; background: rgb(255 255 255 / 0.03);
+  cursor: pointer; transition: background-color 0.12s, border-color 0.12s;
+}
+.viewer .ann-box:hover { background: rgb(57 135 229 / 0.16); border: 2px solid #6aa8f0; }
+.viewer .ann-box.is-manual { border-color: rgb(250 178 25 / 0.85); }
+.viewer .ann-box.is-sel { background: rgb(57 135 229 / 0.2); border: 2px solid #6aa8f0; box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.38); }
+.viewer .ann-box:focus-visible { outline: 2px solid #fab219; outline-offset: 1px; }
+.viewer .ann-draft { position: absolute; border: 2px dashed #fab219; background: rgb(250 178 25 / 0.12); border-radius: 2px; pointer-events: none; }
+.viewer .ann-draft.is-done { border-style: solid; box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.38); }
+.viewer .ann-hint {
+  position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); font: 500 11px/16px theme("fontFamily.sans");
+  color: #fff; background: rgb(0 0 0 / 0.68); padding: 4px 8px; border-radius: 6px; pointer-events: none;
+}
+.ann-pop { position: fixed; z-index: 65; width: 300px; max-height: calc(100vh - 16px); overflow-y: auto; }
+@media (max-width: 639px) {
+  .ann-pop { left: 8px !important; right: 8px; top: auto !important; bottom: 8px; width: auto; }
+}
+
 /* Штрихи шкалы кадров под плеером. */
 .scrub { position: relative; height: 34px; cursor: pointer; touch-action: none; }
 .scrub-tick { position: absolute; bottom: 8px; width: 3px; margin-left: -1.5px; border-radius: 2px; }

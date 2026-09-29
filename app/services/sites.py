@@ -13,8 +13,8 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.models import (
-    ActivityInterval, Camera, CameraState, Detection, Deviation, EquipmentUnit, Frame, Job, PlanItem,
-    Site, SiteFleet, StageObservation, StageState, Zone, utcnow,
+    ActivityInterval, Annotation, Camera, CameraState, Detection, Deviation, EquipmentUnit, Frame, Job, PlanItem,
+    RawDetections, Site, SiteFleet, StageObservation, StageState, Zone, utcnow,
 )
 from app.services import adapters, pipeline
 from app.services import settings as settings_svc
@@ -233,6 +233,8 @@ def delete_camera(s: Session, camera_id: int) -> None:
                 s.delete(unit)
         s.flush()
     s.execute(delete(Detection).where(Detection.frame_id.in_(frames)))
+    s.execute(delete(RawDetections).where(RawDetections.frame_id.in_(frames)))
+    s.execute(delete(Annotation).where(Annotation.camera_id == camera_id))
     s.execute(delete(StageObservation).where(StageObservation.frame_id.in_(frames)))
     s.execute(delete(Frame).where(Frame.camera_id == camera_id))
     s.execute(delete(CameraState).where(CameraState.camera_id == camera_id))
@@ -262,6 +264,8 @@ def reprocess(s: Session, site: Site) -> Job:
     текущих, техника и моточасы (выводятся из модели А заново), маски камер
     (иначе повторный прогон сжимал бы уже сжатую маску — грабли Дениса) и
     неручные состояния этапов. Отклонения сверятся пересчётом по key.
+    Ручные правки не трогаем: ручные этапы и моточасы остаются как есть, ручная
+    разметка техники (таблица annotations) накладывается на новый ответ детектора.
     """
     from app.services.ingest import new_job
     from app.services.queue import frame_queue

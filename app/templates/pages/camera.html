@@ -50,7 +50,8 @@
               <p class="text-2xs text-fg-3" x-show="frames && frames.length" x-text="'кадр ' + (idx + 1) + ' из ' + (frames ? frames.length : 0)"></p>
             </div>
             <span x-show="loadingFrame" class="animate-spin text-fg-3">{{ ic.icon("loader", "w-3.5 h-3.5") }}</span>
-            <div class="ml-auto flex items-center gap-2">
+            <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
+              {% include "partials/annotate_bar.html" %}
               <div class="seg" role="group" aria-label="Слои">
                 <button type="button" :aria-pressed="layers.boxes" @click="layers.boxes = !layers.boxes" title="Рамки техники (B)">{{ ic.icon("scan") }}<span class="hidden sm:inline">Рамки</span></button>
                 <button type="button" :aria-pressed="layers.mask" @click="toggleMask()" :class="!maskUrl && 'opacity-50'" title="Динамическая маска фона (M)">{{ ic.icon("layers") }}<span class="hidden sm:inline">Маска</span></button>
@@ -88,6 +89,7 @@
               <template x-if="side === 'calib' && !draft">
                 <span class="absolute left-3 top-3 rounded-md bg-warn px-2 py-1 text-[11px] font-medium leading-4 text-black">Кликните точку на кадре — затем введите её координаты на плане</span>
               </template>
+              {% include "partials/annotate_layer.html" %}
             </div>
             <template x-if="frameError"><div class="absolute inset-0 grid place-items-center bg-black/60 text-sm text-white" x-text="'Кадр не загрузился: ' + frameError"></div></template>
           </div>
@@ -284,9 +286,11 @@
       </div>
     </div>
   </template>
+  {% include "partials/annotate_popover.html" %}
 </div>
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/viewer.js?v={{ app_version|default('dev') }}" defer></script>
+<script src="/static/js/annotate.js?v={{ app_version|default('dev') }}" defer></script>
 <script src="/static/js/camera.js?v={{ app_version|default('dev') }}" defer></script>
 {% endblock %}

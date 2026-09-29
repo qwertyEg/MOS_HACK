@@ -23,7 +23,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app import __version__, auth, db
 from app.config import BASE_DIR, settings
-from app.routers import api_cameras, api_frames, api_sites, api_system, ingest, pages
+from app.routers import api_annotations, api_cameras, api_frames, api_sites, api_system, ingest, pages
 from app.services.providers import registry
 from app.services.queue import frame_queue
 
@@ -126,6 +126,7 @@ def create_app() -> FastAPI:
     app.include_router(api_sites.router)
     app.include_router(api_cameras.router)
     app.include_router(api_frames.router)
+    app.include_router(api_annotations.router)
     app.include_router(pages.router)
     return app
 

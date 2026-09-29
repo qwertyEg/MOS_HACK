@@ -17,7 +17,10 @@ PostgreSQL (docker compose). Миграций нет: `create_all` при ста
 - `activity_intervals.manual/note` (и `unit_id` допускает NULL) — ручные поправки
   моточасов оператором;
 - `plan_items.position`, `deviations.note/created_at/updated_at`;
-- таблица `jobs` — задания загрузки/переанализа, переживают рестарт.
+- таблица `jobs` — задания загрузки/переанализа, переживают рестарт;
+- таблицы `annotations` (ручная разметка техники, переживает переанализ) и
+  `raw_detections` (ответ детектора до правок — для перепрогона без детектора).
+  Новые таблицы, а не колонки старых: `create_all` досоздаёт их на рабочей базе.
 
 Все времена хранятся как UTC без зоны и отдаются как aware-UTC (`UTCDateTime`):
 SQLite зону не хранит вовсе, и без этого сравнение времён расходилось бы
@@ -324,6 +327,56 @@ class Deviation(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     __table_args__ = (UniqueConstraint("site_id", "key", name="uq_deviation_key"),)
+
+
+class Annotation(Base):
+    """Ручная правка разметки техники (требование 3): факт от оператора, а не вывод модели.
+
+    Одна строка — одно утверждение о рамке кадра: `relabel` (класс рамки — cls),
+    `delete` (это не техника; scope=camera — и не показывать это место камеры
+    дальше), `add` (дорисованная рамка), `unit` (рамка — машина unit_key, класс
+    машины cls: склейка / разделение / смена типа единицы), `verify` (кадр
+    проверен целиком, без рамки). Рамка правки узнаётся среди рамок детектора
+    по IoU, поэтому правки переживают переанализ: конвейер накладывает их поверх
+    ответа детектора (app/services/annotations.apply). `batch` — одно действие
+    в интерфейсе (склейка единиц — десятки строк), отменяется целиком.
+    """
+    __tablename__ = "annotations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id", ondelete="CASCADE"), index=True)
+    frame_id: Mapped[int] = mapped_column(ForeignKey("frames.id", ondelete="CASCADE"), index=True)
+    batch: Mapped[str] = mapped_column(String(32), index=True)
+    kind: Mapped[str] = mapped_column(String(24))          # действие UI: box_relabel | unit_merge | …
+    action: Mapped[str] = mapped_column(String(12))        # relabel | delete | add | unit | verify
+    scope: Mapped[str] = mapped_column(String(8), default="frame")   # frame | camera (только delete)
+    cls: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    orig_cls: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    orig_conf: Mapped[float | None] = mapped_column(Float, nullable=True)
+    x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    w: Mapped[float | None] = mapped_column(Float, nullable=True)
+    h: Mapped[float | None] = mapped_column(Float, nullable=True)
+    unit_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    author: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class RawDetections(Base):
+    """Ответ детектора на кадр как есть — до ручных правок и трекера.
+
+    Нужен, чтобы правка (или её отмена) пересчитывала технику без повторного
+    запуска детектора: перепрогон модели А по сохранённым рамкам — секунды,
+    а не минуты YOLO на CPU (pipeline.replay_model_a)."""
+    __tablename__ = "raw_detections"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    frame_id: Mapped[int] = mapped_column(ForeignKey("frames.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(32))
+    items: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    __table_args__ = (UniqueConstraint("frame_id", "provider", name="uq_raw_frame_provider"),)
 
 
 class Job(Base):

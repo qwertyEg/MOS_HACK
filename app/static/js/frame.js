@@ -3,7 +3,7 @@
  * Сюда ведут ссылки из модалки доказательств — адрес можно отправить коллеге.
  */
 document.addEventListener("alpine:init", () => {
-  Alpine.data("framePage", (frameId) => SV.mix(SV.frameMixin(), {
+  Alpine.data("framePage", (frameId) => SV.mix(SV.frameMixin(), SV.annotateMixin(), {
     frameId,
     frame: null,
     error: null,
@@ -22,9 +22,11 @@ document.addEventListener("alpine:init", () => {
       } catch (e) {
         this.error = e.message;
       }
+      this.annInit();
       window.addEventListener("keydown", (e) => {
         if (SV.isTyping(e) || !this.frame) return;
         if ([...document.querySelectorAll("[aria-modal=true]")].some((el) => el.getClientRects().length)) return;
+        if (this.ann.on && (this.ann.sel !== null || this.ann.pending)) return;   // клавиши у меню правки рамки
         if (e.key === "ArrowLeft" && this.frame.prev_id) location.href = `/frames/${this.frame.prev_id}`;
         if (e.key === "ArrowRight" && this.frame.next_id) location.href = `/frames/${this.frame.next_id}`;
         const k = e.key.toLowerCase();

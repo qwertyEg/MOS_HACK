@@ -24,16 +24,20 @@
 
       {# техника #}
       <div>
-        <div class="mb-2 flex items-center justify-between">
+        <div class="mb-2 flex items-center justify-between gap-2">
           <p class="eyebrow">Техника · модель А</p>
-          <span class="text-2xs text-fg-3" x-text="dets.length ? dets.length + ' ' + SV.fmt.plural(dets.length, 'рамка', 'рамки', 'рамок') : ''"></span>
+          <span class="flex items-center gap-2 text-2xs text-fg-3">
+            <span x-text="dets.length ? dets.length + ' ' + SV.fmt.plural(dets.length, 'рамка', 'рамки', 'рамок') : ''"></span>
+            <template x-if="$data.ann && frame.id && !ann.on"><button type="button" class="link" @click="annToggle(true)" title="Исправить класс, удалить или дорисовать рамку (E)">исправить</button></template>
+          </span>
         </div>
         <ul class="divide-y divide-line overflow-hidden rounded-lg border border-line">
           <template x-for="(d, i) in dets" :key="i">
-            <li class="flex items-center gap-2.5 px-3 py-2 transition-colors" :class="highlight === i ? 'bg-panel-3' : 'hover:bg-panel-2'" @mouseenter="highlight = i" @mouseleave="highlight = null">
+            <li class="flex items-center gap-2.5 px-3 py-2 transition-colors" :class="[highlight === i ? 'bg-panel-3' : 'hover:bg-panel-2', $data.ann && ann.on ? 'cursor-pointer' : '']" @mouseenter="highlight = i" @mouseleave="$data.ann && ann.sel === i ? null : highlight = null"
+                @click="$data.ann && ann.on && annSelect(i)">
               <span class="h-6 w-1 shrink-0 rounded-full" :style="'background:' + SV.palette.color(d.class || d.cls)"></span>
               <div class="min-w-0 flex-1">
-                <p class="truncate text-sm" x-text="detName(d)"></p>
+                <p class="flex items-center gap-1.5 truncate text-sm"><span class="truncate" x-text="detName(d)"></span><span x-show="d.manual" class="badge badge-info !h-4 !px-1" :title="$data.annOrigName ? annOrigName(d) : 'исправлено вручную'"><span x-html="$icon('hand', 'w-2.5 h-2.5')"></span>вручную</span></p>
                 <p class="truncate text-2xs text-fg-3" x-text="detSub(d)"></p>
               </div>
               <span class="badge" x-show="d.activity === 'working' || d.activity === 'idle' || (frame.id && d.activity)" :class="d.activity === 'working' ? 'badge-good' : d.activity === 'idle' ? 'badge-warn' : 'badge-neutral'"
@@ -43,6 +47,19 @@
           </template>
           <li x-show="!dets.length" class="px-3 py-4 text-center text-xs text-fg-3">Техники на кадре не найдено.</li>
         </ul>
+        {# ручная разметка кадра: проверен ли, что правили, идёт ли пересчёт техники #}
+        <template x-if="frame.annotations && (frame.annotations.count || ($data.ann && ann.replay && ann.replay.state !== 'idle'))">
+          <div class="mt-2 space-y-1 text-2xs text-fg-3">
+            <p class="flex flex-wrap items-center gap-1.5">
+              <span x-show="frame.annotations.verified" class="badge badge-good"><span x-html="$icon('check', 'w-3 h-3')"></span>разметка проверена</span>
+              <span x-show="frame.annotations.count" x-text="'правок на кадре: ' + frame.annotations.count"></span>
+            </p>
+            <template x-for="b in (frame.annotations.batches || []).slice(-3).reverse()" :key="b.batch">
+              <p class="truncate" :title="b.note" x-text="SV.fmt.dateTime(b.created_at) + ' · ' + b.note"></p>
+            </template>
+            <p x-show="$data.annReplayText" class="flex items-center gap-1.5 text-info-fg"><span class="animate-spin" x-html="$icon('loader', 'w-3 h-3')"></span><span x-text="$data.annReplayText"></span></p>
+          </div>
+        </template>
       </div>
 
       {# чек-лист #}

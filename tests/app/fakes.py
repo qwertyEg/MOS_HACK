@@ -93,6 +93,10 @@ class FakeEngine:
         self._units: dict[str, c.UnitState] = {}
         self._last: dict[Any, tuple[dt.datetime, list[c.Detection]]] = {}
         self.restored: tuple | None = None
+        self.locked: dict[str, str] = {}
+
+    def set_manual_classes(self, classes) -> None:
+        self.locked.update({k: v for k, v in (classes or {}).items() if v})
 
     def restore(self, units, last) -> None:
         self.restored = (list(units), dict(last))
@@ -111,14 +115,18 @@ class FakeEngine:
         intervals = []
         used: set[int] = set()
         for d in detections:
+            key = d.extra.get("manual_unit")          # машина, названная оператором (как в core.equipment)
             best, best_dist = None, math.inf
             for j, p in enumerate(prev):
-                if j in used or p.cls != d.cls:
+                if j in used or (p.unit_id != key if key else p.cls != d.cls):
                     continue
                 dist = math.dist(p.center, d.center)
                 if dist < best_dist:
                     best, best_dist = j, dist
-            if best is not None and best_dist < 150:
+            if key and best is None:
+                d.unit_id, d.track_id = key, f"{frame.camera_id}:{key}"
+                d.activity = c.Activity.UNKNOWN
+            elif best is not None and (best_dist < 150 or key):
                 used.add(best)
                 d.track_id, d.unit_id = prev[best].track_id, prev[best].unit_id
                 d.displacement_px = best_dist
@@ -133,9 +141,16 @@ class FakeEngine:
                 poly = np.array(z.polygon, np.float32)
                 if len(poly) >= 3 and cv2.pointPolygonTest(poly, d.foot, False) >= 0:
                     d.zone_id = z.id
+            if key:
+                d.unit_id = key
             u = self._units.get(d.unit_id) or c.UnitState(
-                unit_id=d.unit_id, cls=d.cls, status=c.UnitStatus.IDLE, first_seen=frame.captured_at,
-                last_seen=frame.captured_at, last_moved=None, label=f"{d.cls} #{d.unit_id.rsplit('-', 1)[-1]}")
+                unit_id=d.unit_id, cls=d.extra.get("manual_unit_cls") or d.cls, status=c.UnitStatus.IDLE,
+                first_seen=frame.captured_at, last_seen=frame.captured_at, last_moved=None,
+                label=f"{d.extra.get('manual_unit_cls') or d.cls} #{d.unit_id.rsplit('-', 1)[-1]}")
+            if self.locked.get(u.unit_id):
+                u.cls = self.locked[u.unit_id]
+            elif key and d.extra.get("manual_unit_cls"):
+                u.cls = d.extra["manual_unit_cls"]
             u.last_seen = frame.captured_at
             u.cameras = set(u.cameras) | {str(frame.camera_id)}
             if d.moved_since_prev and prev_t is not None:

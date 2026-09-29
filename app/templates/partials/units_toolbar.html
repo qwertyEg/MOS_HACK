@@ -1,0 +1,59 @@
+{#- Панель ручной правки машин (внутри unitTools): склейка отмеченных, журнал правок, датасет. -#}
+<div class="mt-3 flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5 sm:px-5">
+  <template x-if="pick.length">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-xs text-fg-2" x-text="'Отмечено: ' + pick.length"></span>
+      <button type="button" class="btn btn-primary btn-sm" :disabled="pick.length < 2" @click="openMerge()" title="Это одна машина: склеить отмеченные">
+        <span x-html="$icon('layers', 'w-3.5 h-3.5')"></span><span x-text="pick.length < 2 ? 'Отметьте ещё одну' : 'Склеить в одну машину'"></span></button>
+      <button type="button" class="btn btn-ghost btn-sm" @click="pick = []">Снять</button>
+    </div>
+  </template>
+  <template x-if="!pick.length">
+    <span class="text-xs text-fg-3">Одна машина посчитана дважды? Отметьте флажками и склейте. Машина «не та» — меню <span class="inline-flex align-[-2px]" x-html="$icon('pencil', 'w-3.5 h-3.5')"></span>.</span>
+  </template>
+  <span x-show="replayText" class="inline-flex items-center gap-1.5 text-xs text-info-fg"><span class="animate-spin" x-html="$icon('loader', 'w-3.5 h-3.5')"></span><span x-text="replayText"></span></span>
+  <div class="ml-auto flex items-center gap-1.5">
+    <button type="button" class="btn btn-ghost btn-sm" :aria-pressed="journalOpen" @click="toggleJournal()" title="Все ручные правки объекта: что, кто, когда — с отменой">
+      <span x-html="$icon('hand', 'w-3.5 h-3.5')"></span>Журнал правок</button>
+    <div class="relative" x-data="{ open: false }" @keydown.escape="open = false">
+      <button type="button" class="btn btn-secondary btn-sm" @click="open = !open" :aria-expanded="open" title="Размеченные кадры в формате YOLO — для дообучения детектора">
+        <span x-html="$icon('download', 'w-3.5 h-3.5')"></span>Датасет</button>
+      <template x-if="open">
+        <div class="menu right-0 top-9 w-72" @click.outside="open = false" role="menu">
+          <a class="menu-item !items-start" role="menuitem" :href="datasetUrl('reviewed')" @click="open = false">
+            <span class="mt-0.5" x-html="$icon('check', 'w-3.5 h-3.5')"></span>
+            <span><span class="block text-fg">Проверенные кадры</span><span class="block text-2xs text-fg-3">правленые и подтверждённые оператором (YOLO zip)</span></span></a>
+          <a class="menu-item !items-start" role="menuitem" :href="datasetUrl('all')" @click="open = false">
+            <span class="mt-0.5" x-html="$icon('download', 'w-3.5 h-3.5')"></span>
+            <span><span class="block text-fg">Все кадры объекта</span><span class="block text-2xs text-fg-3">рамки модели как псевдоразметка + правки</span></span></a>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+{# журнал ручных правок #}
+<template x-if="journalOpen">
+  <div class="border-t border-line bg-panel-2/60 px-4 py-3 sm:px-5">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <p class="text-2xs font-medium uppercase tracking-[0.05em] text-fg-3">Журнал ручных правок</p>
+      <p class="text-2xs text-fg-3" x-show="journal && journal.stats" x-text="journal && journal.stats ? ['действий: ' + (journal.stats.actions || 0), 'проверенных кадров: ' + (journal.stats.reviewed_frames || 0), 'машин вручную: ' + (journal.stats.manual_units || 0)].join(' · ') : ''"></p>
+    </div>
+    <template x-if="!journal"><div class="skeleton mt-2 h-10 w-full"></div></template>
+    <template x-if="journal && !journal.batches.length">
+      <p class="mt-2 text-xs text-fg-3">Правок пока нет. Исправить можно здесь (меню машины, склейка) или на кадре — кнопка «Разметка».</p>
+    </template>
+    <ul class="mt-2 max-h-72 space-y-1 overflow-y-auto" x-show="journal && journal.batches.length">
+      <template x-for="b in (journal ? journal.batches : [])" :key="b.batch">
+        <li class="flex items-start gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-panel-3">
+          <span class="mt-0.5 text-fg-3" x-html="$icon(kindIcon(b.kind), 'w-3.5 h-3.5')"></span>
+          <div class="min-w-0 flex-1">
+            <p class="text-fg-2" x-text="b.note"></p>
+            <p class="text-2xs text-fg-3" x-text="[b.kind_name, SV.fmt.dateTime(b.created_at), b.author, b.frames ? b.frames + ' ' + SV.fmt.plural(b.frames, 'кадр', 'кадра', 'кадров') : null].filter(Boolean).join(' · ')"></p>
+          </div>
+          <button type="button" class="link shrink-0 text-2xs" x-show="b.frame_ids && b.frame_ids.length" @click="openBatchFrame(b)">кадр</button>
+          <button type="button" class="link shrink-0 text-2xs" @click="undo(b.batch)">отменить</button>
+        </li>
+      </template>
+    </ul>
+  </div>
+</template>

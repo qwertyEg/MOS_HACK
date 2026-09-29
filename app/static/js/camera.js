@@ -10,7 +10,7 @@
 document.addEventListener("alpine:init", () => {
   const SIDE = ["analysis", "upload", "calib", "zones"];
 
-  Alpine.data("cameraPage", (cameraId) => SV.mix(SV.frameMixin(), {
+  Alpine.data("cameraPage", (cameraId) => SV.mix(SV.frameMixin(), SV.annotateMixin(), {
     cameraId,
     cam: null,
     frames: null,
@@ -73,6 +73,7 @@ document.addEventListener("alpine:init", () => {
         this.error = e.message;
       }
       window.addEventListener("keydown", (e) => this.onKey(e));
+      this.annInit();
       // Пока у камеры есть кадры в очереди — подтягиваем свежие результаты сами.
       this._poll = setInterval(() => { if (!document.hidden && this.cam && (this.cam.pending || this.inQueue)) this.poll(); }, 6000);
     },
@@ -101,6 +102,7 @@ document.addEventListener("alpine:init", () => {
       if (SV.isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
       // Пока открыта модалка (снимок, подсказка), стрелки принадлежат ей.
       if ([...document.querySelectorAll("[aria-modal=true]")].some((el) => el.getClientRects().length)) return;
+      if (this.ann.on && (this.ann.sel !== null || this.ann.pending)) return;   // клавиши у меню правки рамки
       const k = e.key.toLowerCase();
       if (e.key === "ArrowLeft") { e.preventDefault(); this.step(-1); }
       else if (e.key === "ArrowRight") { e.preventDefault(); this.step(1); }
@@ -119,6 +121,7 @@ document.addEventListener("alpine:init", () => {
       if (!this.frames || !this.frames.length) return;
       i = Math.max(0, Math.min(this.frames.length - 1, i));
       this.idx = i;
+      this.annCancel();           // выбранная рамка — с прошлого кадра
       const f = this.frames[i];
       history.replaceState(null, "", `?frame=${f.id}${location.hash}`);
       this.frameError = null;

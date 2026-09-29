@@ -48,7 +48,14 @@
         return chips;
       },
       get dets() { return (this.frame && this.frame.detections) || []; },
-      detName(d) { this.unitsTick; return SV.unitName(d.unit_id) || d.name || SV.classNames[d.class || d.cls] || d.class || d.cls; },
+      detName(d) {
+        this.unitsTick;
+        const cls = SV.classNames[d.class || d.cls] || d.class || d.cls;
+        const unit = SV.unitName(d.unit_id);
+        // Класс этой рамки оператор задал вручную и он расходится с машиной — называем по рамке.
+        if (unit && d.manual && d.manual.cls && !unit.startsWith(cls)) return cls;
+        return unit || d.name || cls;
+      },
       /* Подстрока рамки: класс (если в заголовке — имя единицы), зона, сдвиг с прошлого кадра. */
       detSub(d) {
         const parts = [];

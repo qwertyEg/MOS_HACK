@@ -1,0 +1,14 @@
+{#- Слой режима «Разметка» поверх кадра (внутри .viewer): рамки кликабельны, инструмент «+ Рамка» рисует новую.
+    Ожидает SV.annotateMixin() в компоненте (frame.js, camera.js). -#}
+<template x-if="$data.ann && ann.on && frame">
+  <div class="viewer-layer ann-layer" :class="ann.tool === 'draw' ? 'is-drawing' : ''"
+       @pointerdown="annDown($event)" @pointermove="annMove($event)" @pointerup="annUp($event)" @click.stop>
+    <template x-for="(d, i) in dets" :key="'a' + (d.id || i)">
+      <button type="button" class="ann-box" :class="{ 'is-sel': ann.sel === i, 'is-manual': !!d.manual }" :style="annBoxStyle(d)"
+              @pointerdown.stop @click.stop="annSelect(i)" :aria-label="'Править рамку: ' + detName(d)" :title="'Править: ' + detName(d)"></button>
+    </template>
+    <template x-if="annDraft"><div class="ann-draft" :style="annRectStyle(annDraft)"></div></template>
+    <template x-if="ann.pending"><div class="ann-draft is-done" :style="annRectStyle(ann.pending.bbox)"></div></template>
+    <span class="ann-hint" x-text="annReplayText || (ann.tool === 'draw' ? 'Протяните мышью рамку вокруг пропущенной машины' : 'Кликните рамку, чтобы исправить класс или удалить. «+ Рамка» — дорисовать пропущенную')"></span>
+  </div>
+</template>

@@ -32,6 +32,12 @@ def clean(detections: list[Detection], width: int, height: int,
     for d in detections:
         if d.cls not in known:
             continue                                    # класс не из словаря — ядро такого не знает
+        if d.extra.get("manual"):
+            # Рамку дорисовал или подтвердил оператор: пороги уверенности, размера и
+            # края — это защита от шума детектора, а не от человека.
+            kept.append(dataclasses.replace(d, bbox=boxes.clip(d.bbox, width, height) if frame_area else d.bbox,
+                                            extra=dict(d.extra)))
+            continue
         if d.conf < cfg.conf_for(d.cls):
             continue
         b = boxes.clip(d.bbox, width, height) if frame_area else d.bbox
@@ -49,14 +55,17 @@ def clean(detections: list[Detection], width: int, height: int,
         # (например, сырые рамки для отладки детектора).
         kept.append(dataclasses.replace(d, bbox=b, extra=dict(d.extra)))
 
-    kept.sort(key=lambda d: d.conf, reverse=True)
+    # Рамки оператора — первыми: при «одна машина — одна рамка» побеждает человек.
+    # Две ручные рамки друг друга не гасят — их обе нарисовал или подтвердил он.
+    kept.sort(key=lambda d: (bool(d.extra.get("manual")), d.conf), reverse=True)
     out: list[Detection] = []
     for d in kept:
-        winner = next((k for k in out if _same_machine(k, d, cfg)), None)
+        winner = next((k for k in out if not (k.extra.get("manual") and d.extra.get("manual"))
+                       and _same_machine(k, d, cfg)), None)
         if winner is None:
             out.append(d)
             continue
-        if winner.cls != d.cls:
+        if winner.cls != d.cls and not winner.extra.get("manual"):
             # Проигравшая метка не выбрасывается бесследно: трекер добавит её
             # голос к треку, и при устойчивой путанице победит большинство.
             winner.extra["alt"] = [*winner.extra.get("alt", []), [d.cls, round(float(d.conf), 3)]]

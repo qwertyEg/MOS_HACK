@@ -164,6 +164,100 @@ class Recomputer:
             self._timers.clear()
 
 
+class Replayer:
+    """Перепрогон модели А по сохранённым рамкам после ручной правки (pipeline.replay_model_a).
+
+    Правки на кадре идут пачкой (сменил класс, удалил рамку, дорисовал) — перепрогон
+    один, через паузу после последней; правка во время перепрогона — ещё один после
+    него. Склейку машин на небольшом объекте API перепрогоняет сразу (`run`), чтобы
+    оператор увидел итог в ответе. После перепрогона — пересчёт аналитики площадки.
+    """
+
+    def __init__(self) -> None:
+        self._timers: dict[int, threading.Timer] = {}
+        self._running: dict[int, dict] = {}
+        self._again: set[int] = set()
+        self._last: dict[int, dict] = {}
+        self._lock = threading.Lock()
+        self._site_locks: dict[int, threading.Lock] = {}
+
+    def _site_lock(self, site_id: int) -> threading.Lock:
+        with self._lock:
+            return self._site_locks.setdefault(site_id, threading.Lock())
+
+    def request(self, site_id: int) -> None:
+        delay = settings.recompute_debounce_s
+        if delay <= 0:
+            self.run(site_id)
+            return
+        with self._lock:
+            if site_id in self._running:
+                self._again.add(site_id)
+                return
+            old = self._timers.pop(site_id, None)
+            if old is not None:
+                old.cancel()
+            t = threading.Timer(min(delay, 1.5), self._fire, args=(site_id,))
+            t.daemon = True
+            self._timers[site_id] = t
+            t.start()
+
+    def _fire(self, site_id: int) -> None:
+        with self._lock:
+            self._timers.pop(site_id, None)
+        self.run(site_id)
+
+    def run(self, site_id: int) -> dict | None:
+        with self._site_lock(site_id):
+            with self._lock:
+                t = self._timers.pop(site_id, None)
+                if t is not None:
+                    t.cancel()
+                self._running[site_id] = {"done": 0, "total": 0,
+                                          "started_at": dt.datetime.now(dt.UTC).isoformat()}
+
+            def progress(done: int, total: int) -> None:
+                with self._lock:
+                    self._running[site_id] = {**self._running.get(site_id, {}), "done": done, "total": total}
+
+            res = None
+            try:
+                res = pipeline.replay_model_a(site_id, progress=progress)
+                self._last[site_id] = {**res, "error": None, "finished_at": dt.datetime.now(dt.UTC).isoformat()}
+            except Exception as exc:  # noqa: BLE001 — перепрогон не должен ронять поток API
+                log.exception("перепрогон модели А площадки %s упал", site_id)
+                self._last[site_id] = {"error": f"{type(exc).__name__}: {exc}",
+                                       "finished_at": dt.datetime.now(dt.UTC).isoformat()}
+            finally:
+                with self._lock:
+                    self._running.pop(site_id, None)
+                    again = site_id in self._again
+                    self._again.discard(site_id)
+        if again:
+            self.request(site_id)
+        else:
+            recomputer.request(site_id)
+        return res
+
+    def state(self, site_id: int) -> dict:
+        with self._lock:
+            if site_id in self._running:
+                return {"state": "running", **self._running[site_id], "last": self._last.get(site_id)}
+            if site_id in self._timers:
+                return {"state": "queued", "last": self._last.get(site_id)}
+            return {"state": "idle", "last": self._last.get(site_id)}
+
+    def busy(self) -> bool:
+        with self._lock:
+            return bool(self._timers or self._running)
+
+    def cancel_all(self) -> None:
+        with self._lock:
+            for t in self._timers.values():
+                t.cancel()
+            self._timers.clear()
+
+
 class FrameQueue:
     def __init__(self) -> None:
         self._workers: dict[int, _CameraWorker] = {}
@@ -300,7 +394,7 @@ class FrameQueue:
         deadline = time.monotonic() + timeout
         quiet_since = None
         while time.monotonic() < deadline:
-            idle = self.pending() == 0 and not jobs_busy() and not recomputer.busy()
+            idle = self.pending() == 0 and not jobs_busy() and not recomputer.busy() and not replayer.busy()
             if idle:
                 quiet_since = quiet_since or time.monotonic()
                 if time.monotonic() - quiet_since > 0.15:
@@ -321,6 +415,7 @@ class FrameQueue:
         for w in workers:
             w.join(timeout)
         recomputer.cancel_all()
+        replayer.cancel_all()
         self.started = False
 
 
@@ -330,4 +425,5 @@ def camera_ids_for_site(site_id: int) -> list[int]:
 
 
 recomputer = Recomputer()
+replayer = Replayer()
 frame_queue = FrameQueue()

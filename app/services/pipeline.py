@@ -32,7 +32,7 @@ from app.models import (
     ActivityInterval, Camera, CameraState, Detection, Deviation, EquipmentUnit, Frame, PlanItem,
     SiteFleet, Site, StageObservation, StageState, utcnow,
 )
-from app.services import adapters, providers
+from app.services import adapters, annotations, providers
 from app.services import settings as settings_svc
 from app.services.providers import ProviderUnavailable, registry
 from core import contracts as c
@@ -296,6 +296,24 @@ def _engine(s: Session, site: Site, thresholds: dict, provider: str) -> Any:
     engine = _engines.get(site.id)
     if engine is not None:
         return engine
+    engine = _new_engine(site, thresholds)
+    engine.restore(adapters.units(s, site.id), adapters.last_detections_by_camera(s, site.id, provider))
+    _manual_classes(s, site.id, engine)
+    _engines[site.id] = engine
+    return engine
+
+
+def _manual_classes(s: Session, site_id: int, engine: Any) -> None:
+    """Классы ручных машин (склейка, смена типа) — в движок: в UnitState их нет."""
+    if not hasattr(engine, "set_manual_classes"):
+        return
+    try:
+        engine.set_manual_classes(annotations.key_classes(s, site_id))
+    except Exception:  # noqa: BLE001 — без закрепления класс решат голоса детектора
+        log.exception("классы ручных машин площадки %s", site_id)
+
+
+def _new_engine(site: Site, thresholds: dict) -> Any:
     eq = providers.module("core.equipment")
     values = dict(thresholds.get("equipment") or {})
     # День плана, на который списываются моточасы, — по часовому поясу площадки;
@@ -308,10 +326,7 @@ def _engine(s: Session, site: Site, thresholds: dict, provider: str) -> Any:
         values["utilization"] = float(thresholds["analytics"]["utilization"])
     known = set(getattr(eq.EquipmentConfig, "__dataclass_fields__", {}) or values)
     config = eq.EquipmentConfig.from_dict({k: v for k, v in values.items() if k in known})
-    engine = eq.EquipmentEngine(config)
-    engine.restore(adapters.units(s, site.id), adapters.last_detections_by_camera(s, site.id, provider))
-    _engines[site.id] = engine
-    return engine
+    return eq.EquipmentEngine(config)
 
 
 def _write_equipment(s: Session, fr: Frame, site: Site, update: Any, provider: str) -> int:
@@ -378,6 +393,13 @@ def _run_model_a(s: Session, fr: Frame, cam: Camera, site: Site, img: np.ndarray
     detector = registry.require("detector", name)
     with registry.call_lock("detector", name):
         detections = detector.detect(img, info)
+    try:
+        # Ответ детектора — в raw_detections (правка потом пересчитает технику без
+        # детектора), поверх него — ручные правки оператора (требование 3).
+        detections = annotations.prepare(s, fr, site.id, name, detections)
+    except Exception:  # noqa: BLE001 — сбой правок не должен лишать кадр модели А
+        s.rollback()
+        log.exception("ручные правки кадра %s не применены", fr.id)
     with site_lock(site.id):
         engine = _engine(s, site, state["thresholds"], name)
         update = engine.process(info, img, detections, adapters.geometry(cam),
@@ -387,6 +409,78 @@ def _run_model_a(s: Session, fr: Frame, cam: Camera, site: Site, img: np.ndarray
     # «Камера не откалибрована» движок пишет на каждом кадре — UI и так показывает
     # это у камеры, в примечании кадра оставляем только события кадра.
     return [str(n) for n in (getattr(update, "notes", None) or []) if "не откалибрована" not in str(n)]
+
+
+def replay_model_a(site_id: int, progress: Any = None) -> dict[str, Any]:
+    """Перепрогнать модель А площадки по сохранённым ответам детектора — с ручными правками.
+
+    Зачем: правка оператора (удалил ложную рамку, склеил машины) меняет не один кадр,
+    а единицы, моточасы и статусы всей истории. Детектор заново не запускается
+    (ответ каждого кадра лежит в raw_detections), поэтому это секунды на демо-объекте,
+    а не минуты YOLO на CPU. Кадры всех камер идут строго по времени съёмки;
+    очередь площадки ждёт на замке площадки и продолжает уже с новым движком.
+    progress(done, total) — для индикатора в UI.
+    """
+    t0 = dt.datetime.now(dt.UTC)
+    with db.session() as s:
+        site = s.get(Site, site_id)
+        if site is None:
+            return {"frames": 0, "units": 0}
+        state = settings_svc.get_state(s)
+        preferred = state["model_a"]
+        cams = {cam.id: cam for cam in s.scalars(select(Camera).where(Camera.site_id == site_id))}
+        annotations.ensure_raw(s, site_id, preferred)
+        s.commit()
+        frames = list(s.scalars(select(Frame).where(Frame.camera_id.in_(list(cams) or [-1]),
+                                                    Frame.processed_a.is_(True))
+                                .order_by(Frame.captured_at, Frame.id)))
+        total = len(frames)
+        zones = {cid: adapters.zones_for_camera(s, cam) for cid, cam in cams.items()}
+        geoms = {cid: adapters.geometry(cam) for cid, cam in cams.items()}
+        plan = adapters.plan_items(s, site_id)
+        with site_lock(site_id):
+            _engines.pop(site_id, None)
+            engine = _new_engine(site, state["thresholds"])
+            _manual_classes(s, site_id, engine)
+            # Строки единиц не удаляем, а переиспользуем по uid: у машины, которую
+            # перепрогон узнал снова, тот же id — ссылки в открытом UI не «переезжают»
+            # на другую машину. Лишние удалим в конце.
+            frame_ids = select(Frame.id).where(Frame.camera_id.in_(list(cams) or [-1]))
+            s.execute(sa_update(Detection).where(Detection.frame_id.in_(frame_ids)).values(unit_id=None))
+            s.execute(delete(ActivityInterval).where(ActivityInterval.site_id == site_id,
+                                                     ActivityInterval.manual.is_(False)))
+            s.flush()
+            place_rows = {cid: annotations.places(s, cid) for cid in cams}
+            key_cls = annotations.key_classes(s, site_id)
+            store = storage.get()
+            for i in range(0, total, 100):
+                chunk = frames[i:i + 100]
+                raw = annotations.raw_for_frames(s, [f.id for f in chunk], preferred)
+                rules = annotations.frame_rules(s, [f.id for f in chunk])
+                for n, fr in enumerate(chunk, start=i + 1):
+                    dets, prov = raw.get(fr.id, ([], preferred))
+                    dets = annotations.apply(dets, rules.get(fr.id, []), place_rows.get(fr.camera_id, []), key_cls)
+                    try:
+                        img = cv2.imdecode(np.frombuffer(store.get(fr.key), np.uint8), cv2.IMREAD_COLOR)
+                    except Exception:  # noqa: BLE001 — нет файла: движение оценим только по рамкам
+                        img = None
+                    cam = cams[fr.camera_id]
+                    update = engine.process(adapters.frame_info(fr, cam), img, dets, geoms[cam.id],
+                                            zones[cam.id], plan)
+                    _write_equipment(s, fr, site, update, prov)
+                    if progress is not None:
+                        progress(n, total)
+                s.commit()
+            alive = {u.unit_id for u in engine.units()}
+            for row in s.scalars(select(EquipmentUnit).where(EquipmentUnit.site_id == site_id)).all():
+                if row.uid not in alive:
+                    s.delete(row)
+            _engines[site_id] = engine
+            s.commit()
+            units = s.scalar(select(func.count()).select_from(EquipmentUnit)
+                             .where(EquipmentUnit.site_id == site_id)) or 0
+    return {"frames": total, "units": units,
+            "seconds": round((dt.datetime.now(dt.UTC) - t0).total_seconds(), 2)}
 
 
 # --------------------------------------------------------------------------

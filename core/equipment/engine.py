@@ -44,6 +44,17 @@ log = logging.getLogger(__name__)
 
 _RESTORED = "__restored__"      # «мнение» о зоне отстоя, поднятое из БД после рестарта
 
+# Ручная разметка оператора (app/services/annotations.py) приходит полями Detection.extra:
+MANUAL_UNIT = "manual_unit"            # рамка — машина, которую назвал оператор; значение — uid её единицы
+MANUAL_UNIT_CLS = "manual_unit_cls"    # закреплённый оператором класс этой машины
+MANUAL_CLS = "manual_cls"              # класс именно этой рамки задан вручную — классом единицы не перезаписываем
+MANUAL_PREFIX = "m"                    # uid ручных единиц; свои движок пишет как u0001
+
+
+def is_manual(uid: str | None) -> bool:
+    """Единица создана правкой оператора (склейка, разделение, смена типа)."""
+    return bool(uid) and uid.startswith(MANUAL_PREFIX)
+
 
 @dataclass
 class EquipmentUpdate:
@@ -82,6 +93,8 @@ class _Unit:
     # прошлым без разрыва. У камеры, снимающей раз в сутки, движение не оценивается вовсе,
     # и «на стоянке, ждёт вывоза» (PARKED) по времени ей не из чего вывести — «стоит».
     judged_until: dt.datetime | None = None
+    # Последняя рамка по камерам: вернувшуюся «ручную» машину узнаём только на её месте кадра.
+    boxes: dict[str, tuple[float, float, float, float]] = field(default_factory=dict)
 
 
 class EquipmentEngine:
@@ -97,6 +110,8 @@ class EquipmentEngine:
         self._plates: dict[str, str] = {}
         self._merged: dict[str, str] = {}
         self._counter = 0
+        # uid ручной единицы → класс, закреплённый оператором: голоса детектора его не меняют.
+        self._locked: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # публичный интерфейс
@@ -126,11 +141,16 @@ class EquipmentEngine:
                 self._units[st.unit_id] = u
                 if st.plate:
                     self._plates[st.plate] = st.unit_id
-                m = re.search(r"(\d+)$", st.unit_id)
+                # Только свои uid (u0001): у ручных единиц своя нумерация, и хвост их
+                # ключа не должен сдвигать счётчик движка.
+                m = re.fullmatch(r"u(\d+)", st.unit_id)
                 if m:
                     self._counter = max(self._counter, int(m.group(1)))
             for cam, (ts, dets) in last.items():
                 cam = str(cam)
+                for d in dets:
+                    if d.unit_id in self._units:
+                        self._units[d.unit_id].boxes[cam] = tuple(d.bbox)
                 tracker = CameraTracker(cam, self.cfg)
                 tracker.restore(ts, [d if d.unit_id in self._units else dataclasses.replace(d, unit_id=None)
                                      for d in dets])
@@ -140,6 +160,21 @@ class EquipmentEngine:
     def units(self) -> list[UnitState]:
         with self._lock:
             return self._snapshot_all()
+
+    def set_manual_classes(self, classes: dict[str, str]) -> None:
+        """Классы, закреплённые оператором за ручными единицами (uid → класс).
+
+        Веб-слой зовёт после `restore()`: в UnitState закрепления нет, оно живёт
+        в таблице ручных правок. Пустой класс — снять закрепление."""
+        with self._lock:
+            for uid, cls in (classes or {}).items():
+                if not cls:
+                    self._locked.pop(uid, None)
+                    continue
+                self._locked[uid] = cls
+                u = self._units.get(uid)
+                if u is not None and u.state.cls != cls:
+                    self._force_class(u, cls)
 
     def process(self, frame: FrameInfo, image_bgr: np.ndarray | None, detections: list[Detection],
                 geometry: CameraGeometry | None, zones: list[Zone],
@@ -218,9 +253,11 @@ class EquipmentEngine:
         for s in steps:
             u = self._units[s.track.unit_id]
             d = s.detection
-            if d.cls != u.state.cls:
+            # Класс рамки, заданный оператором («только эта рамка»), — истина для
+            # разметки кадра: большинством голосов единицы его не перекрываем.
+            if d.cls != u.state.cls and not d.extra.get(MANUAL_CLS):
                 d.extra["raw_cls"] = d.cls
-            d.cls = u.state.cls
+                d.cls = u.state.cls
             d.unit_id = u.state.unit_id
             d.extra["unit_label"] = u.state.label
             d.extra["unit_status"] = u.state.status.value
@@ -266,6 +303,14 @@ class EquipmentEngine:
         for k, s in enumerate(steps):
             tr, d = s.track, s.detection
             cls = tr.label or d.cls
+            key = d.extra.get(MANUAL_UNIT)
+            if key:
+                # Машину назвал оператор (склейка / разделение): его слово важнее
+                # склейки камер и возврата уехавших — единица задана ключом правки.
+                tr.unit_id = self._manual_unit(str(key), d.cls, d.extra.get(MANUAL_UNIT_CLS), t, taken)
+                tr.coloc = None
+                taken.add(tr.unit_id)
+                continue
             # Кандидаты — через карту склеек: предыдущая рамка этого же кадра
             # могла только что склеить одну из единиц группы с другой.
             candidates = [self._resolve(o.unit_id) for o in sorted(
@@ -281,12 +326,14 @@ class EquipmentEngine:
                 self._switch(tr, plate_uid, t, merged)                  # номер — безусловно
             elif tr.unit_id is None:
                 tr.unit_id = ((candidates[0] if candidates else None)
-                              or self._revive(cls, cam, d.site_xy, t, busy=taken | mine)
-                              or (self._resume(tr, cls, cam, d.site_xy, t, taken | mine)
+                              or self._revive(cls, cam, d.site_xy, t, busy=taken | mine, box=d.bbox)
+                              or (self._resume(tr, cls, cam, d.site_xy, t, taken | mine, box=d.bbox)
                                   if after_gap is not None else None)
                               or self._new_unit(cls, t))
             elif candidates and self._young_single(tr.unit_id, t):
                 self._switch(tr, candidates[0], t, merged)              # дубль с границы зон камер
+            elif is_manual(tr.unit_id) and (not candidates or is_manual(candidates[0])):
+                pass        # ручную единицу сам не склеиваем и не отделяем (две ручные — решил оператор)
             elif (candidates and candidates[0] not in taken and self._young_single(candidates[0], t)
                   and self._disjoint(tr.unit_id, candidates[0], t)):
                 # Обратный случай: дубль родился в ДРУГОЙ камере минуту назад (она
@@ -300,12 +347,14 @@ class EquipmentEngine:
                 # пересечении) — это одна машина. Оставляем старшую.
                 keep, drop = sorted((tr.unit_id, candidates[0]),
                                     key=lambda u: (self._units[u].state.first_seen, u))
+                if is_manual(drop):
+                    keep, drop = drop, keep                  # остаётся машина, названная оператором
                 merged[drop] = keep
                 self._merge(drop, keep)
                 tr.unit_id = keep
             elif self._drifted(tr, d, t, cam):
                 log.info("трек %s отделён от единицы %s: разошлись на плане", tr.track_id, tr.unit_id)
-                tr.unit_id = (self._revive(cls, cam, d.site_xy, t, exclude=tr.unit_id, busy=taken | mine)
+                tr.unit_id = (self._revive(cls, cam, d.site_xy, t, exclude=tr.unit_id, busy=taken | mine, box=d.bbox)
                               or self._new_unit(cls, t))
 
             if tr.unit_id in taken:
@@ -342,7 +391,7 @@ class EquipmentEngine:
     def _young_single(self, uid: str | None, t: dt.datetime) -> bool:
         """Единица только что родилась одним треком и без номера — её можно безболезненно склеить."""
         u = self._units.get(uid) if uid else None
-        if u is None or u.state.plate:
+        if u is None or u.state.plate or is_manual(uid):
             return False
         if t - u.state.first_seen > dt.timedelta(minutes=self.cfg.merge_young_min):
             return False
@@ -374,7 +423,7 @@ class EquipmentEngine:
 
     def _drifted(self, tr, d: Detection, t: dt.datetime, cam: str) -> bool:
         """Трек устойчиво расходится с остальными камерами своей единицы — ошибочная склейка."""
-        if tr.unit_id is None or d.site_xy is None:
+        if tr.unit_id is None or d.site_xy is None or is_manual(tr.unit_id):
             tr.conflicts = 0
             return False
         u = self._units[tr.unit_id]
@@ -393,7 +442,7 @@ class EquipmentEngine:
         return False
 
     def _revive(self, cls: str, cam: str, xy, t: dt.datetime, exclude: str | None = None,
-                busy: set[str] = frozenset()) -> str | None:
+                busy: set[str] = frozenset(), box=None) -> str | None:
         """Уехавшая машина того же типа вернулась в ту же камеру/место — тот же unit_id.
 
         Без номера различить две одинаковые машины нельзя; зато челночные
@@ -413,6 +462,8 @@ class EquipmentEngine:
                 continue
             if not taxonomy.confusable(st.cls, cls) or st.last_seen > t or t - st.last_seen > horizon:
                 continue
+            if is_manual(uid) and not _same_place(u.boxes.get(cam), box):
+                continue            # машину назвал оператор — чужую рамку того же типа ей не отдаём
             near = xy is not None and st.site_xy is not None and _dist(xy, st.site_xy) <= gray
             if cam not in st.cameras and not near:
                 continue
@@ -421,7 +472,7 @@ class EquipmentEngine:
                 best = (rank, uid)
         return best[1] if best else None
 
-    def _resume(self, tr, cls: str, cam: str, xy, t: dt.datetime, busy: set[str]) -> str | None:
+    def _resume(self, tr, cls: str, cam: str, xy, t: dt.datetime, busy: set[str], box=None) -> str | None:
         """Кадр после долгого молчания камеры: машина того же типа, которую эта камера
         уже видела, — та же единица, если сейчас её не ведёт ни один трек.
 
@@ -447,6 +498,8 @@ class EquipmentEngine:
                 continue
             if not taxonomy.confusable(st.cls, cls) or st.last_seen > t - window:
                 continue
+            if is_manual(uid) and not _same_place(u.boxes.get(cam), box):
+                continue
             # За ночь машину могли перегнать через всю площадку — место не запрет,
             # а только порядок: сначала тот же класс, потом стоявшая рядом, потом недавняя.
             near = xy is not None and st.site_xy is not None and _dist(xy, st.site_xy) <= gray
@@ -464,14 +517,36 @@ class EquipmentEngine:
             del tracks[tid]
         return uid
 
-    def _new_unit(self, cls: str, t: dt.datetime) -> str:
-        self._counter += 1
-        uid = f"u{self._counter:04d}"
+    def _new_unit(self, cls: str, t: dt.datetime, uid: str | None = None) -> str:
+        if uid is None:
+            self._counter += 1
+            uid = f"u{self._counter:04d}"
         ordinal = self._next_ordinal(cls)
         st = UnitState(unit_id=uid, cls=cls, status=UnitStatus.IDLE, first_seen=t, last_seen=t,
                        last_moved=None, label=_label(cls, ordinal))
         self._units[uid] = _Unit(st, ordinal)
         return uid
+
+    def _manual_unit(self, key: str, cls: str, lock: str | None, t: dt.datetime, taken: set[str]) -> str:
+        """Единица, названная оператором: её uid — ключ правки; lock — закреплённый класс."""
+        uid = self._resolve(key)
+        if uid in taken:
+            # Две рамки одного кадра с одним ключом: оператор склеил машину с её же
+            # лишней рамкой. Одна машина — одна рамка, вторая остаётся отдельной.
+            return self._new_unit(cls, t)
+        if lock:
+            self._locked[uid] = lock
+        if uid not in self._units:
+            self._new_unit(self._locked.get(uid) or cls, t, uid=uid)
+        u = self._units[uid]
+        if uid in self._locked and u.state.cls != self._locked[uid]:
+            self._force_class(u, self._locked[uid])
+        return uid
+
+    def _force_class(self, u: _Unit, cls: str) -> None:
+        u.ordinal = self._next_ordinal(cls)          # до смены класса — чтобы не посчитать саму себя
+        u.state.cls = cls
+        u.state.label = _label(cls, u.ordinal)
 
     def _next_ordinal(self, cls: str) -> int:
         return 1 + max((u.ordinal for u in self._units.values() if u.state.cls == cls), default=0)
@@ -493,6 +568,8 @@ class EquipmentEngine:
             b.state.worked_hours += sum((pe - ps).total_seconds() / 3600 for ps, pe in b.credited.add(s, e))
         b.votes.extend(a.votes)
         b.history.extend(a.history)
+        for cam, box in a.boxes.items():
+            b.boxes.setdefault(cam, box)
         for cam, flag in a.parking.items():
             b.parking.setdefault(cam, flag)
         self._merged[src] = dst
@@ -523,6 +600,7 @@ class EquipmentEngine:
             u.votes.append((alt_cls, 0.5 * float(alt_conf)))
         if s.track.hist is not None:
             u.hist = s.track.hist if u.hist is None else (0.7 * u.hist + 0.3 * s.track.hist).astype(np.float32)
+        u.boxes[cam] = tuple(d.bbox)
         if d.site_xy is not None:
             u.history.append((t, cam, d.site_xy))
             pos, _ = self._position_at(u, t, exclude_cam="")
@@ -537,7 +615,12 @@ class EquipmentEngine:
         self._relabel(u)
 
     def _relabel(self, u: _Unit) -> None:
-        """Класс единицы — большинство голосов всех её камер и кадров."""
+        """Класс единицы — большинство голосов всех её камер и кадров (или класс, закреплённый оператором)."""
+        locked = self._locked.get(u.state.unit_id)
+        if locked:
+            if u.state.cls != locked:
+                self._force_class(u, locked)
+            return
         score: Counter[str] = Counter()
         for cls, w in u.votes:
             score[cls] += w
@@ -605,6 +688,14 @@ def _dist(a, b) -> float:
     if a is None or b is None:
         return math.inf
     return math.dist(a, b)
+
+
+def _same_place(last, box) -> bool:
+    """Рамка там же, где машину видели на этой камере в последний раз (в пределах её размера)."""
+    if last is None or box is None:
+        return False
+    reach = 1.5 * max(math.hypot(last[2], last[3]), math.hypot(box[2], box[3]))
+    return math.dist((last[0] + last[2] / 2, last[1] + last[3] / 2), (box[0] + box[2] / 2, box[1] + box[3] / 2)) <= reach
 
 
 def _zone_for(d: Detection, cam_zones: list[Zone], site_zones: list[Zone]) -> tuple[int | None, str | None]:

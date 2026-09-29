@@ -1,0 +1,59 @@
+{#- Меню правки рамки в режиме «Разметка»: класс (рамки или всей машины), «не техника», разделить машину;
+    для нарисованной рамки — выбор класса. position:fixed рядом с рамкой (во вьюере меню обрезалось бы). -#}
+<template x-if="$data.ann && ann.on && ann.pos && (annSel || ann.pending)">
+  <div class="ann-pop card shadow-pop" :style="annPopStyle" role="dialog" aria-modal="false" aria-label="Правка рамки" @keydown.escape.stop="annCancel()">
+    <button type="button" class="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded text-fg-3 hover:bg-panel-3 hover:text-fg" @click="annCancel()" aria-label="Закрыть"><span x-html="$icon('x', 'w-3.5 h-3.5')"></span></button>
+
+    <template x-if="ann.pending">
+      <form class="space-y-3 p-3" @submit.prevent="annAdd()">
+        <p class="pr-6 text-sm font-semibold">Новая рамка</p>
+        <div>
+          <label class="label" for="ann-new-cls">Что это за техника</label>
+          <select id="ann-new-cls" class="input input-sm" x-model="ann.cls" x-init="$nextTick(() => $el.focus())">
+            <template x-for="c in annClasses" :key="c.key"><option :value="c.key" x-text="c.name" :selected="c.key === ann.cls"></option></template>
+          </select>
+          <p class="hint">Рамка сразу учитывается в технике объекта и пойдёт в датасет для дообучения.</p>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" class="btn btn-ghost btn-sm" @click="annCancel()">Отмена</button>
+          <button class="btn btn-primary btn-sm" :disabled="ann.busy || !ann.cls" x-text="ann.busy ? 'Сохраняем…' : 'Добавить рамку'"></button>
+        </div>
+      </form>
+    </template>
+
+    <template x-if="annSel && !ann.pending">
+      <div class="space-y-3 p-3">
+        <div class="pr-6">
+          <p class="flex items-center gap-1.5 text-sm font-semibold"><span class="h-2.5 w-2.5 shrink-0 rounded-sm" :style="'background:' + SV.palette.color(annSel.class || annSel.cls)"></span><span class="truncate" x-text="detName(annSel)"></span></p>
+          <p class="mt-0.5 text-2xs text-fg-3" x-text="[detClass(annSel), annSel.manual && annSel.manual.added ? null : 'уверенность ' + Math.round((annSel.conf || 0) * 100) + '%', annOrigName(annSel)].filter(Boolean).join(' · ')"></p>
+        </div>
+        <form class="space-y-2" @submit.prevent="annRelabel()">
+          <label class="label !mb-1" for="ann-cls">Правильный класс</label>
+          <select id="ann-cls" class="input input-sm" x-model="ann.cls">
+            <template x-for="c in annClasses" :key="c.key"><option :value="c.key" x-text="c.name" :selected="c.key === ann.cls"></option></template>
+          </select>
+          <template x-if="annSel.unit_id">
+            <div class="seg flex w-full" role="group" aria-label="Что исправить">
+              <button type="button" class="flex-1 justify-center" :aria-pressed="ann.scope === 'unit'" @click="ann.scope = 'unit'">Вся машина</button>
+              <button type="button" class="flex-1 justify-center" :aria-pressed="ann.scope === 'box'" @click="ann.scope = 'box'">Только эта рамка</button>
+            </div>
+          </template>
+          <p class="hint !mt-0" x-text="ann.scope === 'unit' && annSel.unit_id ? '«' + annUnitName + '» на всех кадрах: класс, рамки и моточасы переходят к новому типу' : 'Только эта рамка на этом кадре (разметка для дообучения)'"></p>
+          <button class="btn btn-primary btn-sm w-full" :disabled="ann.busy || !ann.cls" x-text="ann.busy ? 'Сохраняем…' : 'Сохранить класс'"></button>
+        </form>
+        <div class="space-y-1.5 border-t border-line pt-3">
+          <button type="button" class="btn btn-danger btn-sm w-full !justify-start" :disabled="ann.busy" @click="annDelete('frame')">
+            <span x-html="$icon('trash', 'w-3.5 h-3.5')"></span>Не техника — убрать рамку<span class="kbd ml-auto">D</span></button>
+          <button type="button" class="btn btn-secondary btn-sm w-full !justify-start" :disabled="ann.busy" @click="annDelete('camera')"
+                  title="Мачта, контейнер, столб, бытовка: рамка в этом месте камеры не считается техникой ни на прошлых, ни на новых кадрах">
+            <span x-html="$icon('target', 'w-3.5 h-3.5')"></span>Это место камеры — не техника</button>
+          <template x-if="annSel.unit_row_id">
+            <button type="button" class="btn btn-secondary btn-sm w-full !justify-start" :disabled="ann.busy" @click="annSplit()"
+                    title="Трекер слепил две машины: с этого кадра (на этой камере) — отдельная машина">
+              <span x-html="$icon('move', 'w-3.5 h-3.5')"></span>Другая машина с этого кадра</button>
+          </template>
+        </div>
+      </div>
+    </template>
+  </div>
+</template>
