@@ -267,7 +267,15 @@ def active_profile() -> Profile:
         return Profile.from_env()          # база не поднялась — работаем как раньше
     if row is None or not row.base_url:
         return Profile.from_env()
-    return Profile(base_url=row.base_url, model=row.model,
+    base_url = row.base_url
+    # Профиль «локальная Ollama» мог сохраниться с localhost из запуска на
+    # хосте. В Compose localhost уже указывает внутрь app-контейнера, поэтому
+    # берём адрес host-gateway из окружения для локальных адресов профиля.
+    if row.slug == "local" and (urlparse(base_url).hostname or "") in {
+        "localhost", "127.0.0.1", "::1"
+    }:
+        base_url = settings.vlm_base_url
+    return Profile(base_url=base_url, model=row.model,
                    api_key=row.api_key or settings.vlm_api_key,
                    schema_mode=row.schema_mode)
 
@@ -304,6 +312,7 @@ class ModelB:
             }],
         }
         t0 = time.perf_counter()
+        # Локальный Ollama этот ключ сам не проверяет; его проверяет прокси.
         r = self.session.post(
             f"{self.base_url}/chat/completions",
             headers={"Authorization": f"Bearer {self.api_key}"},
@@ -373,6 +382,7 @@ class ModelB:
         if fmt is not None:
             payload["response_format"] = fmt
 
+        # Пакетный запрос проходит ту же Bearer-проверку прокси, что и одиночный.
         r = self.session.post(
             f"{self.base_url}/chat/completions",
             headers={"Authorization": f"Bearer {self.api_key}"},

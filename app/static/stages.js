@@ -58,11 +58,14 @@
   addBtn?.addEventListener('click', () => {
     const id = picker.value;
     if (!id) return;
-    const name = picker.options[picker.selectedIndex].dataset.name;
+    const option = picker.options[picker.selectedIndex];
+    const name = option.dataset.name;
+    const weight = option.dataset.weight || '1';
     const html = tpl.innerHTML
       .replaceAll('__KEY__', 'm:' + id)
       .replaceAll('__MACRO__', id)
-      .replaceAll('__NAME__', name);
+      .replaceAll('__NAME__', name)
+      .replaceAll('__WEIGHT__', weight);
     const holder = document.createElement('tbody');
     holder.innerHTML = html.trim();
     const row = holder.firstElementChild;

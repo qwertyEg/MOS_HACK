@@ -1,149 +1,86 @@
-{# Диаграмма Ганта: план против факта.
-
-   Полос ровно две. Серая — то, что задал человек в календарном плане.
-   Синяя — то, что происходит на площадке, сведённое по всем камерам разом:
-   ответы кадров сворачиваются в ответ дня большинством голосов, «не видно»
-   не голосует. Полоса на камеру вернула бы на экран сырые данные и
-   переложила сведение на глаз смотрящего — а в нём и есть вся система.
-
-   Обёртка существует всегда, даже когда факта ещё нет: пока идёт съёмка,
-   она сама подтягивает свежую диаграмму, и первый появившийся этап видно
-   без перезагрузки страницы. #}
+{# Гантт и прогресс по этапам. #}
 <div {% if poll %}hx-get="/sites/{{ site.id }}/chart" hx-trigger="every 10s"
        hx-swap="outerHTML"{% endif %}>
-
 {% if chart %}
 <section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
   <div class="flex flex-wrap items-start gap-4 mb-1">
     <h2 class="font-medium">Календарный план: план и факт</h2>
     <div class="ml-auto flex items-center gap-4 text-xs text-slate-500">
-      <span class="flex items-center gap-1.5">
-        <span class="inline-block w-6 h-2.5 rounded-sm"
-              style="background: #94a3b8"></span>по плану
-      </span>
-      <span class="flex items-center gap-1.5">
-        <span class="inline-block w-6 h-2.5 rounded-sm"
-              style="background: #3b82f6"></span>по факту с камер
-      </span>
+      <span class="flex items-center gap-1.5"><span class="inline-block w-6 h-2.5 rounded-sm" style="background:#94a3b8"></span>по плану</span>
+      <span class="flex items-center gap-1.5"><span class="inline-block w-6 h-2.5 rounded-sm" style="background:#3b82f6"></span>по факту с камер</span>
     </div>
   </div>
 
   <p class="text-xs text-slate-500 mb-4">
-    Факт — один на объект: ответы всех камер за день сводятся в один, и этап
-    считается идущим, пока видны его признаки. Признак пропал из кадра —
-    этап закончился, это норма.
-    {% if not chart.detected %}
-    Фактических полос пока нет: камеры ещё не прислали достаточно кадров.
-    {% endif %}
+    Соседние этапы могут идти одновременно. Проценты основаны на подтверждённых видимых вехах;
+    качество наблюдений показывается отдельно. Вероятность срока — предварительная эвристика.
+    {% if not chart.detected %}Фактических полос пока нет: камеры ещё не прислали кадры.{% endif %}
   </p>
+
+  <div class="grid gap-4 sm:grid-cols-2 mb-5">
+    <div>
+      <div class="flex justify-between text-xs mb-1"><span>Прогресс объекта по объёму работ</span><span class="font-medium">{{ chart.object_progress }}%</span></div>
+      <div class="h-2.5 rounded bg-slate-100 overflow-hidden"><div class="h-full bg-green-500 rounded" style="width:{{ chart.object_progress }}%"></div></div>
+    </div>
+    <div>
+      <div class="flex justify-between text-xs mb-1"><span>Полнота наблюдений по этапам</span><span class="font-medium">{{ chart.observation_coverage }}%</span></div>
+      <div class="h-2.5 rounded bg-slate-100 overflow-hidden"><div class="h-full bg-emerald-300 rounded" style="width:{{ chart.observation_coverage }}%"></div></div>
+    </div>
+  </div>
 
   {% if chart.gap_days > 60 %}
   <div class="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-4 py-3">
-    План и факт разнесены во времени: между ними
-    {{ (chart.gap_days / 365)|round(1) }} г. и они нигде не пересекаются. Это почти
-    всегда ошибка в датах, а не настоящее отставание — проверьте, что даты
-    плана и метки времени кадров относятся к одному периоду (у камеры-имитатора
-    это ключ <span class="font-mono">--start-date</span>).
+    План и факт разнесены во времени на {{ (chart.gap_days / 365)|round(1) }} г.; проверьте даты плана и кадров.
   </div>
   {% endif %}
 
-  {% if chart.detected %}
-  <div class="flex flex-wrap gap-8 mb-5 text-sm">
-    <div>
-      <div class="text-slate-500 text-xs">совпадение с планом</div>
-      <div class="text-lg font-medium">
-        {{ "%.0f"|format(chart.match * 100) if chart.match is not none else "—" }}%
-      </div>
-    </div>
-    <div>
-      <div class="text-slate-500 text-xs">этапов опознано</div>
-      <div class="text-lg font-medium">{{ chart.detected }} из {{ chart.planned }}</div>
-    </div>
-    <div class="max-w-md text-xs text-slate-500 self-end pb-1">
-      Совпадение — пересечение календарных дней плана и факта к их
-      объединению: штрафуется и сдвиг начала, и растянутость.
-    </div>
+  <div class="flex flex-wrap gap-6 mb-4 text-xs text-slate-500">
+    <span>Опознано этапов: {{ chart.detected }} из {{ chart.planned }}</span>
+    <span>Сдвиг в днях сравнивает фактический прогресс с плановым на выбранную дату.</span>
   </div>
-  {% endif %}
 
-  {# Узкий экран не должен сжимать сетку до нечитаемого: лучше прокрутка. #}
   <div class="overflow-x-auto -mx-1 px-1">
-    <div style="min-width: 780px">
-
-      {# --- шапка: месяцы, под ними недели --- #}
+    <div style="min-width:780px">
       <div class="flex">
-        <div class="w-56 shrink-0 border border-slate-200 rounded-tl"></div>
+        <div class="w-72 shrink-0 border border-slate-200 rounded-tl"></div>
         <div class="relative flex-1 h-12 border-y border-r border-slate-200 rounded-tr">
-          {% for g in chart.groups %}
-          <div class="absolute top-0 h-6 flex items-center justify-center
-                      border-r border-slate-200 text-xs font-medium text-slate-700
-                      overflow-hidden whitespace-nowrap"
-               style="left: {{ g.left }}%; width: {{ g.width }}%">{{ g.label }}</div>
-          {% endfor %}
-          {% for c in chart.cols %}
-          <div class="absolute top-6 h-6 flex items-center justify-center
-                      border-t border-slate-200 text-[10px] text-slate-500
-                      overflow-hidden whitespace-nowrap
-                      {{ 'border-r border-slate-200' if c.major else '' }}"
-               style="left: {{ c.left }}%; width: {{ c.width }}%">{{ c.label }}</div>
-          {% endfor %}
+          {% for g in chart.groups %}<div class="absolute top-0 h-6 flex items-center justify-center border-r border-slate-200 text-xs font-medium text-slate-700 overflow-hidden whitespace-nowrap" style="left:{{ g.left }}%;width:{{ g.width }}%">{{ g.label }}</div>{% endfor %}
+          {% for c in chart.cols %}<div class="absolute top-6 h-6 flex items-center justify-center border-t border-slate-200 text-[10px] text-slate-500 overflow-hidden whitespace-nowrap {{ 'border-r border-slate-200' if c.major else '' }}" style="left:{{ c.left }}%;width:{{ c.width }}%">{{ c.label }}</div>{% endfor %}
         </div>
       </div>
 
-      {# --- строки этапов --- #}
       <div class="relative">
-        {# Сетка рисуется одним слоем поверх всех строк: так линии идут
-           насквозь, а не собираются из кусочков с зазорами на границах. #}
-        <div class="absolute inset-y-0 right-0 pointer-events-none"
-             style="left: 14rem">
-          {% for c in chart.cols %}
-          {% if c.left > 0 %}
-          <div class="absolute top-0 bottom-0 w-px
-                      {{ 'bg-slate-200' if c.major else 'bg-slate-100' }}"
-               style="left: {{ c.left }}%"></div>
-          {% endif %}
-          {% endfor %}
-          {% if chart.today_left is not none %}
-          <div class="absolute top-0 bottom-0 w-px bg-red-400"
-               style="left: {{ chart.today_left }}%" title="сегодня"></div>
-          {% endif %}
+        <div class="absolute inset-y-0 right-0 pointer-events-none" style="left:18rem">
+          {% for c in chart.cols %}{% if c.left > 0 %}<div class="absolute top-0 bottom-0 w-px {{ 'bg-slate-200' if c.major else 'bg-slate-100' }}" style="left:{{ c.left }}%"></div>{% endif %}{% endfor %}
+          {% if chart.today_left is not none %}<div class="absolute top-0 bottom-0 w-px bg-red-400" style="left:{{ chart.today_left }}%" title="сегодня"></div>{% endif %}
         </div>
-
         {% for row in chart.rows %}
-        <div class="flex">
-          <div class="w-56 shrink-0 border-x border-b border-slate-200 px-3 py-2">
-            <div class="text-xs font-medium text-slate-700 leading-tight">
-              {{ row.title }}
-              {% if row.reached %}
-              <span class="text-green-700"
-                    title="все необратимые признаки этапа наблюдались">✓</span>
-              {% endif %}
+        <div class="grid" style="grid-template-columns:18rem minmax(0,1fr);height:120px">
+          <div class="border-x border-b border-slate-200 px-3 py-2 overflow-hidden">
+            <div class="text-xs font-medium text-slate-700 leading-tight truncate" title="{{ row.title }}">{{ row.title }}{% if row.reached %} <span class="text-green-700" title="следующий этап подтверждён">✓</span>{% endif %}</div>
+            <div class="flex justify-between text-[10px] mt-1"><span>Прогресс этапа</span><span class="font-medium">{{ row.progress }}%</span></div>
+            <div class="h-2 rounded bg-slate-100 overflow-hidden mt-0.5"><div class="h-full bg-green-500 rounded" style="width:{{ row.progress }}%"></div></div>
+            <div class="text-[10px] text-slate-500 mt-1">Наблюдения: {{ row.coverage }}%</div>
+            <div class="text-[10px] leading-tight mt-1">
+              {% if row.on_time_probability is not none %}
+              <span class="font-medium">В срок: {{ row.on_time_probability }}%</span>
+              <span class="text-slate-400">· предварительно</span>
+              {% else %}<span class="text-slate-400">Вероятность срока: —</span>{% endif %}
             </div>
-            <div class="text-[10px] mt-0.5 leading-tight
-                        {{ 'text-green-700' if row.verdict == 'в срок'
-                           else ('text-slate-400' if 'наблюдался' in row.verdict
-                                 else 'text-amber-700') }}">
-              {{ row.verdict }}
-              {%- if row.match is not none %}
-              <span class="text-slate-400">· совпало
-                {{ "%.0f"|format(row.match * 100) }}%</span>
-              {%- endif %}
+            <div class="text-[10px] leading-tight {{ 'text-green-700' if row.variance_days is not none and row.variance_days > 0 else ('text-amber-700' if row.variance_days is not none and row.variance_days < 0 else 'text-slate-500') }}">
+              {% if row.variance_days is none %}Сдвиг: недостаточно данных
+              {% elif row.variance_days > 0 %}Опережение: {{ row.variance_days }} дн.
+              {% elif row.variance_days < 0 %}Отставание: {{ -row.variance_days }} дн.
+              {% else %}По графику{% endif %}
             </div>
           </div>
-
-          <div class="relative flex-1 h-12 border-b border-r border-slate-200">
-            {% if row.plan %}
-            <div class="absolute top-2 h-3 rounded-sm"
-                 style="left: {{ row.plan.left }}%; width: {{ row.plan.width }}%;
-                        background: #94a3b8"
-                 title="по плану: {{ row.plan.label }}"></div>
-            {% endif %}
-            {% for box in row.fact %}
-            <div class="absolute bottom-2 h-3 rounded-sm"
-                 style="left: {{ box.left }}%; width: {{ box.width }}%;
-                        background: #3b82f6"
-                 title="по факту: {{ box.label }}"></div>
-            {% endfor %}
+          <div class="relative border-b border-r border-slate-200" style="height:120px">
+            <div class="absolute left-2 right-2 top-[22px] h-3 rounded-sm bg-slate-100"></div>
+            <div class="absolute left-2 right-2 top-[70px] h-3 rounded-sm bg-slate-50"></div>
+            {% if row.plan %}<div class="absolute top-[22px] h-3 rounded-sm" style="left:{{ row.plan.left }}%;width:{{ row.plan.width }}%;background:#94a3b8" title="по плану: {{ row.plan.label }}"></div>{% endif %}
+            {% for box in row.fact %}<div class="absolute top-[70px] h-3 rounded-sm" style="left:{{ box.left }}%;width:{{ box.width }}%;background:#3b82f6" title="по факту: {{ box.label }}"></div>{% endfor %}
+            <div class="absolute left-2 top-[6px] text-[9px] text-slate-400">План</div>
+            <div class="absolute left-2 top-[54px] text-[9px] text-slate-400">Факт</div>
           </div>
         </div>
         {% endfor %}
@@ -154,10 +91,7 @@
 {% else %}
 <section class="bg-white border border-slate-200 rounded-lg p-6 mb-6">
   <h2 class="font-medium mb-1">Календарный план: план и факт</h2>
-  <p class="text-xs text-slate-500">
-    Проставьте этапам даты в календарном плане ниже — и диаграмма появится.
-    Фактические полосы добавятся, как только камеры пришлют первые кадры.
-  </p>
+  <p class="text-xs text-slate-500">Проставьте этапам даты в календарном плане ниже — диаграмма появится.</p>
 </section>
 {% endif %}
 </div>

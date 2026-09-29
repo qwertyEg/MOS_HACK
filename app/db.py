@@ -24,6 +24,10 @@ DRIFT = [
     "ALTER TABLE frames ADD COLUMN IF NOT EXISTS meta jsonb DEFAULT '{}'::jsonb",
     "ALTER TABLE macro_stages ADD COLUMN IF NOT EXISTS object_types varchar[] DEFAULT '{}'",
     "ALTER TABLE site_stages ADD COLUMN IF NOT EXISTS questions jsonb DEFAULT '[]'::jsonb",
+    "ALTER TABLE site_stages ADD COLUMN IF NOT EXISTS work_weight float",
+    "UPDATE site_stages SET work_weight = CASE macro_stage_id WHEN 1 THEN 5 WHEN 2 THEN 8 WHEN 3 THEN 7 WHEN 4 THEN 12 WHEN 5 THEN 35 WHEN 6 THEN 23 WHEN 7 THEN 10 ELSE 1 END WHERE work_weight IS NULL",
+    "ALTER TABLE site_stages ALTER COLUMN work_weight SET DEFAULT 1",
+    "ALTER TABLE site_stages ALTER COLUMN work_weight SET NOT NULL",
 ]
 
 

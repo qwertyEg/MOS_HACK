@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     local_storage_dir: str = "./var/frames"
 
     # --- модель Б (VLM), внешний сервис ---
-    # Порт 11435, а не 11434: на Spark машина общая и 11434 занят чужим Ollama.
+    # 11435 — Bearer-прокси проекта; сам Ollama слушает только на loopback:11436.
     vlm_base_url: str = "http://localhost:11435/v1"
-    vlm_api_key: str = "ollama"
+    vlm_api_key: str = ""
     vlm_model: str = "qwen3-vl:30b-a3b-instruct"
     vlm_timeout: int = 120
     vlm_temperature: float = 0.0

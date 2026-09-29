@@ -38,20 +38,37 @@ services:
       interval: 5s
       retries: 10
 
+  # Локальный Ollama слушает только loopback на 11436. Этот прокси проверяет
+  # Bearer-ключ до передачи запроса и публикует защищённый API на 11435.
+  ollama-auth:
+    image: ghcr.io/open-webui/open-webui:ollama
+    entrypoint: ["python3"]
+    command: ["/ollama_auth_proxy.py"]
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      OLLAMA_PROXY_TOKEN: ${VLM_API_KEY:?Задайте VLM_API_KEY в .env}
+      OLLAMA_UPSTREAM: http://127.0.0.1:11436
+      OLLAMA_PROXY_HOST: 0.0.0.0
+      OLLAMA_PROXY_PORT: "11435"
+    volumes:
+      - ./tools/ollama_auth_proxy.py:/ollama_auth_proxy.py:ro
+
   app:
     build: .
     depends_on:
       db: {condition: service_healthy}
       minio: {condition: service_started}
+      ollama-auth: {condition: service_started}
     environment:
       DATABASE_URL: postgresql+psycopg://stroyka:stroyka@db:5432/stroyka
       S3_ENDPOINT: http://minio:9000
       # Браузер ходит за снимками напрямую в MinIO, минуя бэкенд, поэтому
       # presigned-ссылки должны указывать на адрес, видимый снаружи.
       S3_PUBLIC_ENDPOINT: http://localhost:9000
-      # Модель Б живёт вне compose — она внешний сервис по условию задачи.
-      # Из контейнера localhost указывает на сам контейнер, поэтому host-gateway.
+      # Прокси модели работает на хосте, поскольку Ollama — отдельный контейнер.
       VLM_BASE_URL: http://host.docker.internal:11435/v1
+      VLM_API_KEY: ${VLM_API_KEY:?Задайте VLM_API_KEY в .env}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

@@ -55,15 +55,20 @@ OpenAI-совместимому эндпоинту, чтобы можно был
 ```bash
 docker run -d --name open-webui --gpus=all --restart unless-stopped \
   -e OLLAMA_HOST=0.0.0.0:11434 \
-  -p 127.0.0.1:8081:8080 -p 127.0.0.1:11435:11434 \
+  -p 127.0.0.1:8081:8080 -p 127.0.0.1:11436:11434 \
   -v open-webui:/app/backend/data -v open-webui-ollama:/root/.ollama \
   ghcr.io/open-webui/open-webui:ollama
 
 docker exec -it open-webui ollama pull qwen3-vl:30b
 ```
 
-Порт **11435**, а не стандартный 11434: на машине разработки 11434 занят другим
-процессом. При необходимости поменяйте `VLM_BASE_URL`.
+Ollama опубликована только на loopback хоста: `127.0.0.1:11436`. При запуске
+сервиса `docker compose up -d --build` поднимает Bearer-прокси на `11435`;
+ключ `VLM_API_KEY` из `.env` проверяется прокси, так как локальный API Ollama
+сам по себе авторизацию не проверяет. В `.env` задайте случайный ключ не короче
+32 символов (`openssl rand -hex 32`). Если приложение запускается на другой
+машине, задайте `VLM_BASE_URL=https://home.udron.ru/ollama/v1` и тот же ключ.
+Так ключ идёт по HTTPS, а не по открытому HTTP.
 
 Про выбор модели: `qwen3-vl:30b` — MoE, 30B суммарно при ~3B активных на токен.
 Качество крупной модели при стоимости инференса мелкой, что хорошо ложится на

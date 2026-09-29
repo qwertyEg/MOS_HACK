@@ -8,9 +8,9 @@
 Полоса на камеру превращала бы вывод обратно в сырые данные и перекладывала
 сведение на глаз смотрящего.
 
-Сведение делает `aggregate`: ответы по кадрам сворачиваются в ответ дня
-большинством голосов, «не видно» не голосует, дальше сглаживание и отрезки
-активности. Сюда приходит уже готовая хронология по объекту целиком.
+Сведение делает `aggregate`: один ответ «да» с любой камеры подтверждает
+признак, «не видно» не голосует. Для каждого этапа берётся собственный сигнал
+начала; соседние этапы перекрываются на короткий период.
 
 **Шкала — сетка, а не резиновая полоса.** Даты читаются только тогда, когда
 есть на что смотреть: колонки недель внутри месяцев, месяцы шапкой над ними.
@@ -18,11 +18,10 @@
 неделе, не прикладывая линейку. На длинных сроках недельные колонки
 вырождаются в частокол, поэтому там шаг — месяц, а шапка — год.
 
-Совпадение считается по дням: пересечение календарных множеств к их
-объединению. Мера выбрана из-за того, как ошибается система. Сравнение одних
-только дат начала объявило бы полным совпадением этап, который начался
-вовремя и тянулся вдвое дольше; сравнение длительностей — этап, который шёл
-столько же, но на месяц позже. Пересечение штрафует и то и другое.
+Вместо процента совпадения с планом строка показывает оценку вероятности
+окончить этап в срок и отклонение текущего прогресса от планового в днях.
+Вероятность — предварительная эвристика по темпу видимых вех, не калиброванная
+на большой выборке.
 
 Модуль намеренно ничего не знает ни о базе, ни о шаблонах: на вход даты, на
 выход проценты. Геометрию тогда можно проверить тестом, а не глазами.
@@ -32,11 +31,13 @@ from __future__ import annotations
 
 import calendar
 import datetime as dt
+import math
 from dataclasses import dataclass, field
+
+from app.pipeline.progress import StageProgress, object_progress
 
 Interval = tuple[dt.date, dt.date]
 
-ON_TIME_DAYS = 3   # расхождение меньше — считаем «в срок»
 # Потолок числа колонок. Шаг сетки выбирается не по длине срока в днях, а по
 # тому, сколько колонок получится: так стройка на полгода и архив на двадцать
 # лет одинаково остаются читаемыми, и ни один срок не даёт частокол.
@@ -79,8 +80,10 @@ class Row:
     plan: Box | None
     fact: list[Box] = field(default_factory=list)
     reached: bool = False
-    match: float | None = None    # доля совпадения плана и факта по дням
-    shift: int | None = None      # сдвиг начала, дней; плюс — позже плана
+    progress: int = 0
+    coverage: int = 0
+    variance_days: int | None = None
+    on_time_probability: int | None = None
     verdict: str = ""
 
 
@@ -92,7 +95,8 @@ class Chart:
     start: dt.date
     end: dt.date
     today_left: float | None
-    match: float | None        # среднее совпадение по этапам, где есть и то и то
+    object_progress: int
+    observation_coverage: int
     detected: int              # этапов, которые камеры увидели
     planned: int               # этапов с проставленными датами
     unit: str                  # шаг сетки: week | month | quarter | year
@@ -115,22 +119,46 @@ def _days(intervals: list[Interval]) -> set[dt.date]:
     return out
 
 
-def _jaccard(plan: set[dt.date], fact: set[dt.date]) -> float | None:
-    if not plan or not fact:
-        return None
-    return len(plan & fact) / len(plan | fact)
+def _planned_progress(start: dt.date, end: dt.date,
+                      today: dt.date) -> int:
+    if today < start:
+        return 0
+    if today >= end:
+        return 100
+    return round(100 * (today - start).days / max(1, (end - start).days))
 
 
-def _verdict(shift: int | None, has_fact: bool, plan_over: bool) -> str:
-    if not has_fact:
-        return "не наблюдался" if plan_over else "ещё не наблюдался"
-    if shift is None:
-        return "вне плана"
-    if shift <= -ON_TIME_DAYS:
-        return f"раньше на {abs(shift)} дн."
-    if shift >= ON_TIME_DAYS:
-        return f"позже на {shift} дн."
-    return "в срок"
+def _estimate(progress: int, coverage: int, start: dt.date | None,
+              planned_start: dt.date, planned_end: dt.date,
+              today: dt.date, completed_at: dt.date | None
+              ) -> tuple[int | None, int | None, str]:
+    """Грубая эвристика темпа: вероятность и отклонение в днях."""
+    duration = max(1, (planned_end - planned_start).days + 1)
+    if completed_at is not None:
+        delta = (planned_end - completed_at).days
+        probability = 100 if delta >= 0 else 0
+        label = "раньше срока" if delta >= 0 else "позже срока"
+        return probability, delta, label
+
+    if coverage and start and today >= planned_start:
+        actual = max(0, min(100, progress))
+        expected = _planned_progress(planned_start, planned_end, today)
+        variance = round((actual - expected) * duration / 100)
+    else:
+        variance = None
+
+    if not coverage or not start or today < planned_start:
+        return None, variance, "пока мало наблюдений"
+
+    elapsed = max(1, (today - start).days + 1)
+    rate = max(0.5, progress) / elapsed
+    remaining = max(0, 100 - progress) / rate
+    forecast_finish = today + dt.timedelta(days=round(remaining))
+    buffer_days = (planned_end - forecast_finish).days
+    scale = max(7.0, duration * 0.20)
+    probability = round(100 / (1 + math.exp(max(-30, min(30, -buffer_days / scale)))))
+    label = "предварительная эвристика"
+    return max(1, min(99, probability)), variance, label
 
 
 # ---------------------------------------------------------------------------
@@ -243,82 +271,83 @@ def _grid(lo: dt.date, hi: dt.date, span: int) -> tuple[list[Group], list[Col], 
 
 def build(stages: list[dict], fact: dict[int, list[Interval]] | None = None,
           reached: set[int] | None = None,
+          stage_progress: dict[int, StageProgress] | None = None,
+          work_weights: dict[int, float] | None = None,
           today: dt.date | None = None) -> Chart | None:
-    """План этапов и сведённая хронология наблюдений → готовая диаграмма.
-
-    stages: [{"id", "title", "planned_start", "planned_end"}] в порядке плана.
-    fact:   {id этапа: отрезки активности} — уже сведённые по всем камерам.
-    """
+    """План и факт → диаграмма, прогноз срока и прогресс вех."""
     fact = fact or {}
     reached = reached or set()
+    stage_progress = stage_progress or {}
+    work_weights = work_weights or {
+        st["id"]: st.get("work_weight", 1.0) for st in stages
+    }
 
     dates: list[dt.date] = []
     for st in stages:
         if st.get("planned_start") and st.get("planned_end"):
             dates += [st["planned_start"], st["planned_end"]]
-    for ivs in fact.values():
-        for a, b in ivs:
+    for intervals in fact.values():
+        for a, b in intervals:
             dates += [a, b]
     if not dates:
         return None
 
-    # Шкала растягивается до целых месяцев: сетка с обрубленным первым и
-    # последним месяцем читается хуже, чем чуть более широкая, но ровная.
     lo = min(dates).replace(day=1)
     hi = _month_end(max(dates))
     span = max(1, (hi - lo).days + 1)
 
     def place(a: dt.date, b: dt.date, label: str = "") -> Box:
-        # Минимальная ширина: однодневный отрезок на годовой шкале — это
-        # 0.3% полосы, то есть невидимая полоска. Лучше показать заметную
-        # метку не совсем в масштабе, чем не показать наблюдение вовсе.
         return Box(left=(a - lo).days / span * 100,
                    width=max(0.8, ((b - a).days + 1) / span * 100),
                    label=label or f"{a:%d.%m.%Y} — {b:%d.%m.%Y}")
 
-    rows, matches, detected, planned = [], [], 0, 0
-    for st in stages:
+    rows, detected, planned = [], 0, 0
+    for index, st in enumerate(stages):
         has_plan = bool(st.get("planned_start") and st.get("planned_end"))
-        plan_days = (_days([(st["planned_start"], st["planned_end"])])
-                     if has_plan else set())
-        planned += 1 if has_plan else 0
+        planned += int(has_plan)
+        intervals = fact.get(st["id"], [])
+        fact_days = _days(intervals)
+        detected += int(bool(fact_days))
+        metric = stage_progress.get(st["id"], StageProgress(0, 0, 0, 0))
+        actual_start = min((a for a, _ in intervals), default=None)
+        # Начало следующего этапа не равно завершению текущего: соседние
+        # работы перекрываются. Завершение следует за концом фактической полосы.
+        completed_at = (max((b for _, b in intervals), default=None)
+                        if st["id"] in reached else None)
 
-        ivs = fact.get(st["id"], [])
-        fact_days = _days(ivs)
-        if fact_days:
-            detected += 1
-
-        match = _jaccard(plan_days, fact_days)
-        if match is not None:
-            matches.append(match)
-
-        shift = ((min(a for a, _ in ivs) - st["planned_start"]).days
-                 if ivs and has_plan else None)
-        plan_over = bool(has_plan and today and st["planned_end"] < today)
+        probability, variance, verdict = (None, None, "нет календарного плана")
+        if has_plan and today:
+            probability, variance, verdict = _estimate(
+                metric.percent, metric.coverage, actual_start,
+                st["planned_start"], st["planned_end"], today, completed_at)
 
         rows.append(Row(
             stage_id=st["id"], title=st["title"],
             plan=place(st["planned_start"], st["planned_end"]) if has_plan else None,
-            fact=[place(a, b) for a, b in ivs],
+            fact=[place(a, b) for a, b in intervals],
             reached=st["id"] in reached,
-            match=match, shift=shift,
-            verdict=_verdict(shift, bool(fact_days), plan_over),
+            progress=metric.percent, coverage=metric.coverage,
+            variance_days=variance,
+            on_time_probability=probability, verdict=verdict,
         ))
 
     groups, cols, unit = _grid(lo, hi, span)
-
-    gap = 0
-    plan_span = [d for st in stages for d in (st.get("planned_start"), st.get("planned_end")) if d]
-    fact_span = [d for ivs in fact.values() for a, b in ivs for d in (a, b)]
-    if plan_span and fact_span:
-        if min(fact_span) > max(plan_span):
-            gap = (min(fact_span) - max(plan_span)).days
-        elif max(fact_span) < min(plan_span):
-            gap = (min(plan_span) - max(fact_span)).days
     today_left = (((today - lo).days / span * 100)
                   if today and lo <= today <= hi else None)
-
-    return Chart(rows=rows, groups=groups, cols=cols, start=lo, end=hi,
-                 today_left=today_left,
-                 match=sum(matches) / len(matches) if matches else None,
-                 detected=detected, planned=planned, unit=unit, gap_days=gap)
+    object_percent, coverage = object_progress(
+        stage_progress, [st["id"] for st in stages], work_weights)
+    planned_dates = [d for st in stages
+                     for d in (st.get("planned_start"), st.get("planned_end")) if d]
+    fact_dates = [d for intervals in fact.values() for pair in intervals for d in pair]
+    gap = 0
+    if planned_dates and fact_dates:
+        if min(fact_dates) > max(planned_dates):
+            gap = (min(fact_dates) - max(planned_dates)).days
+        elif max(fact_dates) < min(planned_dates):
+            gap = (min(planned_dates) - max(fact_dates)).days
+    return Chart(
+        rows=rows, groups=groups, cols=cols, start=lo, end=hi,
+        today_left=today_left, object_progress=object_percent,
+        observation_coverage=coverage, detected=detected, planned=planned,
+        unit=unit, gap_days=gap,
+    )

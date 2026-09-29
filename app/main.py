@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import secrets
 from pathlib import Path
 from urllib.parse import quote
@@ -28,7 +29,7 @@ from app.db import get_session, init_db
 from app.models import (Answer, Camera, CameraState, Checklist, ChecklistAnswer,
                         Deviation, Frame, MacroStage, ObjectType, Site,
                         SiteStage, StageTemplate, VlmProfile)
-from app.pipeline import aggregate, gantt, ingest, live, runner
+from app.pipeline import aggregate, gantt, ingest, live, progress, runner
 from app.pipeline.model_b import ModelB
 
 app = FastAPI(title="Мониторинг строительных площадок", docs_url="/api/docs")
@@ -351,6 +352,7 @@ def site_create(request: Request, user: str = Depends(auth.require_user),
                        .where(StageTemplate.macro_stage_id == ms.id))
         s.add(SiteStage(
             site_id=site.id, macro_stage_id=ms.id, order_idx=idx,
+            work_weight=progress.DEFAULT_STAGE_WEIGHTS.get(ms.id, 1.0),
             equipment_expected=tpl.equipment_expected if tpl else [],
             equipment_forbidden=tpl.equipment_forbidden if tpl else [],
             # Снимок чек-листа берётся здесь же, а не при первом сохранении
@@ -371,17 +373,29 @@ def _chart(s: Session, site, today: dt.date) -> gantt.Chart | None:
     системы; показать вместо этого полосу на камеру значило бы вернуть на
     экран сырые данные и переложить сведение на глаз смотрящего.
 
-    Сводит `aggregate`: ответы всех кадров дня по каждому признаку решаются
-    большинством, «не видно» не голосует вовсе.
+    Сводит `aggregate`: «да» подтверждается, если его увидела хотя бы одна
+    камера; иначе учитывается явное «нет», а «не видно» не голосует.
     """
-    curves = aggregate.site_curves(s, site)
+    curves = aggregate.site_curves(s, site, until=today)
+    weights = {st.id: st.work_weight for st in site.stages}
+    curve_by_id = {c.stage_id: c for c in curves}
+    stage_progress = {
+        st.id: progress.StageProgress(
+            percent=curve_by_id[st.id].progress if st.id in curve_by_id else 0,
+            coverage=curve_by_id[st.id].coverage if st.id in curve_by_id else 0,
+            observed_milestones=0, total_milestones=0,
+        ) for st in site.stages
+    }
     stages = [{"id": st.id, "title": st.title,
-               "planned_start": st.planned_start, "planned_end": st.planned_end}
+               "planned_start": st.planned_start, "planned_end": st.planned_end,
+               "work_weight": st.work_weight}
               for st in site.stages]
     return gantt.build(
         stages,
         fact={c.stage_id: c.intervals for c in curves},
         reached={c.stage_id for c in curves if c.reached},
+        stage_progress=stage_progress,
+        work_weights=weights,
         today=today,
     )
 
@@ -409,6 +423,7 @@ def site_detail(site_id: int, request: Request,
         "today": today,
         "catalog": catalog,
         "available": [m for m in catalog if m.id not in used],
+        "default_stage_weights": progress.DEFAULT_STAGE_WEIGHTS,
         "chart": _chart(s, site, today),
         "live": {c.id: live.status(c.id) for c in site.cameras},
         # Диаграмма подтягивает себя сама, только пока есть чему меняться.
@@ -494,7 +509,8 @@ async def stages_save(site_id: int, request: Request,
                 continue
             kept.add(stage.id)
         elif kind == "m":
-            stage = SiteStage(site_id=site_id, macro_stage_id=ident)
+            stage = SiteStage(site_id=site_id, macro_stage_id=ident,
+                              work_weight=progress.DEFAULT_STAGE_WEIGHTS.get(ident, 1.0))
             tpl = s.scalar(select(StageTemplate)
                            .where(StageTemplate.macro_stage_id == ident))
             stage.equipment_expected = tpl.equipment_expected if tpl else []
@@ -511,6 +527,24 @@ async def stages_save(site_id: int, request: Request,
         # лишний этап теперь убирают из списка, а не снимают с него отметку.
         stage.enabled = True
         stage.order_idx = idx
+        raw_weight = str(form.get(f"weight_{key}") or "").strip()
+        if raw_weight:
+            try:
+                stage.work_weight = float(raw_weight.replace(",", "."))
+                if not math.isfinite(stage.work_weight) or stage.work_weight < 0:
+                    raise ValueError
+            except ValueError:
+                s.rollback()
+                return HTMLResponse(f"Вес этапа не является числом: «{raw_weight}».",
+                                    status_code=400)
+        elif not stage.work_weight:
+            stage.work_weight = progress.DEFAULT_STAGE_WEIGHTS.get(stage.macro_stage_id, 1.0)
+        # Сохранение плана одновременно переводит существующую строку на
+        # актуальные формулировки; ответы старого текста агрегатор отбрасывает.
+        template = s.scalar(select(StageTemplate).where(
+            StageTemplate.macro_stage_id == stage.macro_stage_id))
+        if template is not None:
+            stage.questions = template.questions or []
         start = str(form.get(f"start_{key}") or "").strip()
         end = str(form.get(f"end_{key}") or "").strip()
         stage.planned_start = plan_import.parse_date(start)
@@ -1235,7 +1269,7 @@ def settings_vlm_check(slug: str, request: Request,
     model = ModelB(profile=Profile(base_url=row.base_url, model=row.model,
                                    api_key=row.api_key or settings.vlm_api_key,
                                    schema_mode=row.schema_mode))
-    questions = [{"key": "is_construction", "text": PROBE_QUESTION, "hint": ""}]
+    questions = [{"key": "pit", "text": PROBE_QUESTION, "hint": ""}]
 
     from app.pipeline.model_b import encode
     uri = encode(img)
@@ -1248,7 +1282,7 @@ def settings_vlm_check(slug: str, request: Request,
             continue
         worked = mode
         row.schema_mode = mode
-        row.check_note = (f"ответила «{answer['is_construction'].value}» на {source}; "
+        row.check_note = (f"ответила «{answer['pit'].value}» на {source}; "
                           f"ограничение ответа — {mode}")
         break
 
@@ -1262,8 +1296,8 @@ def settings_vlm_check(slug: str, request: Request,
 
 _SCHEMA_MODES = ("json_schema", "json_object", "text")
 
-PROBE_QUESTION = ("Видны ли признаки идущей стройки — незавершённые "
-                  "конструкции, строительные материалы или техника?")
+PROBE_QUESTION = ("Видна ли большая открытая выемка котлована на пятне "
+                  "будущего здания, а не отдельные ямы или траншеи?")
 
 
 def _probe_frame(s: Session):

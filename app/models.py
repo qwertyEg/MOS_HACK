@@ -226,6 +226,8 @@ class SiteStage(Base):
     dates_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     on_critical_path: Mapped[bool] = mapped_column(Boolean, default=True)
     lag_to_next: Mapped[int] = mapped_column(Integer, default=0)
+    # Вес этапа в прогрессе объекта — доля реального объёма работ, настраивается в плане.
+    work_weight: Mapped[float] = mapped_column(Float, default=1.0, server_default="1", nullable=False)
     equipment_expected: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     equipment_forbidden: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
