@@ -97,6 +97,19 @@ curl http://127.0.0.1:8000/api/health
 режима загружаются заранее (`WARM_MODELS`), чтобы первый кадр не ждал загрузки около 50 секунд.
 `mos-watchdog` останавливает только юниты/процессы из `/root/mos_hack`, если на общем сервере заканчиваются памя, GPU или диск; чужие задачи он не трогает.
 
+Если машина целиком выделена приложению, можно снять ограничения базового юнита
+и отдать локальным моделям все 8 CPU-потоков и GPU 0:
+
+```bash
+sudo install -d /etc/systemd/system/mos-app.service.d
+sudo cp deploy/mos-app-dedicated.conf /etc/systemd/system/mos-app.service.d/dedicated.conf
+sudo systemctl daemon-reload
+sudo systemctl restart mos-app
+```
+
+PyTorch выбирает CUDA автоматически, когда драйвер действительно предоставляет
+устройство вычисления; иначе YOLO и SigLIP продолжают работать на CPU.
+
 ---
 
 ## Веса моделей
