@@ -1,0 +1,29 @@
+[Unit]
+Description=СтройВзор — мониторинг стройплощадки
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/mos_hack/current
+EnvironmentFile=-/root/mos_hack/app/.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+Environment=CUDA_VISIBLE_DEVICES=
+Environment=HF_HOME=/root/mos_hack/hf_cache
+Environment=OMP_NUM_THREADS=3
+Environment=MKL_NUM_THREADS=3
+ExecStartPre=/usr/bin/test -f /root/mos_hack/current/DEPLOYED_SHA
+ExecStart=/root/mos_hack/.venv/bin/python -m app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=90
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=300%
+MemoryMax=6G
+TasksMax=512
+OOMScoreAdjust=750
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Сторож ресурсов СтройВзора на общем сервере
+After=network-online.target docker.service
+
+[Service]
+Type=simple
+ExecStart=/root/mos_hack/tools/watchdog.sh
+Restart=always
+RestartSec=5
+Nice=5
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target

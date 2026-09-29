@@ -84,16 +84,18 @@ WITH_ML=0 docker compose up --build        # лёгкий образ: тольк
 ### На сервере (общая машина, CPU)
 
 Процесс один: очередь кадров и загруженные модели живут в памяти, поэтому uvicorn работает с одним
-воркером. На общей машине ограничьте потоки torch и ресурсы юнита:
+воркером. Для общей машины в репозитории есть постоянные systemd-юниты с лимитами CPU/RAM и пониженным приоритетом:
 
 ```bash
-export EQUIPMENT_THREADS=3 OMP_NUM_THREADS=3
-systemd-run --unit=stroyvzor --collect -p Nice=19 -p MemoryMax=7G -p CPUQuota=300% \
-    --working-directory=$PWD .venv/bin/python -m app --host 127.0.0.1 --port 8000
+sudo cp deploy/mos-app.service deploy/mos-watchdog.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mos-watchdog mos-app
+curl http://127.0.0.1:8000/api/health
 ```
 
 Сервису хватает около 3 ГБ памяти: YOLO11s и одна общая копия SigLIP2. При старте модели текущего
 режима загружаются заранее (`WARM_MODELS`), чтобы первый кадр не ждал загрузки около 50 секунд.
+`mos-watchdog` останавливает только юниты/процессы из `/root/mos_hack`, если на общем сервере заканчиваются памя, GPU или диск; чужие задачи он не трогает.
 
 ---
 
