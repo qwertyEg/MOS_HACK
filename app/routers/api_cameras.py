@@ -17,7 +17,7 @@ from app.config import settings
 from app.db import get_session
 from app.models import Camera, CameraState, Frame, Site, Zone
 from app.routers.common import bad, get_or_404, json_body, not_found, num_field, points_field, require_obj, str_field
-from app.services import adapters, ingest, pipeline, providers, sites, views
+from app.services import adapters, ingest, masks, pipeline, providers, sites, views
 from app.services import settings as settings_svc
 
 router = APIRouter(prefix="/api", tags=["камеры"], dependencies=[Depends(auth.require_api_user)])
@@ -290,32 +290,104 @@ def list_frames(camera_id: int, limit: int = 50, before: str | None = None, afte
 # маска
 # --------------------------------------------------------------------------
 
-@router.get("/cameras/{camera_id}/mask.png")
-def mask_png(camera_id: int, s: Session = Depends(get_session)) -> Response:
-    """Слой маски для UI: погашенный фон — полупрозрачный красный, видимое — прозрачно."""
-    cam = get_or_404(s, Camera, camera_id, "камера")
+MASK_PNG_LIMIT = 8 * 1024 * 1024
+
+
+def _mask_or_404(s: Session, cam: Camera):
     mask = pipeline.load_mask(s, cam)
-    if mask is None:
-        raise not_found("маски у камеры пока нет (копится по дневным кадрам)")
-    visible = np.asarray(mask.visible(), dtype=bool)
-    h, w = visible.shape[:2]
-    rgba = np.zeros((h, w, 4), np.uint8)
-    rgba[~visible] = (40, 40, 220, 120)
-    if cam.image_w and cam.image_h and (w, h) != (cam.image_w, cam.image_h):
-        rgba = cv2.resize(rgba, (cam.image_w, cam.image_h), interpolation=cv2.INTER_NEAREST)
-    ok, buf = cv2.imencode(".png", rgba)
-    return Response(buf.tobytes(), media_type="image/png", headers={"Cache-Control": "no-store"})
+    if mask is None or not getattr(mask, "initialized", True):
+        raise not_found("маска ещё не построена: она копится по дневным кадрам камеры")
+    return mask
+
+
+@router.get("/cameras/{camera_id}/mask")
+def mask_info(camera_id: int, s: Session = Depends(get_session)) -> dict:
+    """Состояние маски: построена ли, откуда (auto | manual), сколько накоплено до первой
+    маски, история изменений (для ползунка эволюции)."""
+    cam = get_or_404(s, Camera, camera_id, "камера")
+    return masks.info(s, cam)
+
+
+@router.get("/cameras/{camera_id}/mask.png")
+def mask_png(camera_id: int, at: str | None = None, i: int | None = None, style: str = "overlay",
+             s: Session = Depends(get_session)) -> Response:
+    """Слой маски: overlay — погашенный фон полупрозрачным красным поверх кадра;
+    bitmap — белое = фон (исходник для кисти). at — маска на момент кадра (ISO),
+    i — снимок истории."""
+    cam = get_or_404(s, Camera, camera_id, "камера")
+    if style not in ("overlay", "bitmap"):
+        raise bad("style: overlay | bitmap")
+    mask = _mask_or_404(s, cam)
+    try:
+        when = ingest.parse_datetime_input(at)
+    except ValueError as exc:
+        raise bad(str(exc)) from None
+    if when is not None:
+        site = s.get(Site, cam.site_id)
+        when = adapters.to_utc(when, adapters.site_tz(site))
+    try:
+        bg = masks.background(mask, when, i)
+    except IndexError:
+        raise not_found(f"снимка маски {i} нет") from None
+    if bg is None:
+        bg = np.zeros((cam.image_h or 1, cam.image_w or 1), bool)     # на этот момент маски ещё не было
+    size = (cam.image_w, cam.image_h) if cam.image_w and cam.image_h else None
+    return Response(masks.overlay_png(bg, size, style), media_type="image/png",
+                    headers={"Cache-Control": "no-store"})
+
+
+@router.put("/cameras/{camera_id}/mask")
+async def put_mask(camera_id: int, request: Request, reanalyze: bool = True,
+                   s: Session = Depends(get_session)) -> dict:
+    """Ручная маска кистью: тело — PNG (белое или непрозрачное = фон) в любом разрешении.
+
+    Маска закрепляется (lock): автоматика её не стирает; переживает переанализ объекта.
+    reanalyze — переспросить модель Б по уже разобранным кадрам камеры с новой маской."""
+    cam = get_or_404(s, Camera, camera_id, "камера")
+    raw = await request.body()
+    if not raw:
+        raise bad("ожидается PNG маски в теле запроса")
+    if len(raw) > MASK_PNG_LIMIT:
+        raise HTTPException(413, "маска больше 8 МБ")
+    try:
+        bitmap = masks.decode_bitmap(raw)
+    except ValueError as exc:
+        raise bad(str(exc)) from None
+    if bitmap.mean() >= 0.98:
+        raise bad("маска закрывает весь кадр — модели Б нечего разбирать")
+    try:
+        return masks.set_manual(s, cam, bitmap, reanalyze=reanalyze)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from None
 
 
 @router.delete("/cameras/{camera_id}/mask")
 def reset_mask(camera_id: int, s: Session = Depends(get_session)) -> dict:
+    """Сброс к автоматической маске: ручная кисть снимается, маска пересобирается по истории
+    камеры в фоне, модель Б затем переспрашивается по уже разобранным кадрам."""
     cam = get_or_404(s, Camera, camera_id, "камера")
-    state = s.scalar(select(CameraState).where(CameraState.camera_id == cam.id))
-    if state is not None:
-        s.delete(state)
-        s.commit()
-    pipeline._masks.pop(cam.id, None)
-    return {"ok": True}
+    return {"ok": True, **masks.reset_to_auto(s, cam)}
+
+
+@router.get("/cameras/{camera_id}/mask/preview.jpg")
+def mask_preview(camera_id: int, frame: int, s: Session = Depends(get_session)) -> Response:
+    """Кадр так, как его видит модель Б: маска на момент кадра, режим гашения модели Б."""
+    cam = get_or_404(s, Camera, camera_id, "камера")
+    fr = get_or_404(s, Frame, frame, "кадр")
+    if fr.camera_id != cam.id:
+        raise bad("кадр другой камеры")
+    mode = settings_svc.get_state(s)["thresholds"].get("stage", {}).get("mask_mode") or "darken"
+    try:
+        img, applied = masks.preview(s, cam, fr, mode)
+    except ValueError as exc:
+        raise not_found(str(exc)) from None
+    h, w = img.shape[:2]
+    if max(h, w) > 1280:
+        k = 1280 / max(h, w)
+        img = cv2.resize(img, (round(w * k), round(h * k)), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    return Response(buf.tobytes(), media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store", "X-Mask-Applied": "1" if applied else "0"})
 
 
 # --------------------------------------------------------------------------

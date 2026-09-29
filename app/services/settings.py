@@ -31,6 +31,7 @@ PRESETS: dict[str, tuple[str, str]] = {
 }
 
 CLOCK_MODES = ("auto", "wall", "last_frame")
+MASK_MODES = ("darken", "gray", "black", "blur", "crop", "none")
 
 DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
     "pipeline": {
@@ -45,6 +46,7 @@ DEFAULT_THRESHOLDS: dict[str, dict[str, Any]] = {
         "no_thr": 0.46,
         "unsure_review_ratio": 0.5,   # доля «не уверен» выше — кадр в needs_review
         "equipment_weight": 1.0,      # вес техники модели А в определении этапа (core/stage/fusion.py); 0 — только чек-лист
+        "mask_mode": "darken",        # как гасить фон перед моделью Б: darken | gray | black | blur | crop | none
     },
     "equipment": {},                  # заполняется из core.equipment.EquipmentConfig().to_dict()
     "analytics": {
@@ -143,6 +145,11 @@ def _validate_thresholds(patch: Any, current: dict[str, dict]) -> dict[str, dict
             if group == "pipeline" and key == "clock":
                 if value not in CLOCK_MODES:
                     raise ValueError(f"thresholds.pipeline.clock: одно из {', '.join(CLOCK_MODES)}")
+                clean[key] = value
+                continue
+            if group == "stage" and key == "mask_mode":
+                if value not in MASK_MODES:
+                    raise ValueError(f"thresholds.stage.mask_mode: одно из {', '.join(MASK_MODES)}")
                 clean[key] = value
                 continue
             if group != "equipment" and key not in current[group]:

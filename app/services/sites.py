@@ -281,7 +281,9 @@ def reprocess(s: Session, site: Site) -> Job:
         s.execute(delete(ActivityInterval).where(ActivityInterval.site_id == site.id,
                                                  ActivityInterval.manual.is_(False)))
         s.execute(delete(EquipmentUnit).where(EquipmentUnit.site_id == site.id))
-        s.execute(delete(CameraState).where(CameraState.camera_id.in_(cams)))
+        # Маска строится заново, но ручная кисть оператора (initial_mask_key) переживает переанализ.
+        s.execute(update(CameraState).where(CameraState.camera_id.in_(cams)).values(
+            mask_key="", windows=0, masked_ratio=0.0, retained=1.0, stage_mask_ratio=None))
         s.execute(delete(StageState).where(StageState.site_id == site.id, StageState.manual.is_(False)))
         s.execute(update(Frame).where(Frame.camera_id.in_(cams)).values(
             processed_a=False, processed_b=False, stage_used=False, status="pending", note="", job_id=job.id))

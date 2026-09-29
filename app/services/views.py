@@ -288,10 +288,28 @@ def camera_json(s: Session, cam: Camera) -> dict[str, Any]:
         "calibrated": bool(cam.homography), "image_w": cam.image_w, "image_h": cam.image_h,
         "last_frame_at": iso(cam.last_frame_at), "source_uri": cam.source_uri,
         "frames_total": total, "pending": frame_queue.pending(cam.id),
-        "mask": ({"masked_ratio": state.masked_ratio, "windows": state.windows,
-                  "updated_at": iso(state.updated_at), "url": f"/api/cameras/{cam.id}/mask.png"}
-                 if state is not None and state.mask_key else None),
+        "mask": _mask_brief(s, cam, state),
     }
+
+
+def _mask_brief(s: Session, cam: Camera, state: CameraState | None) -> dict[str, Any] | None:
+    """Коротко о маске для карточки камеры; подробно — GET /api/cameras/{id}/mask.
+    `frames` — сколько кадров учла маска (бывшие «окна накопления» — это и были кадры)."""
+    if state is None or not state.mask_key:
+        return None
+    from app.services import pipeline
+
+    mask = pipeline.load_mask(s, cam)
+    out = {"masked_ratio": state.masked_ratio, "windows": state.windows, "frames": state.windows,
+           "updated_at": iso(state.updated_at), "url": f"/api/cameras/{cam.id}/mask.png",
+           "initialized": True, "source": "auto", "manual": bool(state.initial_mask_key)}
+    if mask is not None:
+        out["initialized"] = bool(getattr(mask, "initialized", True))
+        out["source"] = getattr(mask, "source", "auto")
+        boot = getattr(mask, "bootstrap", None)
+        if callable(boot) and not out["initialized"]:
+            out["bootstrap"] = boot()
+    return out
 
 
 def zone_json(z: Zone) -> dict[str, Any]:

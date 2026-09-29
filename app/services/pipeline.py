@@ -123,6 +123,15 @@ def mask_class() -> Any | None:
     return None
 
 
+_mask_locks: dict[int, threading.Lock] = defaultdict(threading.Lock)
+
+
+def mask_lock(camera_id: int) -> threading.Lock:
+    """Маску камеры меняют поток камеры (кадры), кисть оператора и пересборка по истории — по очереди."""
+    with _locks_guard:
+        return _mask_locks[camera_id]
+
+
 def load_mask(s: Session, cam: Camera) -> Any | None:
     if cam.id in _masks:
         return _masks[cam.id]
@@ -140,9 +149,63 @@ def load_mask(s: Session, cam: Camera) -> Any | None:
     return None
 
 
+def manual_mask_key(camera_id: int) -> str:
+    return f"masks/{camera_id}/manual.png"
+
+
+def load_manual_bitmap(state: CameraState | None) -> np.ndarray | None:
+    """Ручная маска оператора (PNG: ненулевое = фон) — переживает сброс состояния и переанализ."""
+    if state is None or not state.initial_mask_key:
+        return None
+    try:
+        data = storage.get().get(state.initial_mask_key)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("ручная маска %s не читается: %s", state.initial_mask_key, exc)
+        return None
+    return cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_GRAYSCALE)
+
+
+def new_mask(cls: Any, shape: tuple[int, int], site: Site | None, when: dt.datetime,
+             state: CameraState | None) -> Any:
+    """Новая маска камеры: границы суток по поясу объекта; ручная маска оператора — сразу."""
+    try:
+        off = _tz_offset_hours(site, when) if site is not None else None
+    except Exception:  # noqa: BLE001 — неизвестный пояс: сутки по Москве, как раньше
+        off = None
+    if off is not None and "config" in _params(cls.new):
+        mask = cls.new(shape, {"tz_offset_hours": off})
+    else:
+        mask = cls.new(shape)
+    bmp = load_manual_bitmap(state)
+    if bmp is not None and hasattr(mask, "set_background"):
+        mask.set_background(bmp, lock=True)
+    return mask
+
+
+def frame_boxes(s: Session, frame_id: int) -> list[tuple]:
+    """Рамки модели А кадра (любого провайдера, в т.ч. ручные) — маске: технику площадки не закрывать."""
+    rows = s.execute(select(Detection.x, Detection.y, Detection.w, Detection.h, Detection.cls, Detection.conf)
+                     .where(Detection.frame_id == frame_id)).all()
+    return [tuple(r) for r in rows]
+
+
+def save_mask(s: Session, cam: Camera, mask: Any) -> CameraState:
+    state = s.scalar(select(CameraState).where(CameraState.camera_id == cam.id))
+    if state is None:
+        state = CameraState(camera_id=cam.id)
+        s.add(state)
+    state.mask_key = storage.get().put(_mask_key(cam.id), mask.dumps(), "application/octet-stream")
+    state.masked_ratio = float(mask.masked_ratio)
+    state.retained = float(getattr(mask, "retained", 1.0) or 0.0)
+    state.updated_at = utcnow()
+    _masks[cam.id] = mask
+    return state
+
+
 def _update_mask(s: Session, cam: Camera, img: np.ndarray, when: dt.datetime,
-                 thresholds: dict, weather: Any = None) -> tuple[Any | None, bool]:
-    """Обновить маску годным дневным кадром. → (маска, изменилась ли сильно).
+                 thresholds: dict, weather: Any = None, boxes: list | None = None,
+                 site: Site | None = None) -> tuple[Any | None, bool, bool]:
+    """Обновить маску годным дневным кадром. → (маска, изменилась ли сильно, построена ли только что).
 
     «Сильно» (внеочередной вызов модели Б, ARCHITECTURE §4): маска только что
     инициализировалась или стёрла клетки (стройка заползла на фон —
@@ -151,34 +214,78 @@ def _update_mask(s: Session, cam: Camera, img: np.ndarray, when: dt.datetime,
     """
     cls = mask_class()
     if cls is None:
-        return None, False
-    mask = load_mask(s, cam)
-    if mask is None:
-        mask = cls.new(img.shape[:2])
-    # Погода нужна маске, чтобы снег не «стирал» соседний дом (окно замораживается).
-    kw = {"weather": weather} if weather is not None and "weather" in _params(mask.update) else {}
-    try:
-        upd = mask.update(img, when, **kw)
-    except Exception as exc:  # noqa: BLE001 — камеру переставили / сменилось разрешение
-        log.warning("маска камеры %s сброшена: %s", cam.id, exc)
-        mask = cls.new(img.shape[:2])
-        upd = mask.update(img, when, **kw)
-    _masks[cam.id] = mask
-
-    state = s.scalar(select(CameraState).where(CameraState.camera_id == cam.id))
-    if state is None:
-        state = CameraState(camera_id=cam.id)
-        s.add(state)
-    state.mask_key = storage.get().put(_mask_key(cam.id), mask.dumps(), "application/octet-stream")
-    state.windows = (state.windows or 0) + 1
-    state.masked_ratio = float(mask.masked_ratio)
-    state.retained = float(getattr(mask, "retained", 1.0) or 0.0)
-    state.updated_at = utcnow()
-    changed = bool(getattr(upd, "initialized_now", False) or (getattr(upd, "erased_cells", 0) or 0) > 0)
+        return None, False, False
+    with mask_lock(cam.id):
+        state = s.scalar(select(CameraState).where(CameraState.camera_id == cam.id))
+        mask = load_mask(s, cam)
+        if mask is None:
+            mask = new_mask(cls, img.shape[:2], site, when, state)
+        params = _params(mask.update)
+        # Погода нужна маске, чтобы снег не «стирал» соседний дом (окно замораживается);
+        # рамки модели А — чтобы не закрыть технику, стоящую на площадке.
+        kw: dict[str, Any] = {"weather": weather} if weather is not None and "weather" in params else {}
+        if boxes is not None and "boxes" in params:
+            kw["boxes"] = boxes
+        try:
+            upd = mask.update(img, when, **kw)
+        except Exception as exc:  # noqa: BLE001 — камеру переставили / сменилось разрешение
+            log.warning("маска камеры %s сброшена: %s", cam.id, exc)
+            mask = new_mask(cls, img.shape[:2], site, when, state)
+            upd = mask.update(img, when, **kw)
+        state = save_mask(s, cam, mask)
+        state.windows = (state.windows or 0) + 1
+    born = bool(getattr(upd, "initialized_now", False))
+    changed = bool(born or (getattr(upd, "erased_cells", 0) or 0) > 0)
     if state.stage_mask_ratio is not None and \
             abs(state.masked_ratio - state.stage_mask_ratio) >= thresholds["pipeline"]["stage_mask_change"]:
         changed = True
-    return mask, changed
+    return mask, changed, born
+
+
+def mask_for_frame(mask: Any | None, when: dt.datetime) -> Any | None:
+    """Маска на момент кадра: кадр, разобранный задним числом (после построения маски или
+    ручной правки), видит маску своего времени, а не сегодняшнюю."""
+    if mask is None:
+        return None
+    at = getattr(mask, "visible_at", None)
+    if at is None:
+        return mask
+    if not getattr(mask, "initialized", False):
+        return None
+    return at(when)
+
+
+def requeue_stage_frames(s: Session, cam: Camera, before: dt.datetime | None = None,
+                         kind: str = "mask", message: str = "") -> tuple[str | None, int]:
+    """Переспросить модель Б по кадрам камеры, которые она уже разбирала (маска поменялась).
+
+    Модель А не трогаем: ей маска не нужна. → (id задания, сколько кадров)."""
+    from app.services.ingest import new_job
+    from app.services.queue import frame_queue
+
+    q = select(Frame).where(Frame.camera_id == cam.id, Frame.stage_used.is_(True),
+                            Frame.status.in_(("done", "postponed", "error")))
+    if before is not None:
+        q = q.where(Frame.captured_at < before)
+    frames = list(s.scalars(q.order_by(Frame.captured_at)))
+    if not frames:
+        return None, 0
+    job = new_job(s, kind, camera=cam, message=message or "модель Б: кадры заново с новой маской")
+    for fr in frames:
+        # «restage»: кадр модель Б уже выбирала — переспросить обязательно, мимо правила
+        # «не чаще раза в час» (иначе старый ответ без маски остался бы в хронологии).
+        fr.meta = {**(fr.meta or {}), "restage": True}
+        fr.processed_b = False
+        fr.stage_used = False
+        fr.status = "pending"
+        fr.job_id = job.id
+    job.total = len(frames)
+    job.state = "queued"
+    job.finished_at = utcnow()
+    s.commit()
+    for fr in frames:
+        frame_queue.submit(cam.id, fr.id, fr.captured_at)
+    return job.id, len(frames)
 
 
 # --------------------------------------------------------------------------
@@ -352,6 +459,10 @@ def stage_context(s: Session, site: Site, before: dt.datetime | None = None,
     }
     if mask is not None:
         ctx["mask"] = mask
+        # Режим гашения фона — из настроек (thresholds.stage.mask_mode), для всех провайдеров модели Б.
+        mode = (settings_svc.get_state(s)["thresholds"].get("stage") or {}).get("mask_mode")
+        if mode:
+            ctx["mask_mode"] = mode
     try:
         ctx["text"] = _context_text(s, site, before or dt.datetime.now(dt.UTC), front, rows)
     except Exception as exc:  # noqa: BLE001 — без контекста разбор хуже, но возможен
@@ -365,7 +476,7 @@ def _run_model_b(s: Session, fr: Frame, cam: Camera, site: Site, img: np.ndarray
     classifier = registry.require("classifier", name)
     # Маску не накладываем здесь: классификатор делает это сам (core.stage.mask.
     # masked_for_model) и знает, применилась ли она, — GLM тогда получает пояснение.
-    context = stage_context(s, site, before=fr.captured_at, mask=mask)
+    context = stage_context(s, site, before=fr.captured_at, mask=mask_for_frame(mask, fr.captured_at))
     with registry.call_lock("classifier", name):
         result = classifier.assess(img, info, keys=None, context=context)
     s.execute(delete(StageObservation).where(StageObservation.frame_id == fr.id,
@@ -423,18 +534,7 @@ def process_frame(frame_id: int) -> str:
         info = adapters.frame_info(fr, cam)
         s.commit()
 
-        mask, mask_changed = None, False
-        if quality.usable_for_stage and (fr.meta or {}).get("mask_done"):
-            mask = load_mask(s, cam)        # повторный заход (отложенный кадр): маска этот кадр уже видела
-        elif quality.usable_for_stage:
-            try:
-                mask, mask_changed = _update_mask(s, cam, img, fr.captured_at, thresholds, quality.weather)
-                fr.meta = {**(fr.meta or {}), "mask_done": True}
-                s.commit()
-            except Exception as exc:  # noqa: BLE001
-                s.rollback()
-                errors.append(f"маска: {type(exc).__name__}: {exc}")
-
+        a_ran = not fr.processed_a
         if not fr.processed_a:
             try:
                 notes.extend(_run_model_a(s, fr, cam, site, img, info, state))
@@ -449,17 +549,44 @@ def process_frame(frame_id: int) -> str:
                 log.exception("модель А упала на кадре %s", frame_id)
                 errors.append(f"модель А: {type(exc).__name__}: {exc}")
 
+        # Маска — после модели А: рамки техники, стоящей на площадке, маска не закрывает.
+        mask, mask_changed, mask_born = None, False, False
+        if quality.usable_for_stage and (fr.meta or {}).get("mask_done"):
+            mask = load_mask(s, cam)        # повторный заход (отложенный кадр): маска этот кадр уже видела
+        elif quality.usable_for_stage:
+            try:
+                boxes = frame_boxes(s, fr.id) if fr.processed_a else None
+                mask, mask_changed, mask_born = _update_mask(s, cam, img, fr.captured_at, thresholds,
+                                                             quality.weather, boxes, site)
+                fr.meta = {**(fr.meta or {}), "mask_done": True}
+                s.commit()
+            except Exception as exc:  # noqa: BLE001
+                s.rollback()
+                errors.append(f"маска: {type(exc).__name__}: {exc}")
+        if mask_born:
+            # Маска построилась по первым часам съёмки — кадры этих часов модель Б разбирала
+            # без неё: переспрашиваем их с маской их времени, чтобы этап не видел соседей.
+            try:
+                requeue_stage_frames(s, cam, before=fr.captured_at, kind="mask",
+                                     message="маска построена — модель Б заново по первым кадрам")
+                notes.append("динамическая маска построена по первым часам съёмки")
+            except Exception as exc:  # noqa: BLE001
+                s.rollback()
+                log.warning("кадры камеры %s не переспрошены после маски: %s", cam.id, exc)
+
         if not fr.processed_b:
             if not quality.usable_for_stage:
                 fr.processed_b = True
                 why = quality.reject_reason or ("ночной кадр" if quality.is_night else "кадр не годен")
                 notes.append(f"модель Б пропустила кадр: {why}")
-            elif not _stage_due(s, fr, cam, thresholds, mask_changed):
+            elif not (fr.meta or {}).get("restage") and not _stage_due(s, fr, cam, thresholds, mask_changed):
                 fr.processed_b = True
             else:
                 try:
                     _run_model_b(s, fr, cam, site, img, info, state, mask)
                     fr.processed_b = True
+                    if (fr.meta or {}).get("restage"):
+                        fr.meta = {k: v for k, v in fr.meta.items() if k != "restage"}
                     s.commit()
                 except ProviderUnavailable as exc:
                     s.rollback()
@@ -472,7 +599,8 @@ def process_frame(frame_id: int) -> str:
 
         fr = s.get(Frame, frame_id)
         fr.status = "error" if errors else ("postponed" if postponed else "done")
-        fr.note = "; ".join(errors + notes)[:2000]
+        if a_ran or errors or notes:     # повторный заход только за моделью Б — примечание модели А не терять
+            fr.note = "; ".join(errors + notes)[:2000]
         site_id = site.id
         s.commit()
         status = fr.status
